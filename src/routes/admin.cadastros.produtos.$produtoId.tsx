@@ -1,0 +1,318 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  formatProductCategories,
+  parseProductCategories,
+  PRODUCT_CATEGORIES,
+} from "@/lib/product-options";
+
+export const Route = createFileRoute("/admin/cadastros/produtos/$produtoId")({
+  component: ProdutoFormPage,
+});
+
+interface Programa {
+  id: string;
+  nome: string;
+}
+
+interface ItemRow {
+  id: string;
+  nome: string;
+  unidade: string;
+  categoria: string;
+  subcategoria: string | null;
+}
+
+function ProdutoFormPage() {
+  const { produtoId } = Route.useParams();
+  const navigate = useNavigate();
+  const isNew = produtoId === "novo";
+
+  const [nome, setNome] = useState("");
+  const [unidade, setUnidade] = useState("UNIDADE");
+  const [categorias, setCategorias] = useState<string[]>([PRODUCT_CATEGORIES[0]]);
+  const [selectedProgramas, setSelectedProgramas] = useState<string[]>([]);
+  const [programas, setProgramas] = useState<Programa[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const title = useMemo(() => (isNew ? "Novo produto" : "Editar produto"), [isNew]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+
+      const { data: programasData, error: programasError } = await supabase
+        .from("programas")
+        .select("id,nome")
+        .order("nome", { ascending: true });
+
+      if (!active) return;
+
+      if (programasError) {
+        setError(programasError.message);
+        setLoading(false);
+        return;
+      }
+
+      setProgramas((programasData ?? []) as Programa[]);
+
+      if (isNew) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: itemData, error: itemError } = await supabase
+        .from("itens")
+        .select("id,nome,unidade,categoria,subcategoria")
+        .eq("id", produtoId)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (itemError) {
+        setError(itemError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!itemData) {
+        setError("Produto não encontrado.");
+        setLoading(false);
+        return;
+      }
+
+      const item = itemData as ItemRow;
+      setNome(item.nome);
+      setUnidade(item.unidade);
+      setCategorias(parseProductCategories(item.categoria || PRODUCT_CATEGORIES[0]));
+
+      const { data: vinculosData, error: vinculosError } = await supabase
+        .from("programa_produtos")
+        .select("programa_id")
+        .eq("item_id", produtoId);
+
+      if (!active) return;
+
+      if (vinculosError) {
+        setError(vinculosError.message);
+      } else {
+        setSelectedProgramas((vinculosData ?? []).map((v) => v.programa_id));
+      }
+
+      setLoading(false);
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, [isNew, produtoId]);
+
+  const togglePrograma = (programaId: string) => {
+    setSelectedProgramas((current) =>
+      current.includes(programaId)
+        ? current.filter((id) => id !== programaId)
+        : [...current, programaId],
+    );
+  };
+
+  const toggleCategoria = (nextCategoria: string) => {
+    setCategorias((current) =>
+      current.includes(nextCategoria)
+        ? current.filter((categoria) => categoria !== nextCategoria)
+        : [...current, nextCategoria],
+    );
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const nomeLimpo = nome.trim();
+    const unidadeLimpa = unidade.trim() || "UNIDADE";
+
+    if (!nomeLimpo) {
+      setError("Informe o nome do produto.");
+      setSaving(false);
+      return;
+    }
+
+    if (categorias.length === 0) {
+      setError("Selecione pelo menos um tipo de material.");
+      setSaving(false);
+      return;
+    }
+
+    const payload = {
+      nome: nomeLimpo,
+      unidade: unidadeLimpa,
+      categoria: formatProductCategories(categorias),
+      subcategoria: null,
+    };
+
+    const itemResult = isNew
+      ? await supabase.from("itens").insert(payload).select("id").single()
+      : await supabase.from("itens").update(payload).eq("id", produtoId).select("id").single();
+
+    if (itemResult.error) {
+      setError(itemResult.error.message);
+      setSaving(false);
+      return;
+    }
+
+    const itemId = itemResult.data.id;
+
+    const deleteResult = await supabase.from("programa_produtos").delete().eq("item_id", itemId);
+
+    if (deleteResult.error) {
+      setError(deleteResult.error.message);
+      setSaving(false);
+      return;
+    }
+
+    if (selectedProgramas.length > 0) {
+      const insertResult = await supabase.from("programa_produtos").insert(
+        selectedProgramas.map((programaId) => ({
+          item_id: itemId,
+          programa_id: programaId,
+        })),
+      );
+
+      if (insertResult.error) {
+        setError(insertResult.error.message);
+        setSaving(false);
+        return;
+      }
+    }
+
+    setSuccess("Produto salvo.");
+    setSaving(false);
+    navigate({ to: "/admin/cadastros/produtos" });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Cadastros / Produtos</p>
+          <h2 className="text-2xl text-foreground">{title}</h2>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={() => navigate({ to: "/admin/cadastros/produtos" })}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </Button>
+      </div>
+
+      <Card className="p-6">
+        {loading ? (
+          <div className="flex h-32 items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Carregando...
+          </div>
+        ) : (
+          <form className="max-w-2xl space-y-5" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="nome">Nome</Label>
+              <Input
+                id="nome"
+                value={nome}
+                onChange={(event) => setNome(event.target.value)}
+                placeholder="Nome do produto"
+                required
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="unidade">Unidade</Label>
+                <Input
+                  id="unidade"
+                  value={unidade}
+                  onChange={(event) => setUnidade(event.target.value)}
+                  placeholder="UNIDADE"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label>Tipos de material</Label>
+                <p className="text-sm text-muted-foreground">
+                  Marque todos os tipos onde este produto deve aparecer.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PRODUCT_CATEGORIES.map((option) => (
+                  <label
+                    key={option}
+                    className="flex items-center gap-3 rounded-md border p-3 text-sm"
+                  >
+                    <Checkbox
+                      checked={categorias.includes(option)}
+                      onCheckedChange={() => toggleCategoria(option)}
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label>Programas onde vai aparecer</Label>
+                <p className="text-sm text-muted-foreground">
+                  Marque os programas que podem pedir este produto. Sem marcar, ele fica liberado
+                  para todos.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {programas.map((programa) => (
+                  <label
+                    key={programa.id}
+                    className="flex items-center gap-3 rounded-md border p-3 text-sm"
+                  >
+                    <Checkbox
+                      checked={selectedProgramas.includes(programa.id)}
+                      onCheckedChange={() => togglePrograma(programa.id)}
+                    />
+                    <span>{programa.nome}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {success && <p className="text-sm text-primary">{success}</p>}
+
+            <Button type="submit" className="gap-2" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar
+            </Button>
+          </form>
+        )}
+      </Card>
+    </div>
+  );
+}

@@ -1,0 +1,261 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { KeyRound, Loader2, Mail, Save } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserProfile } from "@/lib/user-profile";
+
+export const Route = createFileRoute("/admin/configuracoes")({
+  component: ConfiguracoesPage,
+});
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+function ConfiguracoesPage() {
+  const navigate = useNavigate();
+  const [emailAtual, setEmailAtual] = useState("");
+  const [novoEmail, setNovoEmail] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadUser() {
+      setLoading(true);
+
+      try {
+        const { user, profile } = await getCurrentUserProfile();
+
+        if (!active) return;
+
+        if (!user) {
+          navigate({ to: "/" });
+          return;
+        }
+
+        const currentEmail = user.email ?? profile?.email ?? "";
+        setEmailAtual(currentEmail);
+        setNovoEmail(currentEmail);
+      } catch (error) {
+        if (active) {
+          setEmailError(getErrorMessage(error, "Erro ao carregar usuário."));
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadUser();
+
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+
+  const handleEmailSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setEmailError(null);
+    setEmailMessage(null);
+
+    const trimmedEmail = novoEmail.trim();
+
+    if (!trimmedEmail) {
+      setEmailError("Informe o novo e-mail.");
+      return;
+    }
+
+    if (trimmedEmail === emailAtual) {
+      setEmailError("Informe um e-mail diferente do atual.");
+      return;
+    }
+
+    setSavingEmail(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({ email: trimmedEmail });
+      if (error) throw new Error(error.message);
+
+      setNovoEmail(trimmedEmail);
+      setEmailMessage(
+        "Solicitação enviada. Verifique o novo e-mail para confirmar a alteração.",
+      );
+    } catch (error) {
+      setEmailError(getErrorMessage(error, "Erro ao alterar e-mail."));
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPasswordError(null);
+    setPasswordMessage(null);
+
+    if (novaSenha.length < 6) {
+      setPasswordError("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (novaSenha !== confirmarSenha) {
+      setPasswordError("As senhas não conferem.");
+      return;
+    }
+
+    setSavingPassword(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: novaSenha });
+      if (error) throw new Error(error.message);
+
+      setNovaSenha("");
+      setConfirmarSenha("");
+      setPasswordMessage("Senha alterada com sucesso.");
+    } catch (error) {
+      setPasswordError(getErrorMessage(error, "Erro ao alterar senha."));
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      <div>
+        <p className="text-sm text-muted-foreground">Conta</p>
+        <h2 className="text-2xl text-foreground">Configurações</h2>
+      </div>
+
+      {loading ? (
+        <Card className="p-6">
+          <div className="flex h-28 items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Carregando...
+          </div>
+        </Card>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Mail className="h-5 w-5 text-primary" />
+                E-mail
+              </CardTitle>
+              <CardDescription>Atualize o e-mail usado para acessar o sistema.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleEmailSubmit}>
+                <div className="space-y-2">
+                  <Label htmlFor="email-atual">E-mail atual</Label>
+                  <Input id="email-atual" value={emailAtual} disabled />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="novo-email">Novo e-mail</Label>
+                  <Input
+                    id="novo-email"
+                    type="email"
+                    value={novoEmail}
+                    onChange={(event) => setNovoEmail(event.target.value)}
+                    placeholder="novo@email.com"
+                    required
+                  />
+                </div>
+
+                {emailError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{emailError}</AlertDescription>
+                  </Alert>
+                )}
+                {emailMessage && (
+                  <Alert>
+                    <AlertDescription>{emailMessage}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button type="submit" className="w-full" disabled={savingEmail}>
+                  {savingEmail ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Salvar e-mail
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <KeyRound className="h-5 w-5 text-primary" />
+                Senha
+              </CardTitle>
+              <CardDescription>Defina uma nova senha para sua conta.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+                <div className="space-y-2">
+                  <Label htmlFor="nova-senha">Nova senha</Label>
+                  <Input
+                    id="nova-senha"
+                    type="password"
+                    value={novaSenha}
+                    onChange={(event) => setNovaSenha(event.target.value)}
+                    placeholder="Mínimo de 6 caracteres"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmar-senha">Confirmar senha</Label>
+                  <Input
+                    id="confirmar-senha"
+                    type="password"
+                    value={confirmarSenha}
+                    onChange={(event) => setConfirmarSenha(event.target.value)}
+                    placeholder="Digite a senha novamente"
+                    required
+                  />
+                </div>
+
+                {passwordError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{passwordError}</AlertDescription>
+                  </Alert>
+                )}
+                {passwordMessage && (
+                  <Alert>
+                    <AlertDescription>{passwordMessage}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button type="submit" className="w-full" disabled={savingPassword}>
+                  {savingPassword ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Salvar senha
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
