@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, CheckCircle2, FileText, Loader2, Upload } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +64,7 @@ function Solicitacoes() {
   const [selected, setSelected] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -222,6 +223,23 @@ function Solicitacoes() {
     }
   };
 
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>, requestId: string) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setDraggingId((current) => (current === requestId ? null : current));
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>, request: Requisicao) => {
+    event.preventDefault();
+    setDraggingId((current) => (current === request.id ? null : current));
+    void handleOutputUpload(request, event.dataTransfer.files?.[0]);
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -281,7 +299,15 @@ function Solicitacoes() {
                       <td className="px-3 py-2 text-muted-foreground">{r.data || "-"}</td>
                       <td className="px-3 py-2 text-foreground">{code}</td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div
+                          className={`flex flex-wrap items-center gap-2 rounded-md border px-2 py-2 transition-colors ${
+                            draggingId === r.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
+                          }`}
+                          onDragEnter={() => setDraggingId(r.id)}
+                          onDragOver={handleDragOver}
+                          onDragLeave={(event) => handleDragLeave(event, r.id)}
+                          onDrop={(event) => handleDrop(event, r)}
+                        >
                           {getAttachmentFile(r.admin_attachment) ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
                               <CheckCircle2 className="h-4 w-4" />
@@ -305,7 +331,7 @@ function Solicitacoes() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="gap-2"
+                            className={`gap-2 ${draggingId === r.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
                             disabled={uploadingId === r.id}
                             onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
                           >
@@ -316,6 +342,11 @@ function Solicitacoes() {
                             )}
                             {getAttachmentFile(r.admin_attachment) ? "Trocar" : "Enviar PDF"}
                           </Button>
+                          {draggingId === r.id && (
+                            <span className="text-xs font-medium text-emerald-700">
+                              Solte o PDF para enviar agora
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right">
