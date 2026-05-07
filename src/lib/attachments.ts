@@ -57,3 +57,15 @@ export async function resolveAttachmentUrl(attachment: AttachmentFile | null | u
 
   return data?.signedUrl || "";
 }
+
+export async function removeAttachmentFile(attachment: AttachmentFile | null | undefined) {
+  if (!attachment?.storageBucket || !attachment.storagePath) return;
+
+  const { error } = await supabase.storage
+    .from(attachment.storageBucket)
+    .remove([attachment.storagePath]);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}

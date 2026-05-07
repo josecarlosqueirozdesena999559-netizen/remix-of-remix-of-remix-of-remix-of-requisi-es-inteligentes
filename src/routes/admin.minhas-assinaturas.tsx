@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { getRequestSignedAttachment } from "@/lib/attachments";
+import {
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+  removeAttachmentFile,
+  type AttachmentFile,
+} from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -118,16 +123,28 @@ function MinhasAssinaturasPage() {
       const signedAttachment = isOutputStage
         ? { ...current, output: attachment }
         : { ...current, request: attachment };
+      const previousSignedAttachment = isOutputStage
+        ? getOutputSignedAttachment(request.signed_attachment, request.status)
+        : getRequestSignedAttachment(request.signed_attachment, request.status);
+      const previousAdminAttachment = isOutputStage
+        ? (request.admin_attachment as AttachmentFile | null)
+        : null;
 
       const { error: updateError } = await supabase
         .from("requisicoes")
         .update({
           signed_attachment: signedAttachment,
+          admin_attachment: isOutputStage ? null : request.admin_attachment,
           status: isOutputStage ? "concluido" : "recebido",
         })
         .eq("id", request.id);
 
       if (updateError) throw new Error(updateError.message);
+
+      await Promise.all([
+        removeAttachmentFile(previousSignedAttachment),
+        removeAttachmentFile(previousAdminAttachment),
+      ]);
 
       setMessage(isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.");
       await loadRequests();

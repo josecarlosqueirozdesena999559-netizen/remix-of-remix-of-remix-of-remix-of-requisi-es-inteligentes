@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { removeAttachmentFile, type AttachmentFile } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
@@ -116,6 +117,8 @@ function Solicitacoes() {
     setUploadingId(request.id);
 
     try {
+      const previousAdminAttachment = request.admin_attachment as AttachmentFile | null;
+
       const { error: uploadError } = await supabase.storage
         .from(REQUISICOES_BUCKET)
         .upload(storagePath, file, {
@@ -135,6 +138,8 @@ function Solicitacoes() {
         .eq("id", request.id);
 
       if (updateError) throw new Error(updateError.message);
+
+      await removeAttachmentFile(previousAdminAttachment);
 
       setData((current) =>
         current?.filter((item) => item.id !== request.id),
