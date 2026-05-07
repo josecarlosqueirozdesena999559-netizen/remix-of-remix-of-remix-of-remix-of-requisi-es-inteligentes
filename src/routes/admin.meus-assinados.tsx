@@ -4,11 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getAttachmentFile,
-  getOutputSignedAttachment,
-  getRequestSignedAttachment,
-} from "@/lib/attachments";
+import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/meus-assinados")({
@@ -61,13 +57,6 @@ function hasOutputDocument(request: Requisicao) {
   );
 }
 
-function hasSignedDocument(request: Requisicao) {
-  return Boolean(
-    getRequestSignedAttachment(request.signed_attachment, request.status) ||
-      hasOutputDocument(request),
-  );
-}
-
 function MeusAssinadosPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -96,12 +85,12 @@ function MeusAssinadosPage() {
           .from("requisicoes")
           .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
           .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["recebido", "requisicao_assinada", "aguardando_assinatura_saida", "concluido"])
+          .eq("status", "concluido")
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
         if (active) {
-          setRequests(((data ?? []) as Requisicao[]).filter(hasSignedDocument));
+          setRequests(((data ?? []) as Requisicao[]).filter(hasOutputDocument));
         }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");

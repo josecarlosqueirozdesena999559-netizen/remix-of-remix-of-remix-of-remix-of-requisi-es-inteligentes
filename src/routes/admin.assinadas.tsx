@@ -58,13 +58,6 @@ function hasOutputDocument(request: RequisicaoAssinada) {
   );
 }
 
-function hasSignedDocument(request: RequisicaoAssinada) {
-  return Boolean(
-    getRequestSignedAttachment(request.signed_attachment, request.status) ||
-      hasOutputDocument(request),
-  );
-}
-
 function AssinadasPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -101,7 +94,11 @@ function AssinadasPage() {
       } else {
         const requests = (requestsResult.data ?? []) as RequisicaoAssinada[];
 
-        setData(requests.filter(hasSignedDocument));
+        setData(
+          requests.filter(
+            (request) => request.status === "concluido" && hasOutputDocument(request),
+          ),
+        );
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
       }
 
