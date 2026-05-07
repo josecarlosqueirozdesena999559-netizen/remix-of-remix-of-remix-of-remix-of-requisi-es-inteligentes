@@ -24,12 +24,14 @@ interface Requisicao {
   saida_codigo: string | null;
   setor: string | null;
   solicitante: string | null;
+  solicitante_cpf: string | null;
   data: string | null;
   created_at: string;
   status: string;
   items: RequestPdfItem[] | null;
   signed_attachment: unknown;
   admin_attachment: unknown;
+  displaySetor?: string;
 }
 
 function hasRequestSigned(request: Requisicao) {
@@ -73,7 +75,7 @@ function Solicitacoes() {
       const [pendingResult, allResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,setor,solicitante,data,created_at,status,items,signed_attachment,admin_attachment")
+          .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment")
           .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("created_at", { ascending: false }),
         supabase
@@ -88,12 +90,48 @@ function Solicitacoes() {
         setError(pendingResult.error?.message || allResult.error?.message || "Erro ao carregar solicitações.");
       } else {
         const requests = (pendingResult.data ?? []) as Requisicao[];
+        const cpfs = Array.from(
+          new Set(
+            requests
+              .map((request) => request.solicitante_cpf?.trim())
+              .filter((cpf): cpf is string => Boolean(cpf)),
+          ),
+        );
+        const usersByCpf = new Map<string, { setor: string | null; unidade_nome: string | null }>();
+
+        if (cpfs.length > 0) {
+          const { data: usersResult, error: usersError } = await supabase
+            .from("usuarios")
+            .select("cpf,setor,unidade_nome")
+            .in("cpf", cpfs);
+
+          if (usersError) {
+            setError(usersError.message);
+            setLoading(false);
+            return;
+          }
+
+          (usersResult ?? []).forEach((user) => {
+            if (user.cpf) {
+              usersByCpf.set(user.cpf, {
+                setor: user.setor ?? null,
+                unidade_nome: user.unidade_nome ?? null,
+              });
+            }
+          });
+        }
+
         const pendingOutputRequests = requests.filter(needsAdminOutput);
 
         setData(
           pendingOutputRequests.map((request) => ({
             ...request,
             status: "recebido",
+            displaySetor:
+              request.setor?.trim() ||
+              usersByCpf.get(request.solicitante_cpf?.trim() || "")?.unidade_nome?.trim() ||
+              usersByCpf.get(request.solicitante_cpf?.trim() || "")?.setor?.trim() ||
+              "Sem setor",
           })),
         );
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]));
@@ -112,7 +150,7 @@ function Solicitacoes() {
   const grouped = useMemo(() => {
     const map = new Map<string, Requisicao[]>();
     (data ?? []).forEach((r) => {
-      const key = r.setor?.trim() || "Sem setor";
+      const key = r.displaySetor?.trim() || "Sem setor";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(r);
     });
@@ -145,7 +183,7 @@ function Solicitacoes() {
       storageBucket: REQUISICOES_BUCKET,
       storagePath,
       uploadedAt: new Date().toISOString(),
-      kind: "output",
+      kind: "output" as const,
     };
 
     setUploadingId(request.id);
@@ -175,9 +213,7 @@ function Solicitacoes() {
 
       await removeAttachmentFile(previousAdminAttachment);
 
-      setData((current) =>
-        current?.filter((item) => item.id !== request.id),
-      );
+      setData((current) => current?.filter((item) => item.id !== request.id));
       setUploadMessage("Documento de saída enviado.");
     } catch (err) {
       setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de saída.");
@@ -194,7 +230,7 @@ function Solicitacoes() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-muted-foreground p-6">
+        <div className="flex items-center gap-2 p-6 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
         </div>
       ) : error ? (
@@ -225,7 +261,7 @@ function Solicitacoes() {
             </p>
           )}
 
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-md overflow-x-auto border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
@@ -308,21 +344,21 @@ function Solicitacoes() {
         </Card>
       ) : (
         <>
-          <Card className="p-6 bg-muted/30">
+          <Card className="bg-muted/30 p-6">
             <p className="text-sm text-muted-foreground">Primeiro passo</p>
             <p className="text-lg text-foreground">Escolha o local para conferir os PDFs</p>
           </Card>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {grouped.map(([setor, items]) => (
               <button
                 key={setor}
                 type="button"
                 onClick={() => setSelected(setor)}
-                className="text-left rounded-md border-l-4 border-primary/60 p-4 bg-card hover:bg-accent/50 transition-colors"
+                className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
               >
                 <p className="text-foreground">{setor}</p>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {items.length} {items.length === 1 ? "registro" : "registros"}
                 </p>
               </button>
