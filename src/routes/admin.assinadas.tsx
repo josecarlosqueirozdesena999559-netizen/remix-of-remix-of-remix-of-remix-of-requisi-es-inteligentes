@@ -24,15 +24,16 @@ interface RequisicaoAssinada {
 }
 
 function getCurrentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function getRequestMonth(request: Pick<RequisicaoAssinada, "data" | "created_at">) {
   const displayDate = request.data?.trim();
 
   if (displayDate) {
-    const brDate = displayDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (brDate) return `${brDate[3]}-${brDate[2]}`;
+    const brDate = displayDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (brDate) return `${brDate[3]}-${brDate[2].padStart(2, "0")}`;
 
     const isoDate = displayDate.match(/^(\d{4})-(\d{2})/);
     if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
@@ -53,6 +54,13 @@ function hasOutputDocument(request: RequisicaoAssinada) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
       getAttachmentFile(request.admin_attachment),
+  );
+}
+
+function hasSignedDocument(request: RequisicaoAssinada) {
+  return Boolean(
+    getRequestSignedAttachment(request.signed_attachment, request.status) ||
+      hasOutputDocument(request),
   );
 }
 
@@ -108,11 +116,7 @@ function AssinadasPage() {
           }
         }
 
-        setData(
-          requests.filter(
-            (request) => request.status === "concluido" && hasOutputDocument(request),
-          ),
-        );
+        setData(requests.filter(hasSignedDocument));
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
       }
 

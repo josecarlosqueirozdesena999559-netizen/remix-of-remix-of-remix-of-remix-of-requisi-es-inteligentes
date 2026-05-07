@@ -44,6 +44,18 @@ async function removeOldAttachment(attachment: AttachmentFile | null | undefined
   }
 }
 
+function hasFinishedSignature(request: Requisicao) {
+  if (request.status === "aguardando_assinatura") {
+    return Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
+  }
+
+  if (request.status === "aguardando_assinatura_saida") {
+    return Boolean(getOutputSignedAttachment(request.signed_attachment, request.status));
+  }
+
+  return false;
+}
+
 function MinhasAssinaturasPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -75,7 +87,37 @@ function MinhasAssinaturasPage() {
 
       if (error) throw new Error(error.message);
 
-      setRequests((data ?? []) as Requisicao[]);
+      const pendingRequests = (data ?? []) as Requisicao[];
+      const finishedRequests = pendingRequests.filter(hasFinishedSignature);
+      const finishedRequestIds = finishedRequests.map((request) => request.id);
+      const signedRequestIds = finishedRequests
+        .filter((request) => request.status === "aguardando_assinatura")
+        .map((request) => request.id);
+      const signedOutputIds = finishedRequests
+        .filter((request) => request.status === "aguardando_assinatura_saida")
+        .map((request) => request.id);
+
+      if (signedRequestIds.length > 0) {
+        const { error: repairRequestError } = await supabase
+          .from("requisicoes")
+          .update({ status: "recebido" })
+          .in("id", signedRequestIds);
+
+        if (repairRequestError) throw new Error(repairRequestError.message);
+      }
+
+      if (signedOutputIds.length > 0) {
+        const { error: repairOutputError } = await supabase
+          .from("requisicoes")
+          .update({ status: "concluido" })
+          .in("id", signedOutputIds);
+
+        if (repairOutputError) throw new Error(repairOutputError.message);
+      }
+
+      setRequests(
+        pendingRequests.filter((request) => !finishedRequestIds.includes(request.id)),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar assinaturas.");
     } finally {
@@ -153,6 +195,7 @@ function MinhasAssinaturasPage() {
       ]);
 
       setMessage(isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.");
+      setRequests((current) => current.filter((item) => item.id !== request.id));
       await loadRequests();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar PDF assinado.");
