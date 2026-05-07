@@ -42,6 +42,7 @@ function MinhaAssinaturaPdfPage() {
       setLoading(true);
       setError(null);
 
+      try {
       const [requestResult, allResult] = await Promise.all([
         supabase
           .from("requisicoes")
@@ -133,6 +134,12 @@ function MinhaAssinaturaPdfPage() {
         url: createdUrl,
       });
       setLoading(false);
+      } catch (err) {
+        if (!active) return;
+
+        setError(err instanceof Error ? err.message : "Erro ao carregar PDF.");
+        setLoading(false);
+      }
     }
 
     loadPdf();

@@ -35,6 +35,14 @@ function getStageLabel(status: string) {
   return "Assinar requisição";
 }
 
+async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
+  try {
+    await removeAttachmentFile(attachment);
+  } catch (error) {
+    console.warn("Nao foi possivel remover anexo antigo.", error);
+  }
+}
+
 function MinhasAssinaturasPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -142,8 +150,8 @@ function MinhasAssinaturasPage() {
       if (updateError) throw new Error(updateError.message);
 
       await Promise.all([
-        removeAttachmentFile(previousSignedAttachment),
-        removeAttachmentFile(previousAdminAttachment),
+        removeOldAttachment(previousSignedAttachment),
+        removeOldAttachment(previousAdminAttachment),
       ]);
 
       setMessage(isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.");
