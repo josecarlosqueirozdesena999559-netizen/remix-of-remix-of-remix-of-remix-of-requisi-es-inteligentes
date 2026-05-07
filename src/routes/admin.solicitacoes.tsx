@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { removeAttachmentFile, type AttachmentFile } from "@/lib/attachments";
+import {
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+  removeAttachmentFile,
+  type AttachmentFile,
+} from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
@@ -22,7 +27,19 @@ interface Requisicao {
   created_at: string;
   status: string;
   items: RequestPdfItem[] | null;
+  signed_attachment: unknown;
   admin_attachment: unknown;
+}
+
+function hasRequestSigned(request: Requisicao) {
+  return Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
+}
+
+function hasOutputDocument(request: Requisicao) {
+  return Boolean(
+    getOutputSignedAttachment(request.signed_attachment, request.status) ||
+      request.admin_attachment,
+  );
 }
 
 function Solicitacoes() {
@@ -47,8 +64,8 @@ function Solicitacoes() {
       const [pendingResult, allResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,setor,solicitante,data,created_at,status,items,admin_attachment")
-          .eq("status", "recebido")
+          .select("id,saida_codigo,setor,solicitante,data,created_at,status,items,signed_attachment,admin_attachment")
+          .in("status", ["recebido", "concluido", "aguardando_assinatura_saida"])
           .order("created_at", { ascending: false }),
         supabase
           .from("requisicoes")
@@ -61,7 +78,33 @@ function Solicitacoes() {
       if (pendingResult.error || allResult.error) {
         setError(pendingResult.error?.message || allResult.error?.message || "Erro ao carregar solicitações.");
       } else {
-        setData((pendingResult.data ?? []) as Requisicao[]);
+        const requests = (pendingResult.data ?? []) as Requisicao[];
+        const pendingOutputRequests = requests.filter(
+          (request) => hasRequestSigned(request) && !hasOutputDocument(request),
+        );
+        const wrongStatusIds = pendingOutputRequests
+          .filter((request) => request.status !== "recebido")
+          .map((request) => request.id);
+
+        if (wrongStatusIds.length > 0) {
+          const { error: repairError } = await supabase
+            .from("requisicoes")
+            .update({ status: "recebido" })
+            .in("id", wrongStatusIds);
+
+          if (repairError) {
+            setError(repairError.message);
+            setLoading(false);
+            return;
+          }
+        }
+
+        setData(
+          pendingOutputRequests.map((request) => ({
+            ...request,
+            status: "recebido",
+          })),
+        );
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]));
       }
 
