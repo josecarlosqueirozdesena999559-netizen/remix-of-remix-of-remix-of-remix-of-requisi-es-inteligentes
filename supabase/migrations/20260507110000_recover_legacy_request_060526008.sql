@@ -21,10 +21,20 @@ WITH rebuilt_items AS (
   FROM public.requisicoes r
   JOIN public.requisicao_itens ri
     ON ri.requisicao_id = r.id
-  WHERE r.solicitante = 'DYELSSE LARISSA DOS SANTOS'
-    AND (
-      (r.data = '06/05/2026' AND r.saida_codigo IN ('060526008', '060526006', '060526005'))
-      OR (r.data = '05/05/2026' AND r.saida_codigo IN ('050526011', '050526007'))
+  WHERE (
+      r.solicitante = 'DYELSSE LARISSA DOS SANTOS'
+      AND (
+        (r.data = '06/05/2026' AND r.saida_codigo IN ('060526008', '060526006', '060526005'))
+        OR (r.data = '05/05/2026' AND r.saida_codigo IN ('050526011', '050526007'))
+      )
+    )
+    OR (
+      r.solicitante = 'Beatriz Dias Mendes'
+      AND r.solicitante_cpf = '06279437302'
+      AND r.data = '04/05/2026'
+      AND r.saida_codigo = '040526011'
+      AND r.setor = 'UBS - MONSENHOR D.'
+      AND r.categoria = 'Odontológico'
     )
   GROUP BY r.id
 )
