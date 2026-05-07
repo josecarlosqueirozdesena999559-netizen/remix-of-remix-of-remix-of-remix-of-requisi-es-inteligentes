@@ -89,22 +89,6 @@ function Solicitacoes() {
       } else {
         const requests = (pendingResult.data ?? []) as Requisicao[];
         const pendingOutputRequests = requests.filter(needsAdminOutput);
-        const wrongStatusIds = pendingOutputRequests
-          .filter((request) => request.status !== "recebido")
-          .map((request) => request.id);
-
-        if (wrongStatusIds.length > 0) {
-          const { error: repairError } = await supabase
-            .from("requisicoes")
-            .update({ status: "recebido" })
-            .in("id", wrongStatusIds);
-
-          if (repairError) {
-            setError(repairError.message);
-            setLoading(false);
-            return;
-          }
-        }
 
         setData(
           pendingOutputRequests.map((request) => ({

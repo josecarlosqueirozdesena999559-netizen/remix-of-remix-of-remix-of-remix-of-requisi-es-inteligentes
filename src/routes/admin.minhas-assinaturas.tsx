@@ -40,24 +40,24 @@ function isRequestSignatureStatus(status: string) {
   return status === "aguardando_assinatura" || status === "aguardando_assinatura_requisicao";
 }
 
+function needsCurrentStageSignature(request: Requisicao) {
+  if (request.status === "aguardando_assinatura_saida") {
+    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  if (isRequestSignatureStatus(request.status)) {
+    return !getRequestSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  return false;
+}
+
 async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
   try {
     await removeAttachmentFile(attachment);
   } catch (error) {
     console.warn("Nao foi possivel remover anexo antigo.", error);
   }
-}
-
-function hasFinishedSignature(request: Requisicao) {
-  if (isRequestSignatureStatus(request.status)) {
-    return Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
-  }
-
-  if (request.status === "aguardando_assinatura_saida") {
-    return Boolean(getOutputSignedAttachment(request.signed_attachment, request.status));
-  }
-
-  return false;
 }
 
 function MinhasAssinaturasPage() {
@@ -91,37 +91,7 @@ function MinhasAssinaturasPage() {
 
       if (error) throw new Error(error.message);
 
-      const pendingRequests = (data ?? []) as Requisicao[];
-      const finishedRequests = pendingRequests.filter(hasFinishedSignature);
-      const finishedRequestIds = finishedRequests.map((request) => request.id);
-      const signedRequestIds = finishedRequests
-        .filter((request) => isRequestSignatureStatus(request.status))
-        .map((request) => request.id);
-      const signedOutputIds = finishedRequests
-        .filter((request) => request.status === "aguardando_assinatura_saida")
-        .map((request) => request.id);
-
-      if (signedRequestIds.length > 0) {
-        const { error: repairRequestError } = await supabase
-          .from("requisicoes")
-          .update({ status: "recebido" })
-          .in("id", signedRequestIds);
-
-        if (repairRequestError) throw new Error(repairRequestError.message);
-      }
-
-      if (signedOutputIds.length > 0) {
-        const { error: repairOutputError } = await supabase
-          .from("requisicoes")
-          .update({ status: "concluido" })
-          .in("id", signedOutputIds);
-
-        if (repairOutputError) throw new Error(repairOutputError.message);
-      }
-
-      setRequests(
-        pendingRequests.filter((request) => !finishedRequestIds.includes(request.id)),
-      );
+      setRequests(((data ?? []) as Requisicao[]).filter(needsCurrentStageSignature));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar assinaturas.");
     } finally {

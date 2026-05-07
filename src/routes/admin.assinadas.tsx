@@ -100,22 +100,6 @@ function AssinadasPage() {
         setError(requestsResult.error?.message || allResult.error?.message || "Erro ao carregar requisicoes.");
       } else {
         const requests = (requestsResult.data ?? []) as RequisicaoAssinada[];
-        const completedWithoutOutput = requests.filter(
-          (request) => request.status === "concluido" && !hasOutputDocument(request),
-        );
-
-        if (completedWithoutOutput.length > 0) {
-          const { error: repairError } = await supabase
-            .from("requisicoes")
-            .update({ status: "recebido" })
-            .in("id", completedWithoutOutput.map((request) => request.id));
-
-          if (repairError) {
-            setError(repairError.message);
-            setLoading(false);
-            return;
-          }
-        }
 
         setData(requests.filter(hasSignedDocument));
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
