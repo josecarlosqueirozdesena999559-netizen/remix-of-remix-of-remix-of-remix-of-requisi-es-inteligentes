@@ -103,10 +103,22 @@ function getRequestItemPdfDescription(item: ReturnType<typeof normalizeRequestIt
   return itemName;
 }
 
+function normalizeQuantity(value: string | number | null | undefined) {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(",", ".");
+  const quantity = Number(normalized);
+
+  return Number.isFinite(quantity) ? quantity : 0;
+}
+
+function getRequestedQuantity(item: RequestPdfItem) {
+  return item.need ?? item.qtdNecessaria ?? item.quantidade_solicitada ?? null;
+}
+
 function getActiveRequestItems(items?: RequestPdfItem[] | null) {
   return (Array.isArray(items) ? items : []).filter((item) => {
-    const quantity = item.need ?? item.qtdNecessaria ?? item.quantidade_solicitada ?? 0;
-    return Number(quantity) > 0;
+    return normalizeQuantity(getRequestedQuantity(item)) > 0;
   });
 }
 
@@ -118,7 +130,7 @@ function getRequestItemsForPdf(request: RequestPdfData) {
       toPdfAscii(getRequestItemPdfDescription(item)),
       toPdfAscii(item.unit || "-"),
       toPdfAscii(item.stock ?? item.qtdDisponivel ?? "-"),
-      toPdfAscii(item.need ?? item.qtdNecessaria ?? item.quantidade_solicitada ?? "-"),
+      toPdfAscii(getRequestedQuantity(item) ?? "-"),
       " ",
     ];
   });

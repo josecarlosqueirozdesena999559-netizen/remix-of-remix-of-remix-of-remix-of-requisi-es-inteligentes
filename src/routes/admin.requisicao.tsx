@@ -34,6 +34,11 @@ function formatToday() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
 }
 
+function hasRequestedQuantity(value: string | undefined) {
+  const quantity = Number(String(value ?? "").trim().replace(",", "."));
+  return Number.isFinite(quantity) && quantity > 0;
+}
+
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
@@ -124,7 +129,7 @@ function CriarRequisicaoPage() {
         quantidade_solicitada: quantities[item.id],
         categoria: selectedCategory || item.categoria,
       }))
-      .filter((item) => Number(item.need) > 0);
+      .filter((item) => hasRequestedQuantity(item.need));
 
     if (selectedItems.length === 0) {
       setError("Informe a quantidade de pelo menos um item.");
