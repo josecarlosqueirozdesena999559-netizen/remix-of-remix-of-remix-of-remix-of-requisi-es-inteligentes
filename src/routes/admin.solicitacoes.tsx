@@ -42,6 +42,13 @@ function hasOutputDocument(request: Requisicao) {
   );
 }
 
+function needsAdminOutput(request: Requisicao) {
+  return !hasOutputDocument(request) && (
+    request.status === "recebido" ||
+    hasRequestSigned(request)
+  );
+}
+
 function Solicitacoes() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -79,9 +86,7 @@ function Solicitacoes() {
         setError(pendingResult.error?.message || allResult.error?.message || "Erro ao carregar solicitações.");
       } else {
         const requests = (pendingResult.data ?? []) as Requisicao[];
-        const pendingOutputRequests = requests.filter(
-          (request) => hasRequestSigned(request) && !hasOutputDocument(request),
-        );
+        const pendingOutputRequests = requests.filter(needsAdminOutput);
         const wrongStatusIds = pendingOutputRequests
           .filter((request) => request.status !== "recebido")
           .map((request) => request.id);
