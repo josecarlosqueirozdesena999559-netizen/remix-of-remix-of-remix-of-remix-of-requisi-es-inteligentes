@@ -46,6 +46,7 @@ function hasOutputDocument(request: Requisicao) {
 function needsAdminOutput(request: Requisicao) {
   return !hasOutputDocument(request) && (
     request.status === "recebido" ||
+    request.status === "requisicao_assinada" ||
     hasRequestSigned(request)
   );
 }
@@ -73,7 +74,7 @@ function Solicitacoes() {
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,data,created_at,status,items,signed_attachment,admin_attachment")
-          .in("status", ["recebido", "concluido", "aguardando_assinatura_saida"])
+          .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("created_at", { ascending: false }),
         supabase
           .from("requisicoes")

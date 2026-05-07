@@ -35,14 +35,16 @@ function AdminHome() {
           .from("requisicoes")
           .select("status")
           .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_saida"]);
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"]);
 
         if (error) throw new Error(error.message);
         if (!active) return;
 
         setSignatureCounts({
-          request: (data ?? []).filter((request) => request.status === "aguardando_assinatura")
-            .length,
+          request: (data ?? []).filter((request) =>
+            request.status === "aguardando_assinatura" ||
+            request.status === "aguardando_assinatura_requisicao",
+          ).length,
           output: (data ?? []).filter(
             (request) => request.status === "aguardando_assinatura_saida",
           ).length,

@@ -36,6 +36,10 @@ function getStageLabel(status: string) {
   return "Assinar requisição";
 }
 
+function isRequestSignatureStatus(status: string) {
+  return status === "aguardando_assinatura" || status === "aguardando_assinatura_requisicao";
+}
+
 async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
   try {
     await removeAttachmentFile(attachment);
@@ -45,7 +49,7 @@ async function removeOldAttachment(attachment: AttachmentFile | null | undefined
 }
 
 function hasFinishedSignature(request: Requisicao) {
-  if (request.status === "aguardando_assinatura") {
+  if (isRequestSignatureStatus(request.status)) {
     return Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
   }
 
@@ -82,7 +86,7 @@ function MinhasAssinaturasPage() {
         .from("requisicoes")
         .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment")
         .eq("solicitante_cpf", profile.cpf)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_saida"])
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);
@@ -91,7 +95,7 @@ function MinhasAssinaturasPage() {
       const finishedRequests = pendingRequests.filter(hasFinishedSignature);
       const finishedRequestIds = finishedRequests.map((request) => request.id);
       const signedRequestIds = finishedRequests
-        .filter((request) => request.status === "aguardando_assinatura")
+        .filter((request) => isRequestSignatureStatus(request.status))
         .map((request) => request.id);
       const signedOutputIds = finishedRequests
         .filter((request) => request.status === "aguardando_assinatura_saida")

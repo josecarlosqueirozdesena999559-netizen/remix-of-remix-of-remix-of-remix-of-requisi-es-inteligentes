@@ -47,6 +47,7 @@ function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
 
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluida";
+  if (status === "requisicao_assinada") return "Requisicao assinada";
   if (status === "recebido") return "Requisicao assinada";
   if (status === "aguardando_assinatura_saida") return "Aguardando saida";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
@@ -95,7 +96,7 @@ function MeusAssinadosPage() {
           .from("requisicoes")
           .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
           .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["recebido", "aguardando_assinatura_saida", "concluido"])
+          .in("status", ["recebido", "requisicao_assinada", "aguardando_assinatura_saida", "concluido"])
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
