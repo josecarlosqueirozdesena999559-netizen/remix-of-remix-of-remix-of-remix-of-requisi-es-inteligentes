@@ -21,6 +21,10 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
+import {
+  isMissingReturnFeedbackColumnError,
+  omitReturnFeedbackFields,
+} from "@/lib/request-return-feedback";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 
@@ -214,17 +218,28 @@ function Solicitacoes() {
 
       if (uploadError) throw new Error(uploadError.message);
 
-      const { error: updateError } = await supabase
+      const payload = {
+        admin_attachment: attachment,
+        saida_codigo: request.saida_codigo || code,
+        status: "aguardando_assinatura_saida",
+        return_reason: null,
+        return_target: null,
+        returned_at: null,
+      };
+
+      let { error: updateError } = await supabase
         .from("requisicoes")
-        .update({
-          admin_attachment: attachment,
-          saida_codigo: request.saida_codigo || code,
-          status: "aguardando_assinatura_saida",
-          return_reason: null,
-          return_target: null,
-          returned_at: null,
-        })
+        .update(payload)
         .eq("id", request.id);
+
+      if (updateError && isMissingReturnFeedbackColumnError(updateError.message)) {
+        const fallbackUpdate = await supabase
+          .from("requisicoes")
+          .update(omitReturnFeedbackFields(payload))
+          .eq("id", request.id);
+
+        updateError = fallbackUpdate.error;
+      }
 
       if (updateError) throw new Error(updateError.message);
 
@@ -291,17 +306,28 @@ function Solicitacoes() {
         removeAttachmentFile(adminAttachment),
       ]);
 
-      const { error: updateError } = await supabase
+      const payload = {
+        status: reviewMode === "devolver" ? "correcao_requisicao" : "excluida_admin",
+        signed_attachment: null,
+        admin_attachment: null,
+        return_reason: reason,
+        return_target: "requisicao",
+        returned_at: new Date().toISOString(),
+      };
+
+      let { error: updateError } = await supabase
         .from("requisicoes")
-        .update({
-          status: reviewMode === "devolver" ? "correcao_requisicao" : "excluida_admin",
-          signed_attachment: null,
-          admin_attachment: null,
-          return_reason: reason,
-          return_target: "requisicao",
-          returned_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", reviewingRequest.id);
+
+      if (updateError && isMissingReturnFeedbackColumnError(updateError.message)) {
+        const fallbackUpdate = await supabase
+          .from("requisicoes")
+          .update(omitReturnFeedbackFields(payload))
+          .eq("id", reviewingRequest.id);
+
+        updateError = fallbackUpdate.error;
+      }
 
       if (updateError) throw new Error(updateError.message);
 

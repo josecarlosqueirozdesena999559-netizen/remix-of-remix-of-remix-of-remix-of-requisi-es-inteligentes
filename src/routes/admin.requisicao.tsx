@@ -10,6 +10,10 @@ import {
   productHasCategory,
   sortProductsByMaterialGroup,
 } from "@/lib/product-options";
+import {
+  isMissingReturnFeedbackColumnError,
+  omitReturnFeedbackFields,
+} from "@/lib/request-return-feedback";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/requisicao")({
@@ -40,6 +44,9 @@ interface EditableRequest {
   items: EditableRequestItem[] | null;
   return_reason: string | null;
 }
+
+const requestSelectWithFeedback = "id,categoria,items,return_reason";
+const requestSelectFallback = "id,categoria,items";
 
 function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
@@ -97,7 +104,7 @@ function CriarRequisicaoPage() {
           editingRequestId
             ? supabase
                 .from("requisicoes")
-                .select("id,categoria,items,return_reason")
+                .select(requestSelectWithFeedback)
                 .eq("id", editingRequestId)
                 .maybeSingle()
             : Promise.resolve({ data: null, error: null }),
@@ -105,13 +112,31 @@ function CriarRequisicaoPage() {
 
         if (!active) return;
 
-        if (itemsResult.error || requestResult.error) {
-          throw new Error(itemsResult.error?.message || requestResult.error?.message || "Erro ao carregar requisição.");
+        let requestError = requestResult.error;
+        let editableRequest = requestResult.data as EditableRequest | null;
+
+        if (requestError && editingRequestId && isMissingReturnFeedbackColumnError(requestError.message)) {
+          const fallbackResult = await supabase
+            .from("requisicoes")
+            .select(requestSelectFallback)
+            .eq("id", editingRequestId)
+            .maybeSingle();
+
+          requestError = fallbackResult.error;
+          editableRequest = fallbackResult.data
+            ? {
+                ...(fallbackResult.data as Omit<EditableRequest, "return_reason">),
+                return_reason: null,
+              }
+            : null;
+        }
+
+        if (itemsResult.error || requestError) {
+          throw new Error(itemsResult.error?.message || requestError?.message || "Erro ao carregar requisicao.");
         }
 
         const categories = getAllowedCategories(profile);
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
-        const editableRequest = requestResult.data as EditableRequest | null;
 
         setProfile(profile);
         setItems(loadedItems);
@@ -177,7 +202,7 @@ function CriarRequisicaoPage() {
     setError(null);
 
     if (!profile) {
-      setError("Perfil do usuário não encontrado.");
+      setError("Perfil do usuario nao encontrado.");
       setSaving(false);
       return;
     }
@@ -220,12 +245,35 @@ function CriarRequisicaoPage() {
       returned_at: null,
     };
 
-    const { error } = editingRequestId
-      ? await supabase.from("requisicoes").update(payload).eq("id", editingRequestId)
-      : await supabase.from("requisicoes").insert(payload);
+    let requestError = null;
 
-    if (error) {
-      setError(error.message);
+    if (editingRequestId) {
+      const updateResult = await supabase.from("requisicoes").update(payload).eq("id", editingRequestId);
+      requestError = updateResult.error;
+
+      if (requestError && isMissingReturnFeedbackColumnError(requestError.message)) {
+        const fallbackResult = await supabase
+          .from("requisicoes")
+          .update(omitReturnFeedbackFields(payload))
+          .eq("id", editingRequestId);
+
+        requestError = fallbackResult.error;
+      }
+    } else {
+      const insertResult = await supabase.from("requisicoes").insert(payload);
+      requestError = insertResult.error;
+
+      if (requestError && isMissingReturnFeedbackColumnError(requestError.message)) {
+        const fallbackResult = await supabase
+          .from("requisicoes")
+          .insert(omitReturnFeedbackFields(payload));
+
+        requestError = fallbackResult.error;
+      }
+    }
+
+    if (requestError) {
+      setError(requestError.message);
       setSaving(false);
       return;
     }
@@ -237,9 +285,9 @@ function CriarRequisicaoPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
+        <p className="text-sm text-muted-foreground">Usuario / Requisicao</p>
         <h2 className="text-2xl text-foreground">
-          {editingRequestId ? "Corrigir requisição" : "Criar requisição"}
+          {editingRequestId ? "Corrigir requisicao" : "Criar requisicao"}
         </h2>
       </div>
 
@@ -252,13 +300,13 @@ function CriarRequisicaoPage() {
         <Card className="p-6 text-destructive">{error}</Card>
       ) : categories.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
-          Nenhum tipo de material liberado para este usuário.
+          Nenhum tipo de material liberado para este usuario.
         </Card>
       ) : (
         <>
           {returnReason && (
             <Card className="border-amber-200 bg-amber-50 p-4 text-amber-950">
-              <p className="text-sm font-medium">Motivo da devolução</p>
+              <p className="text-sm font-medium">Motivo da devolucao</p>
               <p className="mt-1 text-sm">{returnReason}</p>
             </Card>
           )}
@@ -332,7 +380,7 @@ function CriarRequisicaoPage() {
 
           <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {editingRequestId ? "Reenviar requisição" : "Enviar requisição"}
+            {editingRequestId ? "Reenviar requisicao" : "Enviar requisicao"}
           </Button>
         </>
       )}

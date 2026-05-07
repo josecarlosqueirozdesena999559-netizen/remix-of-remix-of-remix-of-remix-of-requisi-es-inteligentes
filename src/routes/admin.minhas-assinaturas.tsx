@@ -12,6 +12,10 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
+import {
+  isMissingReturnFeedbackColumnError,
+  omitReturnFeedbackFields,
+} from "@/lib/request-return-feedback";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/minhas-assinaturas")({
@@ -32,6 +36,9 @@ interface Requisicao {
   return_reason: string | null;
   return_target: string | null;
 }
+
+const baseSelect =
+  "id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment";
 
 function getStageLabel(status: string) {
   if (status === "aguardando_assinatura_saida") return "Assinar saída";
@@ -90,12 +97,28 @@ function MinhasAssinaturasPage() {
         return;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("requisicoes")
-        .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment,return_reason,return_target")
+        .select(`${baseSelect},return_reason,return_target`)
         .eq("solicitante_cpf", profile.cpf)
         .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
         .order("created_at", { ascending: false });
+
+      if (error && isMissingReturnFeedbackColumnError(error.message)) {
+        const fallbackResult = await supabase
+          .from("requisicoes")
+          .select(baseSelect)
+          .eq("solicitante_cpf", profile.cpf)
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
+          .order("created_at", { ascending: false });
+
+        data = (fallbackResult.data ?? []).map((request) => ({
+          ...request,
+          return_reason: null,
+          return_target: null,
+        }));
+        error = fallbackResult.error;
+      }
 
       if (error) throw new Error(error.message);
 
@@ -160,17 +183,28 @@ function MinhasAssinaturasPage() {
         ? (request.admin_attachment as AttachmentFile | null)
         : null;
 
-      const { error: updateError } = await supabase
+      const payload = {
+        signed_attachment: signedAttachment,
+        admin_attachment: isOutputStage ? null : request.admin_attachment,
+        status: isOutputStage ? "concluido" : "recebido",
+        return_reason: null,
+        return_target: null,
+        returned_at: null,
+      };
+
+      let { error: updateError } = await supabase
         .from("requisicoes")
-        .update({
-          signed_attachment: signedAttachment,
-          admin_attachment: isOutputStage ? null : request.admin_attachment,
-          status: isOutputStage ? "concluido" : "recebido",
-          return_reason: null,
-          return_target: null,
-          returned_at: null,
-        })
+        .update(payload)
         .eq("id", request.id);
+
+      if (updateError && isMissingReturnFeedbackColumnError(updateError.message)) {
+        const fallbackUpdate = await supabase
+          .from("requisicoes")
+          .update(omitReturnFeedbackFields(payload))
+          .eq("id", request.id);
+
+        updateError = fallbackUpdate.error;
+      }
 
       if (updateError) throw new Error(updateError.message);
 
