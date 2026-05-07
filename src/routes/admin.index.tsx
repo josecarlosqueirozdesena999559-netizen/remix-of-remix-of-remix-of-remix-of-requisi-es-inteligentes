@@ -35,7 +35,7 @@ function AdminHome() {
           .from("requisicoes")
           .select("status")
           .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"]);
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"]);
 
         if (error) throw new Error(error.message);
         if (!active) return;
@@ -43,7 +43,8 @@ function AdminHome() {
         setSignatureCounts({
           request: (data ?? []).filter((request) =>
             request.status === "aguardando_assinatura" ||
-            request.status === "aguardando_assinatura_requisicao",
+            request.status === "aguardando_assinatura_requisicao" ||
+            request.status === "correcao_requisicao",
           ).length,
           output: (data ?? []).filter(
             (request) => request.status === "aguardando_assinatura_saida",

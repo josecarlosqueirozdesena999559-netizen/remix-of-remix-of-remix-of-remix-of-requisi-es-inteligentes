@@ -24,6 +24,23 @@ interface ItemRow {
   subcategoria: string | null;
 }
 
+interface EditableRequestItem {
+  item?: string | null;
+  nome?: string | null;
+  stock?: string | number | null;
+  qtdDisponivel?: string | number | null;
+  need?: string | number | null;
+  qtdNecessaria?: string | number | null;
+  quantidade_solicitada?: string | number | null;
+}
+
+interface EditableRequest {
+  id: string;
+  categoria: string | null;
+  items: EditableRequestItem[] | null;
+  return_reason: string | null;
+}
+
 function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
@@ -39,6 +56,10 @@ function hasRequestedQuantity(value: string | undefined) {
   return Number.isFinite(quantity) && quantity > 0;
 }
 
+function getItemName(item: EditableRequestItem) {
+  return String(item.item || item.nome || "").trim();
+}
+
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
@@ -49,6 +70,15 @@ function CriarRequisicaoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingRequestId, setEditingRequestId] = useState("");
+  const [returnReason, setReturnReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const requestId = new URLSearchParams(window.location.search).get("requisicaoId") || "";
+    setEditingRequestId(requestId);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -58,22 +88,59 @@ function CriarRequisicaoPage() {
       setError(null);
 
       try {
-        const [{ profile }, itemsResult] = await Promise.all([
+        const [{ profile }, itemsResult, requestResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("itens")
             .select("id,nome,unidade,categoria,subcategoria")
             .order("nome", { ascending: true }),
+          editingRequestId
+            ? supabase
+                .from("requisicoes")
+                .select("id,categoria,items,return_reason")
+                .eq("id", editingRequestId)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
         ]);
 
         if (!active) return;
 
-        if (itemsResult.error) throw new Error(itemsResult.error.message);
+        if (itemsResult.error || requestResult.error) {
+          throw new Error(itemsResult.error?.message || requestResult.error?.message || "Erro ao carregar requisição.");
+        }
 
         const categories = getAllowedCategories(profile);
+        const loadedItems = (itemsResult.data ?? []) as ItemRow[];
+        const editableRequest = requestResult.data as EditableRequest | null;
+
         setProfile(profile);
-        setItems((itemsResult.data ?? []) as ItemRow[]);
-        setSelectedCategory(categories[0] ?? "");
+        setItems(loadedItems);
+        setReturnReason(editableRequest?.return_reason || null);
+
+        const nextCategory = editableRequest?.categoria || categories[0] || "";
+        setSelectedCategory(nextCategory);
+
+        if (editableRequest?.items?.length) {
+          const nextStocks: Record<string, string> = {};
+          const nextQuantities: Record<string, string> = {};
+
+          editableRequest.items.forEach((requestItem) => {
+            const itemName = getItemName(requestItem);
+            const matchedItem = loadedItems.find((item) => item.nome.trim() === itemName);
+            if (!matchedItem) return;
+
+            nextStocks[matchedItem.id] = String(requestItem.stock ?? requestItem.qtdDisponivel ?? "");
+            nextQuantities[matchedItem.id] = String(
+              requestItem.need ?? requestItem.qtdNecessaria ?? requestItem.quantidade_solicitada ?? "",
+            );
+          });
+
+          setStocks(nextStocks);
+          setQuantities(nextQuantities);
+        } else {
+          setStocks({});
+          setQuantities({});
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro ao carregar itens.");
       } finally {
@@ -86,7 +153,7 @@ function CriarRequisicaoPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [editingRequestId]);
 
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
 
@@ -137,7 +204,7 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    const { error } = await supabase.from("requisicoes").insert({
+    const payload = {
       categoria: selectedCategory || null,
       setor: profile.unidade_nome || profile.setor,
       solicitante: profile.nome,
@@ -146,7 +213,16 @@ function CriarRequisicaoPage() {
       data: formatToday(),
       status: "aguardando_assinatura",
       items: selectedItems,
-    });
+      signed_attachment: null,
+      admin_attachment: null,
+      return_reason: null,
+      return_target: null,
+      returned_at: null,
+    };
+
+    const { error } = editingRequestId
+      ? await supabase.from("requisicoes").update(payload).eq("id", editingRequestId)
+      : await supabase.from("requisicoes").insert(payload);
 
     if (error) {
       setError(error.message);
@@ -162,7 +238,9 @@ function CriarRequisicaoPage() {
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
-        <h2 className="text-2xl text-foreground">Criar requisição</h2>
+        <h2 className="text-2xl text-foreground">
+          {editingRequestId ? "Corrigir requisição" : "Criar requisição"}
+        </h2>
       </div>
 
       {loading ? (
@@ -178,6 +256,13 @@ function CriarRequisicaoPage() {
         </Card>
       ) : (
         <>
+          {returnReason && (
+            <Card className="border-amber-200 bg-amber-50 p-4 text-amber-950">
+              <p className="text-sm font-medium">Motivo da devolução</p>
+              <p className="mt-1 text-sm">{returnReason}</p>
+            </Card>
+          )}
+
           <Card className="p-4">
             <div className="flex flex-wrap gap-2">
               {categories.map((category) => (
@@ -194,7 +279,7 @@ function CriarRequisicaoPage() {
           </Card>
 
           <Card className="p-4">
-            <div className="rounded-md border overflow-x-auto">
+            <div className="rounded-md overflow-x-auto border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-muted-foreground">
                   <tr>
@@ -247,7 +332,7 @@ function CriarRequisicaoPage() {
 
           <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Enviar requisição
+            {editingRequestId ? "Reenviar requisição" : "Enviar requisição"}
           </Button>
         </>
       )}

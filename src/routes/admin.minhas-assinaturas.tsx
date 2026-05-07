@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { CheckCircle2, Eye, Loader2, Upload } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, Upload, Wrench } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,10 +29,13 @@ interface Requisicao {
   status: string;
   signed_attachment: unknown;
   admin_attachment: unknown;
+  return_reason: string | null;
+  return_target: string | null;
 }
 
 function getStageLabel(status: string) {
   if (status === "aguardando_assinatura_saida") return "Assinar saída";
+  if (status === "correcao_requisicao") return "Corrigir requisição";
   return "Assinar requisição";
 }
 
@@ -43,6 +46,10 @@ function isRequestSignatureStatus(status: string) {
 function needsCurrentStageSignature(request: Requisicao) {
   if (request.status === "aguardando_assinatura_saida") {
     return !getOutputSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  if (request.status === "correcao_requisicao") {
+    return true;
   }
 
   if (isRequestSignatureStatus(request.status)) {
@@ -85,9 +92,9 @@ function MinhasAssinaturasPage() {
 
       const { data, error } = await supabase
         .from("requisicoes")
-        .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment")
+        .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment,return_reason,return_target")
         .eq("solicitante_cpf", profile.cpf)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);
@@ -127,7 +134,7 @@ function MinhasAssinaturasPage() {
       storageBucket: REQUISICOES_BUCKET,
       storagePath,
       uploadedAt: new Date().toISOString(),
-      kind: isOutputStage ? "output" : "request",
+      kind: isOutputStage ? "output" as const : "request" as const,
     };
 
     setUploadingId(request.id);
@@ -159,6 +166,9 @@ function MinhasAssinaturasPage() {
           signed_attachment: signedAttachment,
           admin_attachment: isOutputStage ? null : request.admin_attachment,
           status: isOutputStage ? "concluido" : "recebido",
+          return_reason: null,
+          return_target: null,
+          returned_at: null,
         })
         .eq("id", request.id);
 
@@ -216,7 +226,7 @@ function MinhasAssinaturasPage() {
         <Card className="p-6 text-muted-foreground">Nenhum documento aguardando sua assinatura.</Card>
       ) : (
         <Card className="p-4">
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-md overflow-x-auto border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
@@ -224,7 +234,7 @@ function MinhasAssinaturasPage() {
                   <th className="px-3 py-2 text-left font-normal">Local</th>
                   <th className="px-3 py-2 text-left font-normal">Etapa</th>
                   <th className="px-3 py-2 text-right font-normal">PDF</th>
-                  <th className="px-3 py-2 text-right font-normal">Assinado gov.br</th>
+                  <th className="px-3 py-2 text-right font-normal">Ação</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,8 +249,14 @@ function MinhasAssinaturasPage() {
                           {hasRequestSigned && request.status === "aguardando_assinatura_saida" && (
                             <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                           )}
+                          {request.status === "correcao_requisicao" && (
+                            <Wrench className="h-4 w-4 text-amber-700" />
+                          )}
                           {getStageLabel(request.status)}
                         </span>
+                        {request.return_reason && request.status === "correcao_requisicao" && (
+                          <p className="mt-1 text-xs text-amber-700">{request.return_reason}</p>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <Button
@@ -260,47 +276,64 @@ function MinhasAssinaturasPage() {
                         </Button>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <div
-                          className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
-                            draggingId === request.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
-                          }`}
-                          onDragEnter={() => setDraggingId(request.id)}
-                          onDragOver={handleDragOver}
-                          onDragLeave={(event) => handleDragLeave(event, request.id)}
-                          onDrop={(event) => handleDrop(event, request)}
-                        >
-                          <input
-                            id={`assinado-${request.id}`}
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            className="hidden"
-                            disabled={uploadingId === request.id}
-                            onChange={(event) => {
-                              void handleUpload(request, event.target.files?.[0]);
-                              event.currentTarget.value = "";
-                            }}
-                          />
+                        {request.status === "correcao_requisicao" ? (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                            disabled={uploadingId === request.id}
-                            onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
+                            className="gap-2"
+                            onClick={() => {
+                              if (typeof window !== "undefined") {
+                                window.location.assign(`/admin/requisicao?requisicaoId=${request.id}`);
+                              }
+                            }}
                           >
-                            {uploadingId === request.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Upload className="h-4 w-4" />
-                            )}
-                            Anexar
+                            <Wrench className="h-4 w-4" />
+                            Corrigir
                           </Button>
-                          {draggingId === request.id && (
-                            <span className="text-xs font-medium text-emerald-700">
-                              Solte o PDF para enviar agora
-                            </span>
-                          )}
-                        </div>
+                        ) : (
+                          <div
+                            className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
+                              draggingId === request.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
+                            }`}
+                            onDragEnter={() => setDraggingId(request.id)}
+                            onDragOver={handleDragOver}
+                            onDragLeave={(event) => handleDragLeave(event, request.id)}
+                            onDrop={(event) => handleDrop(event, request)}
+                          >
+                            <input
+                              id={`assinado-${request.id}`}
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              className="hidden"
+                              disabled={uploadingId === request.id}
+                              onChange={(event) => {
+                                void handleUpload(request, event.target.files?.[0]);
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
+                              disabled={uploadingId === request.id}
+                              onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
+                            >
+                              {uploadingId === request.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Upload className="h-4 w-4" />
+                              )}
+                              Anexar
+                            </Button>
+                            {draggingId === request.id && (
+                              <span className="text-xs font-medium text-emerald-700">
+                                Solte o PDF para enviar agora
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

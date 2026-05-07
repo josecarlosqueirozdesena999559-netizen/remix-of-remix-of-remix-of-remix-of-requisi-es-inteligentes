@@ -189,6 +189,9 @@ export type Database = {
           data: string | null
           id: string
           items: Json
+          return_reason: string | null
+          return_target: string | null
+          returned_at: string | null
           saida_codigo: string | null
           setor: string | null
           signed_attachment: Json | null
@@ -206,6 +209,9 @@ export type Database = {
           data?: string | null
           id?: string
           items?: Json
+          return_reason?: string | null
+          return_target?: string | null
+          returned_at?: string | null
           saida_codigo?: string | null
           setor?: string | null
           signed_attachment?: Json | null
@@ -223,6 +229,9 @@ export type Database = {
           data?: string | null
           id?: string
           items?: Json
+          return_reason?: string | null
+          return_target?: string | null
+          returned_at?: string | null
           saida_codigo?: string | null
           setor?: string | null
           signed_attachment?: Json | null

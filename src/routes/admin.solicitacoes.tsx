@@ -1,8 +1,17 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, FileText, Loader2, Upload } from "lucide-react";
+import { ArrowLeft, CheckCircle2, FileText, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getAttachmentFile,
@@ -65,6 +74,10 @@ function Solicitacoes() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
+  const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
+  const [reviewReason, setReviewReason] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +220,9 @@ function Solicitacoes() {
           admin_attachment: attachment,
           saida_codigo: request.saida_codigo || code,
           status: "aguardando_assinatura_saida",
+          return_reason: null,
+          return_target: null,
+          returned_at: null,
         })
         .eq("id", request.id);
 
@@ -238,6 +254,69 @@ function Solicitacoes() {
     event.preventDefault();
     setDraggingId((current) => (current === request.id ? null : current));
     void handleOutputUpload(request, event.dataTransfer.files?.[0]);
+  };
+
+  const openReview = (request: Requisicao, mode: "devolver" | "excluir") => {
+    setReviewingRequest(request);
+    setReviewMode(mode);
+    setReviewReason("");
+  };
+
+  const closeReview = () => {
+    if (reviewSaving) return;
+    setReviewingRequest(null);
+    setReviewReason("");
+  };
+
+  const submitReview = async () => {
+    if (!reviewingRequest) return;
+
+    const reason = reviewReason.trim();
+    if (!reason) {
+      setUploadMessage("Digite o motivo para continuar.");
+      return;
+    }
+
+    setReviewSaving(true);
+    setUploadMessage(null);
+
+    try {
+      const requestAttachment = getRequestSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
+      const outputAttachment = getOutputSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
+      const adminAttachment = getAttachmentFile(reviewingRequest.admin_attachment) as AttachmentFile | null;
+
+      await Promise.all([
+        removeAttachmentFile(requestAttachment),
+        removeAttachmentFile(outputAttachment),
+        removeAttachmentFile(adminAttachment),
+      ]);
+
+      const { error: updateError } = await supabase
+        .from("requisicoes")
+        .update({
+          status: reviewMode === "devolver" ? "correcao_requisicao" : "excluida_admin",
+          signed_attachment: null,
+          admin_attachment: null,
+          return_reason: reason,
+          return_target: "requisicao",
+          returned_at: new Date().toISOString(),
+        })
+        .eq("id", reviewingRequest.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
+      setUploadMessage(
+        reviewMode === "devolver"
+          ? "Requisição devolvida para correção."
+          : "Requisição excluída da fila.",
+      );
+      closeReview();
+    } catch (err) {
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao revisar requisição.");
+    } finally {
+      setReviewSaving(false);
+    }
   };
 
   return (
@@ -288,6 +367,7 @@ function Solicitacoes() {
                   <th className="px-3 py-2 text-left font-normal">Número</th>
                   <th className="px-3 py-2 text-left font-normal">Documento de saída</th>
                   <th className="px-3 py-2 text-right font-normal">PDF</th>
+                  <th className="px-3 py-2 text-right font-normal">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -366,6 +446,18 @@ function Solicitacoes() {
                           Ver PDF
                         </Button>
                       </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => openReview(r, "devolver")}>
+                            <RotateCcw className="h-4 w-4" />
+                            Devolver
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" className="gap-2 text-destructive" onClick={() => openReview(r, "excluir")}>
+                            <Trash2 className="h-4 w-4" />
+                            Excluir
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -397,6 +489,39 @@ function Solicitacoes() {
           </div>
         </>
       )}
+
+      <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}</DialogTitle>
+            <DialogDescription>
+              {reviewMode === "devolver"
+                ? "O usuário receberá a mesma requisição com os itens para corrigir e reenviar."
+                : "A requisição será retirada da fila sem apagar o histórico do banco."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Motivo</p>
+            <Textarea
+              value={reviewReason}
+              onChange={(event) => setReviewReason(event.target.value)}
+              placeholder="Descreva o erro encontrado na requisição"
+              rows={4}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeReview} disabled={reviewSaving}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void submitReview()} disabled={reviewSaving}>
+              {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {reviewMode === "devolver" ? "Devolver" : "Excluir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
