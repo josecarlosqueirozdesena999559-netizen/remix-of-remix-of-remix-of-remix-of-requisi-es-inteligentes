@@ -10,6 +10,9 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
+import { buildGlobalRequestCodes } from "@/lib/request-code";
+import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
+import { resolveRequestForPdf } from "@/lib/request-resolver";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin/meus-assinados/$requisicaoId/pdf")({
@@ -19,16 +22,24 @@ export const Route = createFileRoute("/admin/meus-assinados/$requisicaoId/pdf")(
 interface Requisicao {
   id: string;
   saida_codigo: string | null;
+  categoria: string | null;
+  setor: string | null;
+  solicitante: string | null;
+  solicitante_cpf: string | null;
+  solicitante_funcao: string | null;
+  data: string | null;
+  created_at: string;
   status: string;
   signed_attachment: unknown;
   admin_attachment: unknown;
+  items: RequestPdfItem[] | null;
 }
 
 function MeuAssinadoPdfPage() {
   const { requisicaoId } = Route.useParams();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
-  const [fileName, setFileName] = useState("Requisição-completa.pdf");
+  const [fileName, setFileName] = useState("Requisicao.pdf");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,27 +51,35 @@ function MeuAssinadoPdfPage() {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .from("requisicoes")
-        .select("id,saida_codigo,status,signed_attachment,admin_attachment")
-        .eq("id", requisicaoId)
-        .maybeSingle();
+      const [requestResult, allResult] = await Promise.all([
+        supabase
+          .from("requisicoes")
+          .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment")
+          .eq("id", requisicaoId)
+          .maybeSingle(),
+        supabase
+          .from("requisicoes")
+          .select("id,saida_codigo,data,created_at")
+          .order("created_at", { ascending: true }),
+      ]);
 
       if (!active) return;
 
-      if (error) {
-        setError(error.message);
+      if (requestResult.error || allResult.error) {
+        setError(requestResult.error?.message || allResult.error?.message || "Erro ao carregar PDF.");
         setLoading(false);
         return;
       }
 
-      if (!data) {
-        setError("Requisição não encontrada.");
+      if (!requestResult.data) {
+        setError("Requisicao nao encontrada.");
         setLoading(false);
         return;
       }
 
-      const request = data as Requisicao;
+      const request = requestResult.data as Requisicao;
+      const codeByRequestId = buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]);
+      const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
       const requestAttachment = getRequestSignedAttachment(
         request.signed_attachment,
         request.status,
@@ -69,20 +88,27 @@ function MeuAssinadoPdfPage() {
         getOutputSignedAttachment(request.signed_attachment, request.status) ||
         (request.admin_attachment as AttachmentFile | null);
 
-      const requestUrl = await resolveAttachmentUrl(requestAttachment);
-      const outputUrl = await resolveAttachmentUrl(outputAttachment);
-
-      if (!requestUrl && !outputUrl) {
-        setError("PDF assinado não encontrado.");
-        setLoading(false);
-        return;
-      }
+      const [requestUrl, outputUrl] = await Promise.all([
+        resolveAttachmentUrl(requestAttachment),
+        resolveAttachmentUrl(outputAttachment),
+      ]);
 
       if (requestUrl && outputUrl) {
         const blob = await createCombinedSignedPdfBlob(outputUrl, requestUrl);
         createdUrl = URL.createObjectURL(blob);
-      } else {
+      } else if (requestUrl || outputUrl) {
         createdUrl = requestUrl || outputUrl;
+      } else {
+        const blob = await createRequestPdfBlob(
+          await resolveRequestForPdf(
+            {
+              ...request,
+              items: request.items as RequestPdfItem[] | null,
+            },
+            code,
+          ),
+        );
+        createdUrl = URL.createObjectURL(blob);
       }
 
       if (!active) {
@@ -91,7 +117,7 @@ function MeuAssinadoPdfPage() {
       }
 
       setUrl(createdUrl);
-      setFileName(`Requisição-completa-${request.saida_codigo || request.id}.pdf`);
+      setFileName(`Requisicao-${code}.pdf`);
       setLoading(false);
     }
 
@@ -108,7 +134,7 @@ function MeuAssinadoPdfPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">Assinados / PDF</p>
-          <h2 className="text-2xl text-foreground">PDF completo</h2>
+          <h2 className="text-2xl text-foreground">PDF</h2>
         </div>
         <div className="flex items-center gap-2">
           {url && (
@@ -141,7 +167,7 @@ function MeuAssinadoPdfPage() {
       ) : url ? (
         <iframe
           src={url}
-          title="PDF completo"
+          title="PDF"
           className="min-h-[720px] flex-1 rounded-md border bg-white"
         />
       ) : null}

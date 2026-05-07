@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Eye, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,11 +19,38 @@ interface Requisicao {
   status: string;
 }
 
+function getCurrentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
+  const displayDate = request.data?.trim();
+
+  if (displayDate) {
+    const brDate = displayDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brDate) return `${brDate[3]}-${brDate[2]}`;
+
+    const isoDate = displayDate.match(/^(\d{4})-(\d{2})/);
+    if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
+  }
+
+  return String(request.created_at || "").slice(0, 7);
+}
+
+function getStatusLabel(status: string) {
+  if (status === "concluido") return "Concluida";
+  if (status === "recebido") return "Requisicao assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saida";
+  if (status === "aguardando_assinatura") return "Aguardando assinatura";
+  return status || "-";
+}
+
 function MeusAssinadosPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isChildRoute = pathname !== "/admin/meus-assinados";
   const [requests, setRequests] = useState<Requisicao[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,13 +73,12 @@ function MeusAssinadosPage() {
           .from("requisicoes")
           .select("id,saida_codigo,setor,data,created_at,status")
           .eq("solicitante_cpf", profile.cpf)
-          .eq("status", "concluido")
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
         if (active) setRequests((data ?? []) as Requisicao[]);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar assinados.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");
       } finally {
         if (active) setLoading(false);
       }
@@ -65,6 +91,10 @@ function MeusAssinadosPage() {
     };
   }, []);
 
+  const filteredRequests = useMemo(() => {
+    return requests.filter((request) => getRequestMonth(request) === selectedMonth);
+  }, [requests, selectedMonth]);
+
   if (isChildRoute) {
     return <Outlet />;
   }
@@ -72,9 +102,21 @@ function MeusAssinadosPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuário / Assinados</p>
-        <h2 className="text-2xl text-foreground">Assinados</h2>
+        <p className="text-sm text-muted-foreground">Usuario / Assinados</p>
+        <h2 className="text-2xl text-foreground">Meus PDFs do mes</h2>
       </div>
+
+      <Card className="p-4">
+        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+          Mes
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => setSelectedMonth(event.target.value || getCurrentMonth())}
+            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+          />
+        </label>
+      </Card>
 
       {loading ? (
         <div className="flex items-center gap-2 p-6 text-muted-foreground">
@@ -83,8 +125,8 @@ function MeusAssinadosPage() {
         </div>
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
-      ) : requests.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisição concluída.</Card>
+      ) : filteredRequests.length === 0 ? (
+        <Card className="p-6 text-muted-foreground">Nenhuma requisicao encontrada neste mes.</Card>
       ) : (
         <Card className="p-4">
           <div className="rounded-md border overflow-x-auto">
@@ -93,16 +135,18 @@ function MeusAssinadosPage() {
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Data</th>
                   <th className="px-3 py-2 text-left font-normal">Local</th>
-                  <th className="px-3 py-2 text-left font-normal">Número</th>
-                  <th className="px-3 py-2 text-right font-normal">PDF completo</th>
+                  <th className="px-3 py-2 text-left font-normal">Numero</th>
+                  <th className="px-3 py-2 text-left font-normal">Status</th>
+                  <th className="px-3 py-2 text-right font-normal">PDF</th>
                 </tr>
               </thead>
               <tbody>
-                {requests.map((request) => (
+                {filteredRequests.map((request) => (
                   <tr key={request.id} className="border-t">
                     <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                     <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
                     <td className="px-3 py-2 text-foreground">{request.saida_codigo || "-"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{getStatusLabel(request.status)}</td>
                     <td className="px-3 py-2 text-right">
                       <Button
                         type="button"
