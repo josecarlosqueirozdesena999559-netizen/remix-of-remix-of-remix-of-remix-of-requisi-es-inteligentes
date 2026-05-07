@@ -12,6 +12,8 @@ import {
 } from "@/lib/attachments";
 import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
+import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
+import { resolveRequestForPdf } from "@/lib/request-resolver";
 
 export const Route = createFileRoute("/admin/assinadas/$requisicaoId/pdf")({
   component: PdfAssinadoCompletoPage,
@@ -27,6 +29,10 @@ interface RequisicaoAssinada {
   status: string;
   signed_attachment: unknown;
   admin_attachment: unknown;
+  categoria: string | null;
+  solicitante_cpf: string | null;
+  solicitante_funcao: string | null;
+  items: RequestPdfItem[] | null;
 }
 
 interface PdfState {
@@ -53,7 +59,7 @@ function PdfAssinadoCompletoPage() {
       const [requestResult, allResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment")
+          .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment")
           .eq("id", requisicaoId)
           .maybeSingle(),
         supabase
@@ -89,7 +95,17 @@ function PdfAssinadoCompletoPage() {
         resolveAttachmentUrl(requestAttachment),
       ]);
 
-      const blob = await createCombinedSignedPdfBlob(outputUrl, requestUrl);
+      const blob = outputUrl || requestUrl
+        ? await createCombinedSignedPdfBlob(outputUrl, requestUrl)
+        : await createRequestPdfBlob(
+            await resolveRequestForPdf(
+              {
+                ...request,
+                items: request.items as RequestPdfItem[] | null,
+              },
+              code,
+            ),
+          );
       createdUrl = URL.createObjectURL(blob);
 
       if (!active) {

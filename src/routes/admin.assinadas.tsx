@@ -23,6 +23,32 @@ interface RequisicaoAssinada {
   admin_attachment: unknown;
 }
 
+function getCurrentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function getRequestMonth(request: Pick<RequisicaoAssinada, "data" | "created_at">) {
+  const displayDate = request.data?.trim();
+
+  if (displayDate) {
+    const brDate = displayDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (brDate) return `${brDate[3]}-${brDate[2]}`;
+
+    const isoDate = displayDate.match(/^(\d{4})-(\d{2})/);
+    if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
+  }
+
+  return String(request.created_at || "").slice(0, 7);
+}
+
+function getStatusLabel(status: string) {
+  if (status === "concluido") return "Concluida";
+  if (status === "recebido") return "Requisicao assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saida";
+  if (status === "aguardando_assinatura") return "Aguardando assinatura";
+  return status || "-";
+}
+
 function AssinadasPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -32,6 +58,7 @@ function AssinadasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
 
   useEffect(() => {
     let active = true;
@@ -40,11 +67,10 @@ function AssinadasPage() {
       setLoading(true);
       setError(null);
 
-      const [completedResult, allResult] = await Promise.all([
+      const [requestsResult, allResult] = await Promise.all([
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment")
-          .eq("status", "concluido")
           .order("created_at", { ascending: false }),
         supabase
           .from("requisicoes")
@@ -54,10 +80,10 @@ function AssinadasPage() {
 
       if (!active) return;
 
-      if (completedResult.error || allResult.error) {
-        setError(completedResult.error?.message || allResult.error?.message || "Erro ao carregar assinadas.");
+      if (requestsResult.error || allResult.error) {
+        setError(requestsResult.error?.message || allResult.error?.message || "Erro ao carregar requisicoes.");
       } else {
-        setData((completedResult.data ?? []) as RequisicaoAssinada[]);
+        setData((requestsResult.data ?? []) as RequisicaoAssinada[]);
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
       }
 
@@ -71,15 +97,19 @@ function AssinadasPage() {
     };
   }, []);
 
+  const filteredData = useMemo(() => {
+    return (data ?? []).filter((request) => getRequestMonth(request) === selectedMonth);
+  }, [data, selectedMonth]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, RequisicaoAssinada[]>();
-    (data ?? []).forEach((request) => {
+    filteredData.forEach((request) => {
       const key = request.setor?.trim() || "Sem local";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(request);
     });
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [data]);
+  }, [filteredData]);
 
   if (isChildRoute) {
     return <Outlet />;
@@ -92,9 +122,24 @@ function AssinadasPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Início / Assinadas</p>
-        <h2 className="text-2xl text-foreground">Requisições Assinadas</h2>
+        <p className="text-sm text-muted-foreground">Inicio / Assinadas</p>
+        <h2 className="text-2xl text-foreground">Requisicoes do mes</h2>
       </div>
+
+      <Card className="p-4">
+        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+          Mes
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => {
+              setSelectedMonth(event.target.value || getCurrentMonth());
+              setSelected(null);
+            }}
+            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+          />
+        </label>
+      </Card>
 
       {loading ? (
         <div className="flex items-center gap-2 p-6 text-muted-foreground">
@@ -104,7 +149,7 @@ function AssinadasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : grouped.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisição assinada concluída.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma requisicao encontrada neste mes.</Card>
       ) : selected ? (
         <Card className="p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -127,10 +172,11 @@ function AssinadasPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left font-normal">Usuário</th>
+                  <th className="px-3 py-2 text-left font-normal">Usuario</th>
                   <th className="px-3 py-2 text-left font-normal">Data</th>
-                  <th className="px-3 py-2 text-left font-normal">Número</th>
-                  <th className="px-3 py-2 text-right font-normal">PDF completo</th>
+                  <th className="px-3 py-2 text-left font-normal">Numero</th>
+                  <th className="px-3 py-2 text-left font-normal">Status</th>
+                  <th className="px-3 py-2 text-right font-normal">PDF</th>
                 </tr>
               </thead>
               <tbody>
@@ -140,20 +186,21 @@ function AssinadasPage() {
                   const outputAttachment =
                     getOutputSignedAttachment(request.signed_attachment, request.status) ||
                     request.admin_attachment;
-                  const hasCompletePdf = Boolean(requestAttachment || outputAttachment);
+                  const hasPdf = Boolean(requestAttachment || outputAttachment || request.id);
 
                   return (
                     <tr key={request.id} className="border-t">
                       <td className="px-3 py-2 text-foreground">{request.solicitante || "-"}</td>
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                       <td className="px-3 py-2 text-foreground">{code}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{getStatusLabel(request.status)}</td>
                       <td className="px-3 py-2 text-right">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           className="gap-2"
-                          disabled={!hasCompletePdf}
+                          disabled={!hasPdf}
                           onClick={() =>
                             navigate({
                               to: "/admin/assinadas/$requisicaoId/pdf",
@@ -176,7 +223,7 @@ function AssinadasPage() {
         <>
           <Card className="p-6 bg-muted/30">
             <p className="text-sm text-muted-foreground">Primeiro passo</p>
-            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs assinados</p>
+            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mes</p>
           </Card>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
