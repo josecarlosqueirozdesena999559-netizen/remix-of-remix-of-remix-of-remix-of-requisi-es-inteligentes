@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { getOutputSignedAttachment } from "@/lib/attachments";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/meus-assinados")({
@@ -17,6 +18,8 @@ interface Requisicao {
   data: string | null;
   created_at: string;
   status: string;
+  signed_attachment: unknown;
+  admin_attachment: unknown;
 }
 
 function getCurrentMonth() {
@@ -45,6 +48,13 @@ function getStatusLabel(status: string) {
   return status || "-";
 }
 
+function hasOutputDocument(request: Requisicao) {
+  return Boolean(
+    getOutputSignedAttachment(request.signed_attachment, request.status) ||
+      request.admin_attachment,
+  );
+}
+
 function MeusAssinadosPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -71,12 +81,15 @@ function MeusAssinadosPage() {
 
         const { data, error } = await supabase
           .from("requisicoes")
-          .select("id,saida_codigo,setor,data,created_at,status")
+          .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
           .eq("solicitante_cpf", profile.cpf)
+          .eq("status", "concluido")
           .order("created_at", { ascending: false });
 
         if (error) throw new Error(error.message);
-        if (active) setRequests((data ?? []) as Requisicao[]);
+        if (active) {
+          setRequests(((data ?? []) as Requisicao[]).filter(hasOutputDocument));
+        }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");
       } finally {
@@ -103,7 +116,7 @@ function MeusAssinadosPage() {
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground">Usuario / Assinados</p>
-        <h2 className="text-2xl text-foreground">Meus PDFs do mes</h2>
+        <h2 className="text-2xl text-foreground">Meus assinados</h2>
       </div>
 
       <Card className="p-4">

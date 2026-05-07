@@ -49,6 +49,13 @@ function getStatusLabel(status: string) {
   return status || "-";
 }
 
+function hasOutputDocument(request: RequisicaoAssinada) {
+  return Boolean(
+    getOutputSignedAttachment(request.signed_attachment, request.status) ||
+      request.admin_attachment,
+  );
+}
+
 function AssinadasPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -83,7 +90,29 @@ function AssinadasPage() {
       if (requestsResult.error || allResult.error) {
         setError(requestsResult.error?.message || allResult.error?.message || "Erro ao carregar requisicoes.");
       } else {
-        setData((requestsResult.data ?? []) as RequisicaoAssinada[]);
+        const requests = (requestsResult.data ?? []) as RequisicaoAssinada[];
+        const completedWithoutOutput = requests.filter(
+          (request) => request.status === "concluido" && !hasOutputDocument(request),
+        );
+
+        if (completedWithoutOutput.length > 0) {
+          const { error: repairError } = await supabase
+            .from("requisicoes")
+            .update({ status: "recebido" })
+            .in("id", completedWithoutOutput.map((request) => request.id));
+
+          if (repairError) {
+            setError(repairError.message);
+            setLoading(false);
+            return;
+          }
+        }
+
+        setData(
+          requests.filter(
+            (request) => request.status === "concluido" && hasOutputDocument(request),
+          ),
+        );
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
       }
 
@@ -123,7 +152,7 @@ function AssinadasPage() {
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground">Inicio / Assinadas</p>
-        <h2 className="text-2xl text-foreground">Requisicoes do mes</h2>
+        <h2 className="text-2xl text-foreground">Requisicoes assinadas</h2>
       </div>
 
       <Card className="p-4">
@@ -186,7 +215,7 @@ function AssinadasPage() {
                   const outputAttachment =
                     getOutputSignedAttachment(request.signed_attachment, request.status) ||
                     request.admin_attachment;
-                  const hasPdf = Boolean(requestAttachment || outputAttachment || request.id);
+                  const hasPdf = Boolean(requestAttachment || outputAttachment);
 
                   return (
                     <tr key={request.id} className="border-t">
