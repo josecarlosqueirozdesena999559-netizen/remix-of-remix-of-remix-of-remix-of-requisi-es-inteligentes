@@ -29,12 +29,27 @@ WITH rebuilt_items AS (
       )
     )
     OR (
-      r.solicitante = 'Beatriz Dias Mendes'
+      upper(r.solicitante) = 'BEATRIZ DIAS MENDES'
       AND r.solicitante_cpf = '06279437302'
       AND r.data = '04/05/2026'
       AND r.saida_codigo = '040526011'
-      AND r.setor = 'UBS - MONSENHOR D.'
-      AND r.categoria = 'Odontológico'
+    )
+    OR (
+      r.solicitante = 'STEFANI DE OLIVEIRA DE AQUINO'
+      AND r.setor = 'UBS - CRIOULAS'
+      AND (
+        (r.data = '06/05/2026' AND r.saida_codigo IN ('060526002', '060526001'))
+        OR (r.data = '05/05/2026' AND r.saida_codigo IN ('050526016', '050526015', '050526014', '050526013'))
+      )
+    )
+    OR (
+      upper(r.solicitante) = 'MELISSA DIAS HOLANDA'
+      AND (
+        (r.data = '06/05/2026' AND r.saida_codigo IN ('060526010', '060526004', '060526003'))
+        OR (r.data = '05/05/2026' AND r.saida_codigo IN ('050526006'))
+        OR (r.data = '24/04/2026' AND r.saida_codigo IN ('240426001'))
+        OR (r.data = '22/04/2026' AND r.saida_codigo IN ('220426008'))
+      )
     )
   GROUP BY r.id
 )

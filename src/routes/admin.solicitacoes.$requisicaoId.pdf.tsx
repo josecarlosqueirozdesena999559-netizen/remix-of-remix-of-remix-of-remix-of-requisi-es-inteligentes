@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getRequestSignedAttachment,
+  resolveAttachmentUrl,
+} from "@/lib/attachments";
 import { buildGlobalRequestCodes, formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
 import { createRequestPdfBlob, type RequestPdfData, type RequestPdfItem } from "@/lib/request-pdf";
 
@@ -23,6 +27,7 @@ interface Requisicao {
   created_at: string;
   status: string;
   items: RequestPdfItem[] | null;
+  signed_attachment: unknown;
 }
 
 interface PdfState {
@@ -91,7 +96,7 @@ function SolicitacaoPdfPage() {
       const [requestResult, allResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items")
+          .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment")
           .eq("id", requisicaoId)
           .maybeSingle(),
         supabase
@@ -117,6 +122,7 @@ function SolicitacaoPdfPage() {
       const request = requestResult.data as Requisicao;
       const codeByRequestId = buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]);
       const code = request.saida_codigo || codeByRequestId.get(request.id) || `${formatRequestCodeDate(request.data || request.created_at)}001`;
+      const signedRequestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
 
       if (!request.saida_codigo) {
         const { error } = await supabase
@@ -131,11 +137,17 @@ function SolicitacaoPdfPage() {
         }
       }
 
-      const blob = await createRequestPdfBlob(await resolveRequestForPdf(request, code));
-      createdUrl = URL.createObjectURL(blob);
+      const signedRequestUrl = await resolveAttachmentUrl(signedRequestAttachment);
+
+      if (signedRequestUrl) {
+        createdUrl = signedRequestUrl;
+      } else {
+        const blob = await createRequestPdfBlob(await resolveRequestForPdf(request, code));
+        createdUrl = URL.createObjectURL(blob);
+      }
 
       if (!active) {
-        URL.revokeObjectURL(createdUrl);
+        if (createdUrl.startsWith("blob:")) URL.revokeObjectURL(createdUrl);
         return;
       }
 
@@ -151,7 +163,7 @@ function SolicitacaoPdfPage() {
 
     return () => {
       active = false;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
+      if (createdUrl.startsWith("blob:")) URL.revokeObjectURL(createdUrl);
     };
   }, [requisicaoId]);
 
