@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  buildSignedAttachmentPayload,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   removeAttachmentFile,
@@ -124,13 +125,10 @@ function MinhasAssinaturasPage() {
 
       if (uploadError) throw new Error(uploadError.message);
 
-      const current = request.signed_attachment && typeof request.signed_attachment === "object"
-        ? (request.signed_attachment as Record<string, unknown>)
-        : {};
-
-      const signedAttachment = isOutputStage
-        ? { ...current, output: attachment }
-        : { ...current, request: attachment };
+      const signedAttachment = buildSignedAttachmentPayload(request.signed_attachment, {
+        request: isOutputStage ? undefined : attachment,
+        output: isOutputStage ? attachment : undefined,
+      });
       const previousSignedAttachment = isOutputStage
         ? getOutputSignedAttachment(request.signed_attachment, request.status)
         : getRequestSignedAttachment(request.signed_attachment, request.status);

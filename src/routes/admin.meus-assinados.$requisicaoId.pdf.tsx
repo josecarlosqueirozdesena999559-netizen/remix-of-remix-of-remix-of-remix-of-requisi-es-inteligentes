@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
+  getAttachmentFile,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
@@ -86,7 +87,7 @@ function MeuAssinadoPdfPage() {
       );
       const outputAttachment =
         getOutputSignedAttachment(request.signed_attachment, request.status) ||
-        (request.admin_attachment as AttachmentFile | null);
+        getAttachmentFile(request.admin_attachment) as AttachmentFile | null;
 
       const [requestUrl, outputUrl] = await Promise.all([
         resolveAttachmentUrl(requestAttachment),

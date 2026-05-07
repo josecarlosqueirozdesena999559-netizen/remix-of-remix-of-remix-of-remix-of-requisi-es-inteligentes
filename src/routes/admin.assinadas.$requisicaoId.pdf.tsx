@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  getAttachmentFile,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
@@ -88,7 +89,7 @@ function PdfAssinadoCompletoPage() {
       const requestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
       const outputAttachment =
         getOutputSignedAttachment(request.signed_attachment, request.status) ||
-        (request.admin_attachment as AttachmentFile | null);
+        getAttachmentFile(request.admin_attachment) as AttachmentFile | null;
 
       const [outputUrl, requestUrl] = await Promise.all([
         resolveAttachmentUrl(outputAttachment),

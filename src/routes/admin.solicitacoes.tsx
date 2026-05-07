@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  getAttachmentFile,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   removeAttachmentFile,
@@ -38,7 +39,7 @@ function hasRequestSigned(request: Requisicao) {
 function hasOutputDocument(request: Requisicao) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      request.admin_attachment,
+      getAttachmentFile(request.admin_attachment),
   );
 }
 
@@ -165,7 +166,7 @@ function Solicitacoes() {
     setUploadingId(request.id);
 
     try {
-      const previousAdminAttachment = request.admin_attachment as AttachmentFile | null;
+      const previousAdminAttachment = getAttachmentFile(request.admin_attachment) as AttachmentFile | null;
 
       const { error: uploadError } = await supabase.storage
         .from(REQUISICOES_BUCKET)
@@ -260,7 +261,7 @@ function Solicitacoes() {
                       <td className="px-3 py-2 text-foreground">{code}</td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          {r.admin_attachment ? (
+                          {getAttachmentFile(r.admin_attachment) ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
                               <CheckCircle2 className="h-4 w-4" />
                               Enviado
@@ -292,7 +293,7 @@ function Solicitacoes() {
                             ) : (
                               <Upload className="h-4 w-4" />
                             )}
-                            {r.admin_attachment ? "Trocar" : "Enviar PDF"}
+                            {getAttachmentFile(r.admin_attachment) ? "Trocar" : "Enviar PDF"}
                           </Button>
                         </div>
                       </td>

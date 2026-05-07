@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { getOutputSignedAttachment, getRequestSignedAttachment } from "@/lib/attachments";
+import { getAttachmentFile, getOutputSignedAttachment, getRequestSignedAttachment } from "@/lib/attachments";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 
 export const Route = createFileRoute("/admin/assinadas")({
@@ -52,7 +52,7 @@ function getStatusLabel(status: string) {
 function hasOutputDocument(request: RequisicaoAssinada) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      request.admin_attachment,
+      getAttachmentFile(request.admin_attachment),
   );
 }
 
@@ -214,7 +214,7 @@ function AssinadasPage() {
                   const requestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
                   const outputAttachment =
                     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-                    request.admin_attachment;
+                    getAttachmentFile(request.admin_attachment);
                   const hasPdf = Boolean(requestAttachment || outputAttachment);
 
                   return (

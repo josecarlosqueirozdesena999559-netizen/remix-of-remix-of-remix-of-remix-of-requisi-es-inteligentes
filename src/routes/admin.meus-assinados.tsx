@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { getOutputSignedAttachment } from "@/lib/attachments";
+import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/meus-assinados")({
@@ -51,7 +51,7 @@ function getStatusLabel(status: string) {
 function hasOutputDocument(request: Requisicao) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      request.admin_attachment,
+      getAttachmentFile(request.admin_attachment),
   );
 }
 
