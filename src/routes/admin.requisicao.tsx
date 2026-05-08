@@ -6,6 +6,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  isCleaningProduct,
+  isMedicationProduct,
+  normalizeProductSearchValue,
   normalizeProductCategory,
   productHasCategory,
   sortProductsByMaterialGroup,
@@ -45,6 +48,13 @@ interface EditableRequest {
   return_reason: string | null;
 }
 
+interface RequestSection {
+  id: string;
+  label: string;
+  baseCategory: string;
+  matchesItem?: (item: ItemRow) => boolean;
+}
+
 const requestSelectWithFeedback = "id,categoria,items,return_reason";
 const requestSelectFallback = "id,categoria,items";
 
@@ -69,11 +79,67 @@ function getItemName(item: EditableRequestItem) {
 
 const requestSearchStorageKey = "admin:requisicao:search";
 
+function buildRequestSections(categories: string[]) {
+  const sections: RequestSection[] = [];
+
+  categories.forEach((category) => {
+    if (category === "GÃªneros alimentÃ­cios/limpeza") {
+      sections.push(
+        {
+          id: "generos-alimenticios",
+          label: "AlimentÃ­cio",
+          baseCategory: category,
+          matchesItem: (item) => !isCleaningProduct(item),
+        },
+        {
+          id: "limpeza",
+          label: "Limpeza",
+          baseCategory: category,
+          matchesItem: (item) => isCleaningProduct(item),
+        },
+      );
+      return;
+    }
+
+    if (category === "Ambulatorial") {
+      sections.push(
+        {
+          id: "ambulatorial-materiais",
+          label: "Material Ambulatorial",
+          baseCategory: category,
+          matchesItem: (item) => !isMedicationProduct(item),
+        },
+        {
+          id: "ambulatorial-medicamentos",
+          label: "Medicamentos",
+          baseCategory: category,
+          matchesItem: (item) => isMedicationProduct(item),
+        },
+      );
+      return;
+    }
+
+    sections.push({
+      id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
+      label: category,
+      baseCategory: category,
+    });
+  });
+
+  return sections;
+}
+
+function getInitialSectionId(sections: RequestSection[], categoria: string | null | undefined) {
+  const normalizedCategory = normalizeProductCategory(categoria);
+  const firstMatch = sections.find((section) => section.baseCategory === normalizedCategory);
+  return firstMatch?.id || sections[0]?.id || "";
+}
+
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedSectionId, setSelectedSectionId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
@@ -154,8 +220,8 @@ function CriarRequisicaoPage() {
         setItems(loadedItems);
         setReturnReason(editableRequest?.return_reason || null);
 
-        const nextCategory = editableRequest?.categoria || categories[0] || "";
-        setSelectedCategory(nextCategory);
+        const availableSections = buildRequestSections(categories);
+        setSelectedSectionId(getInitialSectionId(availableSections, editableRequest?.categoria));
 
         if (editableRequest?.items?.length) {
           const nextStocks: Record<string, string> = {};
@@ -193,22 +259,40 @@ function CriarRequisicaoPage() {
   }, [editingRequestId]);
 
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
+  const sections = useMemo(() => buildRequestSections(categories), [categories]);
+  const selectedSection = useMemo(
+    () => sections.find((section) => section.id === selectedSectionId) || sections[0] || null,
+    [sections, selectedSectionId],
+  );
+
+  useEffect(() => {
+    if (!sections.length) {
+      setSelectedSectionId("");
+      return;
+    }
+
+    if (!sections.some((section) => section.id === selectedSectionId)) {
+      setSelectedSectionId(sections[0].id);
+    }
+  }, [sections, selectedSectionId]);
 
   const visibleItems = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase();
+    const normalizedSearch = normalizeProductSearchValue(searchQuery);
+    if (!selectedSection) return [];
 
     return sortProductsByMaterialGroup(
       items.filter((item) => {
-        if (!productHasCategory(item.categoria, selectedCategory)) return false;
+        if (!productHasCategory(item.categoria, selectedSection.baseCategory)) return false;
+        if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
         if (!normalizedSearch) return true;
 
         return [item.nome, item.unidade, item.subcategoria]
           .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+          .some((value) => normalizeProductSearchValue(String(value)).includes(normalizedSearch));
       }),
-      selectedCategory,
+      selectedSection.baseCategory,
     );
-  }, [items, searchQuery, selectedCategory]);
+  }, [items, searchQuery, selectedSection]);
 
   const handleQuantityChange = (itemId: string, value: string) => {
     setQuantities((current) => ({ ...current, [itemId]: value }));
@@ -240,7 +324,7 @@ function CriarRequisicaoPage() {
         need: quantities[item.id],
         qtdNecessaria: quantities[item.id],
         quantidade_solicitada: quantities[item.id],
-        categoria: selectedCategory || item.categoria,
+        categoria: selectedSection?.baseCategory || item.categoria,
       }))
       .filter((item) => hasRequestedQuantity(item.need));
 
@@ -251,7 +335,7 @@ function CriarRequisicaoPage() {
     }
 
     const payload = {
-      categoria: selectedCategory || null,
+      categoria: selectedSection?.baseCategory || null,
       setor: profile.unidade_nome || profile.setor,
       solicitante: profile.nome,
       solicitante_cpf: profile.cpf,
@@ -334,14 +418,14 @@ function CriarRequisicaoPage() {
 
           <Card className="p-4">
             <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
+              {sections.map((section) => (
                 <Button
-                  key={category}
+                  key={section.id}
                   type="button"
-                  variant={selectedCategory === category ? "default" : "outline"}
-                  onClick={() => setSelectedCategory(category)}
+                  variant={selectedSectionId === section.id ? "default" : "outline"}
+                  onClick={() => setSelectedSectionId(section.id)}
                 >
-                  {category}
+                  {section.label}
                 </Button>
               ))}
             </div>

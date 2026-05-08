@@ -52,7 +52,7 @@ interface ProductOrderItem {
   subcategoria?: string | null;
 }
 
-function normalizeForOrder(value: string | null | undefined) {
+export function normalizeProductSearchValue(value: string | null | undefined) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -61,9 +61,9 @@ function normalizeForOrder(value: string | null | undefined) {
 }
 
 function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
-  const category = normalizeForOrder(activeCategory || item.categoria);
-  const subcategory = normalizeForOrder(item.subcategoria);
-  const name = normalizeForOrder(item.nome);
+  const category = normalizeProductSearchValue(activeCategory || item.categoria);
+  const subcategory = normalizeProductSearchValue(item.subcategoria);
+  const name = normalizeProductSearchValue(item.nome);
   const searchable = `${subcategory} ${name}`;
 
   if (category.includes("aliment") || category.includes("limpeza")) {
@@ -79,6 +79,16 @@ function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
   }
 
   return 0;
+}
+
+export function isCleaningProduct(item: ProductOrderItem) {
+  const searchable = `${normalizeProductSearchValue(item.subcategoria)} ${normalizeProductSearchValue(item.nome)}`;
+  return searchable.includes("limpeza");
+}
+
+export function isMedicationProduct(item: ProductOrderItem) {
+  const searchable = `${normalizeProductSearchValue(item.subcategoria)} ${normalizeProductSearchValue(item.nome)}`;
+  return searchable.includes("medicamento") || searchable.includes("remedio");
 }
 
 export function sortProductsByMaterialGroup<T extends ProductOrderItem>(
