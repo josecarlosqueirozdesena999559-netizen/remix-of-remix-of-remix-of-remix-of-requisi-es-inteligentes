@@ -16,6 +16,7 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/minhas-assinaturas")({
@@ -66,6 +67,33 @@ function needsCurrentStageSignature(request: Requisicao) {
   return false;
 }
 
+function buildRequestDedupKey(request: Requisicao) {
+  const code = request.saida_codigo?.trim();
+  if (code) {
+    return `code:${code}|status:${request.status}`;
+  }
+
+  return [
+    request.status,
+    request.solicitante_cpf?.trim() || "",
+    request.setor?.trim() || "",
+    request.data?.trim() || "",
+    request.return_target?.trim() || "",
+    request.return_reason?.trim() || "",
+  ].join("|");
+}
+
+function dedupeRequests(requests: Requisicao[]) {
+  const seen = new Set<string>();
+
+  return requests.filter((request) => {
+    const key = buildRequestDedupKey(request);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
   try {
     await removeAttachmentFile(attachment);
@@ -97,12 +125,23 @@ function MinhasAssinaturasPage() {
         return;
       }
 
-      let { data, error } = await supabase
-        .from("requisicoes")
-        .select(`${baseSelect},return_reason,return_target`)
-        .eq("solicitante_cpf", profile.cpf)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
-        .order("created_at", { ascending: false });
+      const [{ data: setoresData, error: setoresError }, requestsResult] = await Promise.all([
+        supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
+        supabase
+          .from("requisicoes")
+          .select(`${baseSelect},return_reason,return_target`)
+          .eq("solicitante_cpf", profile.cpf)
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
+          .order("created_at", { ascending: false }),
+      ]);
+
+      let { data, error } = requestsResult;
+
+      if (setoresError) {
+        throw new Error(setoresError.message);
+      }
+
+      const locationOptions = (setoresData ?? []) as LocationOption[];
 
       if (error && isMissingReturnFeedbackColumnError(error.message)) {
         const fallbackResult = await supabase
@@ -122,7 +161,16 @@ function MinhasAssinaturasPage() {
 
       if (error) throw new Error(error.message);
 
-      setRequests(((data ?? []) as Requisicao[]).filter(needsCurrentStageSignature));
+      setRequests(
+        dedupeRequests(
+          ((data ?? []) as Requisicao[])
+            .map((request) => ({
+              ...request,
+              setor: resolveCanonicalLocationName(request.setor, locationOptions) || request.setor,
+            }))
+            .filter(needsCurrentStageSignature),
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar assinaturas.");
     } finally {

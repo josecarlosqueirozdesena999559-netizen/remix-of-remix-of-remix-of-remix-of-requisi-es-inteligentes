@@ -90,7 +90,7 @@ function Solicitacoes() {
       setLoading(true);
       setError(null);
 
-      const [pendingResult, allResult] = await Promise.all([
+      const [pendingResult, allResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment")
@@ -100,14 +100,19 @@ function Solicitacoes() {
           .from("requisicoes")
           .select("id,saida_codigo,data,created_at")
           .order("created_at", { ascending: true }),
+        supabase
+          .from("setores")
+          .select("nome,programa")
+          .order("nome", { ascending: true }),
       ]);
 
       if (!active) return;
 
-      if (pendingResult.error || allResult.error) {
+      if (pendingResult.error || allResult.error || setoresResult.error) {
         setError(pendingResult.error?.message || allResult.error?.message || "Erro ao carregar solicitações.");
       } else {
         const requests = (pendingResult.data ?? []) as Requisicao[];
+        const locationOptions = (setoresResult.data ?? []) as LocationOption[];
         const cpfs = Array.from(
           new Set(
             requests
@@ -145,11 +150,15 @@ function Solicitacoes() {
           pendingOutputRequests.map((request) => ({
             ...request,
             status: "recebido",
-            displaySetor:
-              request.setor?.trim() ||
-              usersByCpf.get(request.solicitante_cpf?.trim() || "")?.unidade_nome?.trim() ||
-              usersByCpf.get(request.solicitante_cpf?.trim() || "")?.setor?.trim() ||
+            displaySetor: resolveCanonicalLocationNameFromCandidates(
+              [
+                request.setor?.trim(),
+                usersByCpf.get(request.solicitante_cpf?.trim() || "")?.unidade_nome?.trim(),
+                usersByCpf.get(request.solicitante_cpf?.trim() || "")?.setor?.trim(),
+              ],
+              locationOptions,
               "Sem setor",
+            ),
           })),
         );
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]));

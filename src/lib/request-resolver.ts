@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { resolveCanonicalLocationOption, type LocationOption } from "@/lib/location-normalizer";
 import type { RequestPdfData, RequestPdfItem } from "@/lib/request-pdf";
 
 export interface RequisicaoPdfRow {
@@ -25,12 +26,16 @@ export async function resolveRequestForPdf(request: RequisicaoPdfRow, code: stri
   if (sectorName) {
     const { data: setorData } = await supabase
       .from("setores")
-      .select("programa")
-      .eq("nome", sectorName)
-      .maybeSingle();
+      .select("nome,programa")
+      .order("nome", { ascending: true });
 
-    if (setorData?.programa) {
-      programa = setorData.programa;
+    const canonicalSetor = resolveCanonicalLocationOption(
+      sectorName,
+      ((setorData ?? []) as LocationOption[]),
+    );
+
+    if (canonicalSetor?.programa) {
+      programa = canonicalSetor.programa;
     }
   }
 

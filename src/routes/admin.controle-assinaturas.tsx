@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  resolveCanonicalLocationNameFromCandidates,
+  type LocationOption,
+} from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -79,7 +83,7 @@ function ControleAssinaturasPage() {
       setError(null);
 
       try {
-        const [{ profile }, usersResult, requestsResult, allRequestsResult] = await Promise.all([
+        const [{ profile }, usersResult, requestsResult, allRequestsResult, setoresResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("usuarios")
@@ -95,6 +99,10 @@ function ControleAssinaturasPage() {
             .from("requisicoes")
             .select("id,saida_codigo,data,created_at")
             .order("created_at", { ascending: true }),
+          supabase
+            .from("setores")
+            .select("nome,programa")
+            .order("nome", { ascending: true }),
         ]);
 
         if (!active) return;
@@ -104,16 +112,18 @@ function ControleAssinaturasPage() {
           return;
         }
 
-        if (usersResult.error || requestsResult.error || allRequestsResult.error) {
+        if (usersResult.error || requestsResult.error || allRequestsResult.error || setoresResult.error) {
           throw new Error(
             usersResult.error?.message ||
               requestsResult.error?.message ||
+              setoresResult.error?.message ||
               allRequestsResult.error?.message ||
               "Erro ao carregar controle de assinaturas.",
           );
         }
 
         const users = (usersResult.data ?? []) as UsuarioBase[];
+        const locationOptions = (setoresResult.data ?? []) as LocationOption[];
         const requests = ((requestsResult.data ?? []) as RequisicaoControle[]).filter((request) =>
           isPendingStatus(request.status),
         );
@@ -122,11 +132,15 @@ function ControleAssinaturasPage() {
 
         requests.forEach((request) => {
           const fallbackUser = users.find((user) => user.cpf && user.cpf === request.solicitante_cpf);
-          const localidade =
-            request.setor?.trim() ||
-            fallbackUser?.unidade_nome?.trim() ||
-            fallbackUser?.setor?.trim() ||
-            "Sem localidade";
+          const localidade = resolveCanonicalLocationNameFromCandidates(
+            [
+              request.setor?.trim(),
+              fallbackUser?.unidade_nome?.trim(),
+              fallbackUser?.setor?.trim(),
+            ],
+            locationOptions,
+            "Sem localidade",
+          );
           const usuarioNome =
             request.solicitante?.trim() ||
             fallbackUser?.nome?.trim() ||

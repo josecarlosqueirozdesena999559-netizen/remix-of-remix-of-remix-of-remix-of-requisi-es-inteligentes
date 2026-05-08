@@ -27,6 +27,7 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 
 export const Route = createFileRoute("/admin/assinadas")({
@@ -107,7 +108,7 @@ function AssinadasPage() {
       setLoading(true);
       setError(null);
 
-      const [requestsResult, allResult] = await Promise.all([
+      const [requestsResult, allResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment")
@@ -116,19 +117,32 @@ function AssinadasPage() {
           .from("requisicoes")
           .select("id,saida_codigo,data,created_at")
           .order("created_at", { ascending: true }),
+        supabase
+          .from("setores")
+          .select("nome,programa")
+          .order("nome", { ascending: true }),
       ]);
 
       if (!active) return;
 
-      if (requestsResult.error || allResult.error) {
-        setError(requestsResult.error?.message || allResult.error?.message || "Erro ao carregar requisicoes.");
+      if (requestsResult.error || allResult.error || setoresResult.error) {
+        setError(
+          requestsResult.error?.message ||
+            allResult.error?.message ||
+            setoresResult.error?.message ||
+            "Erro ao carregar requisicoes.",
+        );
       } else {
         const requests = (requestsResult.data ?? []) as RequisicaoAssinada[];
+        const locationOptions = (setoresResult.data ?? []) as LocationOption[];
 
         setData(
           requests.filter(
             (request) => request.status === "concluido" && hasOutputDocument(request),
-          ),
+          ).map((request) => ({
+            ...request,
+            setor: resolveCanonicalLocationName(request.setor, locationOptions) || request.setor,
+          })),
         );
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
       }
