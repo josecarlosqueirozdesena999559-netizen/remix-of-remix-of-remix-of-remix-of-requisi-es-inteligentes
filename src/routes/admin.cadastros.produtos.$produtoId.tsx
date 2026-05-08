@@ -14,11 +14,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import {
   formatProductCategories,
   parseProductCategories,
   PRODUCT_CATEGORIES,
+  PRODUCT_SUBCATEGORIES,
 } from "@/lib/product-options";
 
 export const Route = createFileRoute("/admin/cadastros/produtos/$produtoId")({
@@ -46,6 +54,7 @@ function ProdutoFormPage() {
   const [nome, setNome] = useState("");
   const [unidade, setUnidade] = useState("UNIDADE");
   const [categorias, setCategorias] = useState<string[]>([PRODUCT_CATEGORIES[0]]);
+  const [subcategoria, setSubcategoria] = useState<string | null>(null);
   const [selectedProgramas, setSelectedProgramas] = useState<string[]>([]);
   const [programas, setProgramas] = useState<Programa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +65,23 @@ function ProdutoFormPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const title = useMemo(() => (isNew ? "Novo produto" : "Editar produto"), [isNew]);
+  const availableSubcategories = useMemo(() => {
+    const options: string[] = [];
+
+    if (categorias.includes("GÃªneros alimentÃ­cios/limpeza")) {
+      options.push("Alimentício", "Limpeza");
+    }
+
+    if (categorias.includes("Ambulatorial")) {
+      options.push("Material Ambulatorial", "Medicamentos");
+    }
+
+    if (categorias.includes("Expediente")) {
+      options.push("Expediente");
+    }
+
+    return PRODUCT_SUBCATEGORIES.filter((option) => options.includes(option));
+  }, [categorias]);
 
   useEffect(() => {
     let active = true;
@@ -108,6 +134,7 @@ function ProdutoFormPage() {
       setNome(item.nome);
       setUnidade(item.unidade);
       setCategorias(parseProductCategories(item.categoria || PRODUCT_CATEGORIES[0]));
+      setSubcategoria(item.subcategoria);
 
       const { data: vinculosData, error: vinculosError } = await supabase
         .from("programa_produtos")
@@ -148,6 +175,19 @@ function ProdutoFormPage() {
     );
   };
 
+  useEffect(() => {
+    if (!availableSubcategories.length) {
+      setSubcategoria(null);
+      return;
+    }
+
+    if (subcategoria && availableSubcategories.includes(subcategoria)) {
+      return;
+    }
+
+    setSubcategoria(availableSubcategories[0]);
+  }, [availableSubcategories, subcategoria]);
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -173,7 +213,7 @@ function ProdutoFormPage() {
       nome: nomeLimpo,
       unidade: unidadeLimpa,
       categoria: formatProductCategories(categorias),
-      subcategoria: null,
+      subcategoria,
     };
 
     const itemResult = isNew
@@ -321,6 +361,31 @@ function ProdutoFormPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="subcategoria">Subcategoria</Label>
+              <Select
+                value={subcategoria ?? "sem-subcategoria"}
+                onValueChange={(value) =>
+                  setSubcategoria(value === "sem-subcategoria" ? null : value)
+                }
+              >
+                <SelectTrigger id="subcategoria">
+                  <SelectValue placeholder="Selecione a subcategoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sem-subcategoria">Sem subcategoria</SelectItem>
+                  {availableSubcategories.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Use a subcategoria para separar itens como alimentício, limpeza, material ambulatorial e medicamentos.
+              </p>
             </div>
 
             <div className="space-y-3">

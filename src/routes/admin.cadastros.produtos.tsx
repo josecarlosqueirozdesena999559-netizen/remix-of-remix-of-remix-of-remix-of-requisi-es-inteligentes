@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Loader2, Save, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +27,7 @@ import {
   formatProductCategories,
   parseProductCategories,
   PRODUCT_CATEGORIES,
+  PRODUCT_SUBCATEGORIES,
   sortProductsByMaterialGroup,
 } from "@/lib/product-options";
 
@@ -53,6 +61,7 @@ function ProdutosPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkCategories, setBulkCategories] = useState<string[]>([]);
+  const [bulkSubcategoria, setBulkSubcategoria] = useState<string | null>(null);
   const [bulkProgramas, setBulkProgramas] = useState<string[]>([]);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -135,9 +144,34 @@ function ProdutosPage() {
   const openBulkEdit = () => {
     setBulkError(null);
     setBulkCategories([]);
+    setBulkSubcategoria(null);
     setBulkProgramas([]);
     setBulkOpen(true);
   };
+
+  const availableBulkSubcategories = useMemo(() => {
+    const options: string[] = [];
+
+    if (bulkCategories.includes("GÃªneros alimentÃ­cios/limpeza")) {
+      options.push("Alimentício", "Limpeza");
+    }
+
+    if (bulkCategories.includes("Ambulatorial")) {
+      options.push("Material Ambulatorial", "Medicamentos");
+    }
+
+    if (bulkCategories.includes("Expediente")) {
+      options.push("Expediente");
+    }
+
+    return PRODUCT_SUBCATEGORIES.filter((option) => options.includes(option));
+  }, [bulkCategories]);
+
+  useEffect(() => {
+    if (bulkSubcategoria && !availableBulkSubcategories.includes(bulkSubcategoria)) {
+      setBulkSubcategoria(null);
+    }
+  }, [availableBulkSubcategories, bulkSubcategoria]);
 
   const handleBulkSave = async () => {
     setBulkSaving(true);
@@ -158,7 +192,7 @@ function ProdutosPage() {
     const categoria = formatProductCategories(bulkCategories);
     const itemResult = await supabase
       .from("itens")
-      .update({ categoria, subcategoria: null })
+      .update({ categoria, subcategoria: bulkSubcategoria })
       .in("id", selectedIds);
 
     if (itemResult.error) {
@@ -280,6 +314,33 @@ function ProdutosPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label>Subcategoria</Label>
+                <p className="text-sm text-muted-foreground">
+                  Opcional. Use para separar os itens dentro do mesmo tipo de material.
+                </p>
+              </div>
+              <Select
+                value={bulkSubcategoria ?? "sem-subcategoria"}
+                onValueChange={(value) =>
+                  setBulkSubcategoria(value === "sem-subcategoria" ? null : value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a subcategoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sem-subcategoria">Sem subcategoria</SelectItem>
+                  {availableBulkSubcategories.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-3">

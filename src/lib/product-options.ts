@@ -7,6 +7,15 @@ export const PRODUCT_CATEGORIES = [
 ] as const;
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+export const PRODUCT_SUBCATEGORIES = [
+  "Alimentício",
+  "Limpeza",
+  "Material Ambulatorial",
+  "Medicamentos",
+  "Expediente",
+] as const;
+
+export type ProductSubcategory = (typeof PRODUCT_SUBCATEGORIES)[number];
 
 const CATEGORY_SEPARATOR = ";";
 
@@ -89,6 +98,13 @@ export function isCleaningProduct(item: ProductOrderItem) {
 export function isMedicationProduct(item: ProductOrderItem) {
   const searchable = `${normalizeProductSearchValue(item.subcategoria)} ${normalizeProductSearchValue(item.nome)}`;
   return searchable.includes("medicamento") || searchable.includes("remedio");
+}
+
+export function productHasSubcategory(
+  value: string | null | undefined,
+  subcategory: ProductSubcategory,
+) {
+  return normalizeProductSearchValue(value) === normalizeProductSearchValue(subcategory);
 }
 
 export function sortProductsByMaterialGroup<T extends ProductOrderItem>(

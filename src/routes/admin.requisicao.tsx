@@ -10,6 +10,7 @@ import {
   isMedicationProduct,
   normalizeProductSearchValue,
   normalizeProductCategory,
+  productHasSubcategory,
   productHasCategory,
   sortProductsByMaterialGroup,
 } from "@/lib/product-options";
@@ -53,6 +54,7 @@ interface RequestSection {
   label: string;
   baseCategory: string;
   matchesItem?: (item: ItemRow) => boolean;
+  order: number;
 }
 
 const requestSelectWithFeedback = "id,categoria,items,return_reason";
@@ -87,15 +89,19 @@ function buildRequestSections(categories: string[]) {
       sections.push(
         {
           id: "generos-alimenticios",
-          label: "AlimentÃ­cio",
+          label: "Alimentício",
           baseCategory: category,
-          matchesItem: (item) => !isCleaningProduct(item),
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Alimentício") || !isCleaningProduct(item),
+          order: 0,
         },
         {
           id: "limpeza",
           label: "Limpeza",
           baseCategory: category,
-          matchesItem: (item) => isCleaningProduct(item),
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Limpeza") || isCleaningProduct(item),
+          order: 1,
         },
       );
       return;
@@ -107,13 +113,18 @@ function buildRequestSections(categories: string[]) {
           id: "ambulatorial-materiais",
           label: "Material Ambulatorial",
           baseCategory: category,
-          matchesItem: (item) => !isMedicationProduct(item),
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Material Ambulatorial") ||
+            !isMedicationProduct(item),
+          order: 2,
         },
         {
           id: "ambulatorial-medicamentos",
           label: "Medicamentos",
           baseCategory: category,
-          matchesItem: (item) => isMedicationProduct(item),
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Medicamentos") || isMedicationProduct(item),
+          order: 3,
         },
       );
       return;
@@ -123,10 +134,11 @@ function buildRequestSections(categories: string[]) {
       id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
       label: category,
       baseCategory: category,
+      order: category === "Expediente" ? 4 : 5,
     });
   });
 
-  return sections;
+  return sections.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "pt-BR"));
 }
 
 function getInitialSectionId(sections: RequestSection[], categoria: string | null | undefined) {
