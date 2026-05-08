@@ -3,22 +3,12 @@ export interface LocationOption {
   programa?: string | null;
 }
 
-function stripCommonPrefixes(value: string) {
-  return value
-    .replace(/\bubs\b/g, " ")
-    .replace(/\bhospital municipal\b/g, " ")
-    .replace(/\bhospital\b/g, " ")
-    .replace(/\bsecretaria de saude\b/g, " ")
-    .replace(/\bunidade basica de saude\b/g, " ");
-}
-
 export function normalizeLocationKey(value?: string | null) {
-  const normalized = String(value || "")
+  return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-  return stripCommonPrefixes(normalized)
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -43,7 +33,10 @@ export function resolveCanonicalLocationOption(
   if (exactMatch) return exactMatch.option;
 
   const partialMatches = normalizedOptions.filter(
-    (entry) => entry.key.includes(key) || key.includes(entry.key),
+    (entry) =>
+      entry.key.length >= 5 &&
+      key.length >= 5 &&
+      (entry.key.includes(key) || key.includes(entry.key)),
   );
 
   if (partialMatches.length === 1) {

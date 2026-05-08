@@ -5,32 +5,12 @@ IMMUTABLE
 AS $$
   SELECT trim(
     regexp_replace(
-      regexp_replace(
-        regexp_replace(
-          regexp_replace(
-            regexp_replace(
-              lower(
-                translate(
-                  COALESCE(value, ''),
-                  'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ',
-                  'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn'
-                )
-              ),
-              '\mubs\M',
-              ' ',
-              'g'
-            ),
-            '\mhospital municipal\M',
-            ' ',
-            'g'
-          ),
-          '\mhospital\M',
-          ' ',
-          'g'
-        ),
-        '\msecretaria de saude\M',
-        ' ',
-        'g'
+      lower(
+        translate(
+          COALESCE(value, ''),
+          'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ',
+          'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn'
+        )
       ),
       '[^a-z0-9]+',
       ' ',
@@ -58,12 +38,18 @@ usuarios_matches AS (
     WHERE public.normalize_location_key(u.unidade_nome) <> ''
       AND (
         cs.normalized_nome = public.normalize_location_key(u.unidade_nome)
-        OR cs.normalized_nome LIKE '%' || public.normalize_location_key(u.unidade_nome) || '%'
-        OR public.normalize_location_key(u.unidade_nome) LIKE '%' || cs.normalized_nome || '%'
+        OR (
+          length(cs.normalized_nome) >= 5
+          AND length(public.normalize_location_key(u.unidade_nome)) >= 5
+          AND (
+            cs.normalized_nome LIKE '%' || public.normalize_location_key(u.unidade_nome) || '%'
+            OR public.normalize_location_key(u.unidade_nome) LIKE '%' || cs.normalized_nome || '%'
+          )
+        )
       )
     ORDER BY
       CASE WHEN cs.normalized_nome = public.normalize_location_key(u.unidade_nome) THEN 0 ELSE 1 END,
-      length(cs.normalized_nome)
+      length(cs.normalized_nome) DESC
     LIMIT 2
   ) matched ON TRUE
   GROUP BY u.id, matched.nome, matched.programa
@@ -80,12 +66,18 @@ requisicoes_matches AS (
     WHERE public.normalize_location_key(r.setor) <> ''
       AND (
         cs.normalized_nome = public.normalize_location_key(r.setor)
-        OR cs.normalized_nome LIKE '%' || public.normalize_location_key(r.setor) || '%'
-        OR public.normalize_location_key(r.setor) LIKE '%' || cs.normalized_nome || '%'
+        OR (
+          length(cs.normalized_nome) >= 5
+          AND length(public.normalize_location_key(r.setor)) >= 5
+          AND (
+            cs.normalized_nome LIKE '%' || public.normalize_location_key(r.setor) || '%'
+            OR public.normalize_location_key(r.setor) LIKE '%' || cs.normalized_nome || '%'
+          )
+        )
       )
     ORDER BY
       CASE WHEN cs.normalized_nome = public.normalize_location_key(r.setor) THEN 0 ELSE 1 END,
-      length(cs.normalized_nome)
+      length(cs.normalized_nome) DESC
     LIMIT 2
   ) matched ON TRUE
   GROUP BY r.id, matched.nome

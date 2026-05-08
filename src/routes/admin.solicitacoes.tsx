@@ -25,6 +25,10 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import {
+  resolveCanonicalLocationNameFromCandidates,
+  type LocationOption,
+} from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 
