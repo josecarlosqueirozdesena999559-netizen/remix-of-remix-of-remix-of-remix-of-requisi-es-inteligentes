@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -30,17 +29,17 @@ interface RequisicaoControle {
   data: string | null;
   created_at: string;
   status: string;
-  signed_attachment: unknown;
-  admin_attachment: unknown;
 }
 
-interface UsuarioControle {
-  id: string;
-  cpf: string | null;
-  nome: string;
+interface RequisicaoDetalhe extends RequisicaoControle {
   localidade: string;
+  usuarioNome: string;
+}
+
+interface SetorControle {
+  nome: string;
   pendencias: number;
-  requests: RequisicaoControle[];
+  requests: RequisicaoDetalhe[];
 }
 
 const pendingStatuses = [
@@ -50,40 +49,23 @@ const pendingStatuses = [
   "correcao_requisicao",
 ] as const;
 
-function hasOutputDocument(request: RequisicaoControle) {
-  return Boolean(
-    getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      getAttachmentFile(request.admin_attachment),
-  );
-}
-
 function isPendingStatus(status: string) {
   return pendingStatuses.includes(status as (typeof pendingStatuses)[number]);
 }
 
-function isVisibleForControl(request: RequisicaoControle) {
-  if (isPendingStatus(request.status)) return true;
-  return request.status === "concluido" && hasOutputDocument(request);
-}
-
 function getStatusLabel(status: string) {
-  if (status === "aguardando_assinatura") return "Aguardando assinatura";
-  if (status === "aguardando_assinatura_requisicao") return "Aguardando assinatura";
-  if (status === "aguardando_assinatura_saida") return "Saida enviada";
-  if (status === "correcao_requisicao") return "Devolvida para correcao";
-  if (status === "concluido") return "Concluida";
+  if (status === "aguardando_assinatura") return "Faltando assinatura da requisicao";
+  if (status === "aguardando_assinatura_requisicao") return "Faltando assinatura da requisicao";
+  if (status === "aguardando_assinatura_saida") return "Faltando assinatura da saida";
+  if (status === "correcao_requisicao") return "Correcao da requisicao";
   return status || "-";
-}
-
-function getUserKey(cpf?: string | null, nome?: string | null, localidade?: string | null) {
-  return [cpf || "sem-cpf", nome || "sem-nome", localidade || "sem-localidade"].join("|");
 }
 
 function ControleAssinaturasPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState<UsuarioControle[]>([]);
+  const [data, setData] = useState<SetorControle[]>([]);
   const [codeByRequestId, setCodeByRequestId] = useState<Map<string, string>>(new Map());
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedSetor, setSelectedSetor] = useState<string | null>(null);
   const [localidadeFilter, setLocalidadeFilter] = useState("");
   const [nomeFilter, setNomeFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -106,8 +88,8 @@ function ControleAssinaturasPage() {
             .order("nome", { ascending: true }),
           supabase
             .from("requisicoes")
-            .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment")
-            .in("status", [...pendingStatuses, "concluido"])
+            .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status")
+            .in("status", [...pendingStatuses])
             .order("created_at", { ascending: false }),
           supabase
             .from("requisicoes")
@@ -132,22 +114,11 @@ function ControleAssinaturasPage() {
         }
 
         const users = (usersResult.data ?? []) as UsuarioBase[];
-        const requests = ((requestsResult.data ?? []) as RequisicaoControle[]).filter(isVisibleForControl);
+        const requests = ((requestsResult.data ?? []) as RequisicaoControle[]).filter((request) =>
+          isPendingStatus(request.status),
+        );
         const codeMap = buildGlobalRequestCodes((allRequestsResult.data ?? []) as RequisicaoControle[]);
-        const byUser = new Map<string, UsuarioControle>();
-
-        users.forEach((user) => {
-          const localidade = user.unidade_nome?.trim() || user.setor?.trim() || "Sem localidade";
-          const key = getUserKey(user.cpf, user.nome, localidade);
-          byUser.set(key, {
-            id: key,
-            cpf: user.cpf,
-            nome: user.nome,
-            localidade,
-            pendencias: 0,
-            requests: [],
-          });
-        });
+        const bySetor = new Map<string, SetorControle>();
 
         requests.forEach((request) => {
           const fallbackUser = users.find((user) => user.cpf && user.cpf === request.solicitante_cpf);
@@ -156,39 +127,39 @@ function ControleAssinaturasPage() {
             fallbackUser?.unidade_nome?.trim() ||
             fallbackUser?.setor?.trim() ||
             "Sem localidade";
-          const nome =
+          const usuarioNome =
             request.solicitante?.trim() ||
             fallbackUser?.nome?.trim() ||
             "Usuario sem nome";
-          const key = getUserKey(request.solicitante_cpf, nome, localidade);
 
-          if (!byUser.has(key)) {
-            byUser.set(key, {
-              id: key,
-              cpf: request.solicitante_cpf,
-              nome,
-              localidade,
+          if (!bySetor.has(localidade)) {
+            bySetor.set(localidade, {
+              nome: localidade,
               pendencias: 0,
               requests: [],
             });
           }
 
-          const current = byUser.get(key);
+          const current = bySetor.get(localidade);
           if (!current) return;
 
-          current.requests.push(request);
-          if (isPendingStatus(request.status)) {
-            current.pendencias += 1;
-          }
+          current.requests.push({
+            ...request,
+            localidade,
+            usuarioNome,
+          });
+          current.pendencias += 1;
         });
 
-        const result = Array.from(byUser.values())
-          .filter((user) => user.requests.length > 0 || user.pendencias > 0)
-          .sort(
-            (left, right) =>
-              left.localidade.localeCompare(right.localidade) ||
-              left.nome.localeCompare(right.nome),
-          );
+        const result = Array.from(bySetor.values())
+          .map((setor) => ({
+            ...setor,
+            requests: setor.requests.sort(
+              (left, right) =>
+                new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+            ),
+          }))
+          .sort((left, right) => left.nome.localeCompare(right.nome));
 
         setData(result);
         setCodeByRequestId(codeMap);
@@ -208,28 +179,31 @@ function ControleAssinaturasPage() {
     };
   }, []);
 
-  const filteredUsers = useMemo(() => {
-    return data.filter((user) => {
-      const localidadeMatch =
-        !localidadeFilter.trim() ||
-        user.localidade.toLowerCase().includes(localidadeFilter.trim().toLowerCase());
-      const nomeMatch =
-        !nomeFilter.trim() || user.nome.toLowerCase().includes(nomeFilter.trim().toLowerCase());
-      return localidadeMatch && nomeMatch;
-    });
+  const filteredSetores = useMemo(() => {
+    return data
+      .map((setor) => ({
+        ...setor,
+        requests: setor.requests.filter((request) => {
+          const localidadeMatch =
+            !localidadeFilter.trim() ||
+            setor.nome.toLowerCase().includes(localidadeFilter.trim().toLowerCase());
+          const nomeMatch =
+            !nomeFilter.trim() ||
+            request.usuarioNome.toLowerCase().includes(nomeFilter.trim().toLowerCase());
+          return localidadeMatch && nomeMatch;
+        }),
+      }))
+      .filter((setor) => setor.requests.length > 0)
+      .map((setor) => ({
+        ...setor,
+        pendencias: setor.requests.length,
+      }));
   }, [data, localidadeFilter, nomeFilter]);
 
-  const groupedUsers = useMemo(() => {
-    const map = new Map<string, UsuarioControle[]>();
-    filteredUsers.forEach((user) => {
-      const key = user.localidade || "Sem localidade";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)?.push(user);
-    });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredUsers]);
-
-  const selectedUser = data.find((user) => user.id === selectedUserId) || null;
+  const selectedSetorData =
+    filteredSetores.find((setor) => setor.nome === selectedSetor) ||
+    data.find((setor) => setor.nome === selectedSetor) ||
+    null;
 
   return (
     <div className="space-y-4">
@@ -241,19 +215,19 @@ function ControleAssinaturasPage() {
       <Card className="p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-2 text-sm text-muted-foreground">
-            Localidade
+            Setor
             <Input
               value={localidadeFilter}
               onChange={(event) => setLocalidadeFilter(event.target.value)}
-              placeholder="Filtrar por localidade"
+              placeholder="Filtrar por setor"
             />
           </label>
           <label className="space-y-2 text-sm text-muted-foreground">
-            Nome
+            Usuario
             <Input
               value={nomeFilter}
               onChange={(event) => setNomeFilter(event.target.value)}
-              placeholder="Filtrar por nome"
+              placeholder="Filtrar por usuario"
             />
           </label>
         </div>
@@ -266,51 +240,47 @@ function ControleAssinaturasPage() {
         </div>
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
-      ) : selectedUser ? (
+      ) : selectedSetorData ? (
         <Card className="p-4">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">Usuario selecionado</p>
-              <p className="text-lg text-foreground">{selectedUser.nome}</p>
-              <p className="text-sm text-muted-foreground">{selectedUser.localidade}</p>
+              <p className="text-sm text-muted-foreground">Setor selecionado</p>
+              <p className="text-lg text-foreground">{selectedSetorData.nome}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={selectedUser.pendencias > 0 ? "destructive" : "secondary"}>
-                {selectedUser.pendencias} pendente{selectedUser.pendencias === 1 ? "" : "s"}
+              <Badge variant="destructive">
+                {selectedSetorData.requests.length} pendente{selectedSetorData.requests.length === 1 ? "" : "s"}
               </Badge>
-              <Button type="button" variant="outline" className="gap-2" onClick={() => setSelectedUserId(null)}>
+              <Button type="button" variant="outline" className="gap-2" onClick={() => setSelectedSetor(null)}>
                 <ArrowLeft className="h-4 w-4" />
                 Voltar
               </Button>
             </div>
           </div>
 
-          {selectedUser.requests.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">Nenhuma requisicao encontrada.</div>
+          {selectedSetorData.requests.length === 0 ? (
+            <div className="p-4 text-sm text-muted-foreground">Nenhuma requisicao pendente encontrada.</div>
           ) : (
             <div className="rounded-md overflow-x-auto border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 text-left font-normal">Data</th>
-                    <th className="px-3 py-2 text-left font-normal">Local</th>
                     <th className="px-3 py-2 text-left font-normal">Numero</th>
+                    <th className="px-3 py-2 text-left font-normal">Usuario</th>
+                    <th className="px-3 py-2 text-left font-normal">Data</th>
                     <th className="px-3 py-2 text-left font-normal">Status</th>
                     <th className="px-3 py-2 text-right font-normal">PDF</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedUser.requests.map((request) => {
+                  {selectedSetorData.requests.map((request) => {
                     const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
-                    const pdfRoute = hasOutputDocument(request)
-                      ? "/admin/assinadas/$requisicaoId/pdf"
-                      : "/admin/solicitacoes/$requisicaoId/pdf";
 
                     return (
                       <tr key={request.id} className="border-t">
-                        <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
-                        <td className="px-3 py-2 text-foreground">{request.setor || selectedUser.localidade}</td>
                         <td className="px-3 py-2 text-foreground">{code}</td>
+                        <td className="px-3 py-2 text-foreground">{request.usuarioNome}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                         <td className="px-3 py-2 text-muted-foreground">{getStatusLabel(request.status)}</td>
                         <td className="px-3 py-2 text-right">
                           <Button
@@ -320,7 +290,7 @@ function ControleAssinaturasPage() {
                             className="gap-2"
                             onClick={() =>
                               navigate({
-                                to: pdfRoute,
+                                to: "/admin/solicitacoes/$requisicaoId/pdf",
                                 params: { requisicaoId: request.id },
                               })
                             }
@@ -337,37 +307,27 @@ function ControleAssinaturasPage() {
             </div>
           )}
         </Card>
-      ) : groupedUsers.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhum registro encontrado no controle.</Card>
+      ) : filteredSetores.length === 0 ? (
+        <Card className="p-6 text-muted-foreground">Nenhuma pendencia encontrada no controle.</Card>
       ) : (
-        groupedUsers.map(([localidade, users]) => (
-          <Card key={localidade} className="p-4">
-            <div className="mb-3">
-              <p className="text-sm text-muted-foreground">Localidade</p>
-              <h3 className="text-lg text-foreground">{localidade}</h3>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {users.map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => setSelectedUserId(user.id)}
-                  className="rounded-md border p-4 text-left transition-colors hover:bg-muted/40"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base text-foreground">{user.nome}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {user.requests.length} registro{user.requests.length === 1 ? "" : "s"} no controle
-                      </p>
-                    </div>
-                    <Badge variant={user.pendencias > 0 ? "destructive" : "secondary"}>
-                      {user.pendencias}
-                    </Badge>
-                  </div>
-                </button>
-              ))}
-            </div>
+        filteredSetores.map((setor) => (
+          <Card key={setor.nome} className="p-4">
+            <button
+              type="button"
+              onClick={() => setSelectedSetor(setor.nome)}
+              className="flex w-full items-start justify-between gap-3 text-left"
+            >
+              <div>
+                <p className="text-sm text-muted-foreground">Setor</p>
+                <h3 className="text-lg text-foreground">{setor.nome}</h3>
+                <p className="text-sm text-muted-foreground">
+                  Clique para ver as requisicoes pendentes deste setor.
+                </p>
+              </div>
+              <Badge variant="destructive">
+                {setor.pendencias}
+              </Badge>
+            </button>
           </Card>
         ))
       )}
