@@ -93,6 +93,7 @@ function Solicitacoes() {
     async function loadRequests() {
       setLoading(true);
       setError(null);
+      try {
 
       const [pendingResult, allResult, setoresResult] = await Promise.all([
         supabase
@@ -134,7 +135,6 @@ function Solicitacoes() {
 
           if (usersError) {
             setError(usersError.message);
-            setLoading(false);
             return;
           }
 
@@ -168,7 +168,13 @@ function Solicitacoes() {
         setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]));
       }
 
-      setLoading(false);
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Erro ao carregar solicitações.");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     }
 
     loadRequests();
