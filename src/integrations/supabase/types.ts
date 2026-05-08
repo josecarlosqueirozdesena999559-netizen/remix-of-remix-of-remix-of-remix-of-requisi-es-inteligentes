@@ -345,6 +345,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_pending_signature_control: {
+        Args: { p_localidade?: string | null; p_nome?: string | null }
+        Returns: {
+          localidade: string
+          nome: string
+          quantidade_assinaturas_pendentes: number
+        }[]
+      }
       is_admin_user: { Args: never; Returns: boolean }
       replace_requisicao_items: {
         Args: { p_items?: Json; p_requisicao_id: string }
