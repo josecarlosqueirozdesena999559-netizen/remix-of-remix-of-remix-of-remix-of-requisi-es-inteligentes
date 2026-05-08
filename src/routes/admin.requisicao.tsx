@@ -81,6 +81,19 @@ function getItemName(item: EditableRequestItem) {
 
 const requestSearchStorageKey = "admin:requisicao:search";
 
+function isFoodCleaningCategory(category: string) {
+  const normalized = normalizeProductSearchValue(category);
+  return normalized.includes("genero") && normalized.includes("limpeza");
+}
+
+function isAmbulatorialCategory(category: string) {
+  return normalizeProductSearchValue(category) === "ambulatorial";
+}
+
+function isExpedienteCategory(category: string) {
+  return normalizeProductSearchValue(category) === "expediente";
+}
+
 function buildRequestSections(categories: string[]) {
   const sections: RequestSection[] = [];
 
@@ -135,6 +148,66 @@ function buildRequestSections(categories: string[]) {
       label: category,
       baseCategory: category,
       order: category === "Expediente" ? 4 : 5,
+    });
+  });
+
+  return sections.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "pt-BR"));
+}
+
+function buildNormalizedRequestSections(categories: string[]) {
+  const sections: RequestSection[] = [];
+
+  categories.forEach((category) => {
+    if (isFoodCleaningCategory(category)) {
+      sections.push(
+        {
+          id: "generos-alimenticios",
+          label: "Alimenticio",
+          baseCategory: category,
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "AlimentÃ­cio") || !isCleaningProduct(item),
+          order: 0,
+        },
+        {
+          id: "limpeza",
+          label: "Limpeza",
+          baseCategory: category,
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Limpeza") || isCleaningProduct(item),
+          order: 1,
+        },
+      );
+      return;
+    }
+
+    if (isAmbulatorialCategory(category)) {
+      sections.push(
+        {
+          id: "ambulatorial-materiais",
+          label: "Material Ambulatorial",
+          baseCategory: category,
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Material Ambulatorial") ||
+            !isMedicationProduct(item),
+          order: 2,
+        },
+        {
+          id: "ambulatorial-medicamentos",
+          label: "Medicamentos",
+          baseCategory: category,
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Medicamentos") || isMedicationProduct(item),
+          order: 3,
+        },
+      );
+      return;
+    }
+
+    sections.push({
+      id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
+      label: category,
+      baseCategory: category,
+      order: isExpedienteCategory(category) ? 4 : 5,
     });
   });
 
@@ -232,7 +305,7 @@ function CriarRequisicaoPage() {
         setItems(loadedItems);
         setReturnReason(editableRequest?.return_reason || null);
 
-        const availableSections = buildRequestSections(categories);
+        const availableSections = buildNormalizedRequestSections(categories);
         setSelectedSectionId(getInitialSectionId(availableSections, editableRequest?.categoria));
 
         if (editableRequest?.items?.length) {
@@ -271,7 +344,7 @@ function CriarRequisicaoPage() {
   }, [editingRequestId]);
 
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
-  const sections = useMemo(() => buildRequestSections(categories), [categories]);
+  const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) || sections[0] || null,
     [sections, selectedSectionId],
