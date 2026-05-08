@@ -1,9 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +50,8 @@ function ProdutoFormPage() {
   const [programas, setProgramas] = useState<Programa[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -206,6 +216,40 @@ function ProdutoFormPage() {
     navigate({ to: "/admin/cadastros/produtos" });
   };
 
+  const handleDelete = async () => {
+    if (isNew) return;
+
+    setDeleting(true);
+    setError(null);
+    setSuccess(null);
+
+    const deleteLinksResult = await supabase
+      .from("programa_produtos")
+      .delete()
+      .eq("item_id", produtoId);
+
+    if (deleteLinksResult.error) {
+      setError(deleteLinksResult.error.message);
+      setDeleting(false);
+      return;
+    }
+
+    const deleteItemResult = await supabase
+      .from("itens")
+      .delete()
+      .eq("id", produtoId);
+
+    if (deleteItemResult.error) {
+      setError(deleteItemResult.error.message);
+      setDeleting(false);
+      return;
+    }
+
+    setDeleteOpen(false);
+    setDeleting(false);
+    navigate({ to: "/admin/cadastros/produtos" });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -310,9 +354,46 @@ function ProdutoFormPage() {
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar
             </Button>
+            {!isNew && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="ml-2 gap-2"
+                disabled={saving || deleting}
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir produto
+              </Button>
+            )}
           </form>
         )}
       </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir produto</DialogTitle>
+            <DialogDescription>
+              Esta ação vai remover o produto cadastrado e seus vínculos com programas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <p className="text-sm text-muted-foreground">
+            Confirma a exclusão de <span className="font-medium text-foreground">{nome || "este produto"}</span>?
+          </p>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
