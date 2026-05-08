@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Search, Send, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -67,11 +67,14 @@ function getItemName(item: EditableRequestItem) {
   return String(item.item || item.nome || "").trim();
 }
 
+const requestSearchStorageKey = "admin:requisicao:search";
+
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -85,7 +88,16 @@ function CriarRequisicaoPage() {
 
     const requestId = new URLSearchParams(window.location.search).get("requisicaoId") || "";
     setEditingRequestId(requestId);
+
+    const savedSearch = window.localStorage.getItem(requestSearchStorageKey) || "";
+    setSearchQuery(savedSearch);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(requestSearchStorageKey, searchQuery);
+  }, [searchQuery]);
 
   useEffect(() => {
     let active = true;
@@ -183,11 +195,20 @@ function CriarRequisicaoPage() {
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
 
   const visibleItems = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
     return sortProductsByMaterialGroup(
-      items.filter((item) => productHasCategory(item.categoria, selectedCategory)),
+      items.filter((item) => {
+        if (!productHasCategory(item.categoria, selectedCategory)) return false;
+        if (!normalizedSearch) return true;
+
+        return [item.nome, item.unidade, item.subcategoria]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      }),
       selectedCategory,
     );
-  }, [items, selectedCategory]);
+  }, [items, searchQuery, selectedCategory]);
 
   const handleQuantityChange = (itemId: string, value: string) => {
     setQuantities((current) => ({ ...current, [itemId]: value }));
@@ -327,6 +348,28 @@ function CriarRequisicaoPage() {
           </Card>
 
           <Card className="p-4">
+            <div className="relative max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Pesquisar item, unidade ou subcategoria..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="pl-9 pr-10"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="Limpar pesquisa"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-4">
             <div className="rounded-md overflow-x-auto border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-muted-foreground">
@@ -367,7 +410,9 @@ function CriarRequisicaoPage() {
                   {visibleItems.length === 0 && (
                     <tr>
                       <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
-                        Nenhum item liberado para este tipo de material.
+                        {searchQuery.trim()
+                          ? "Nenhum item encontrado para esta pesquisa."
+                          : "Nenhum item liberado para este tipo de material."}
                       </td>
                     </tr>
                   )}
