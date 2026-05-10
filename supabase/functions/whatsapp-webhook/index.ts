@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const WHATSAPP_TEMPLATE_LANGUAGE = "pt_BR";
 const READY_TEMPLATE_NAME = "pedido_pronto_retirada";
+const CONFIRM_BUTTON_ID = "confirmar_retirada";
 const SETTINGS_KEYS = [
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_PHONE_NUMBER_ID",
@@ -45,6 +46,16 @@ type PendingConfirmation = {
     requesterCpf: string;
     requestDate: string;
   };
+};
+
+type RequisicaoRow = {
+  id: string;
+  saida_codigo: string | null;
+  categoria: string | null;
+  data: string | null;
+  solicitante: string | null;
+  solicitante_cpf: string | null;
+  status: string;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -213,6 +224,51 @@ async function sendTextMessage(input: { to: string; text: string }) {
   }
 }
 
+async function sendConfirmationButtonMessage(input: {
+  to: string;
+  pending: PendingConfirmation;
+}) {
+  const config = await getSettings();
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizePhoneNumber(input.to),
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: buildConfirmationMessage(input.pending),
+          },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: {
+                  id: CONFIRM_BUTTON_ID,
+                  title: "Confirmar",
+                },
+              },
+            ],
+          },
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "Erro ao enviar botao de confirmacao.");
+  }
+}
+
 async function sendReadyTemplate(input: {
   to: string;
   requestCode: string;
@@ -306,15 +362,7 @@ async function getRequestByQrPayload(qrPayloadText: string) {
     `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&id=eq.${encodeURIComponent(
       qrPayload.requestId,
     )}&limit=1`,
-  )) as Array<{
-    id: string;
-    saida_codigo: string | null;
-    categoria: string | null;
-    data: string | null;
-    solicitante: string | null;
-    solicitante_cpf: string | null;
-    status: string;
-  }>;
+  )) as RequisicaoRow[];
 
   const requisicao = rows[0];
   if (!requisicao) throw new Error("Requisicao nao encontrada.");
@@ -325,18 +373,80 @@ async function getRequestByQrPayload(qrPayloadText: string) {
     throw new Error("QR Code nao confere com a requisicao encontrada.");
   }
 
+  return buildRequestLookupResult(requisicao, qrPayload);
+}
+
+function buildRequestLookupResult(requisicao: RequisicaoRow, qrPayload?: RequestQrPayload) {
+  const requestCode = requisicao.saida_codigo || requisicao.id;
+
   return {
     qrPayload,
     requisicao,
     request: {
       id: requisicao.id,
       requestCode: valueOrDash(requestCode),
-      materialType: valueOrDash(requisicao.categoria || qrPayload.materialType),
-      requester: valueOrDash(requisicao.solicitante || qrPayload.requester),
-      requesterCpf: valueOrDash(requisicao.solicitante_cpf || qrPayload.requesterCpf),
-      requestDate: valueOrDash(requisicao.data || qrPayload.requestDate),
+      materialType: valueOrDash(requisicao.categoria || qrPayload?.materialType),
+      requester: valueOrDash(requisicao.solicitante || qrPayload?.requester),
+      requesterCpf: valueOrDash(requisicao.solicitante_cpf || qrPayload?.requesterCpf),
+      requestDate: valueOrDash(requisicao.data || qrPayload?.requestDate),
     },
   };
+}
+
+function buildQrPayloadTextFromRequest(requisicao: RequisicaoRow) {
+  const requestCode = requisicao.saida_codigo || requisicao.id;
+  return JSON.stringify({
+    kind: "almoxarifado_requisicao",
+    version: 1,
+    requestId: requisicao.id,
+    requestCode: valueOrDash(requestCode),
+    materialType: valueOrDash(requisicao.categoria),
+    requester: valueOrDash(requisicao.solicitante),
+    requesterCpf: valueOrDash(requisicao.solicitante_cpf),
+    requestDate: valueOrDash(requisicao.data),
+  });
+}
+
+function normalizeManualCode(value: string) {
+  return value
+    .trim()
+    .replace(/^c[oó]digo\s*[:#-]?\s*/i, "")
+    .replace(/^cod\s*[:#-]?\s*/i, "")
+    .trim();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+async function getRequestByManualCode(rawCode: string) {
+  const code = normalizeManualCode(rawCode);
+  if (!code) throw new Error("Digite o codigo que aparece abaixo do QR Code.");
+
+  const rowsByCode = (await supabaseFetch(
+    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&saida_codigo=eq.${encodeURIComponent(
+      code,
+    )}&limit=1`,
+  )) as RequisicaoRow[];
+
+  let requisicao = rowsByCode[0];
+
+  if (!requisicao && isUuid(code)) {
+    const rowsById = (await supabaseFetch(
+      `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&id=eq.${encodeURIComponent(
+        code,
+      )}&limit=1`,
+    )) as RequisicaoRow[];
+    requisicao = rowsById[0];
+  }
+
+  if (!requisicao) {
+    throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
+  }
+
+  return buildRequestLookupResult(requisicao);
 }
 
 async function findRequesterWhatsApp(input: {
@@ -402,9 +512,12 @@ function buildConfirmationMessage(pending: PendingConfirmation) {
     `Tipo: ${pending.request.materialType}`,
     `Numero: ${pending.request.requestCode}`,
     `Data: ${pending.request.requestDate}`,
-    "",
-    "Responda CONFIRMAR para avisar o responsavel que o pedido pode ser retirado.",
   ].join("\n");
+}
+
+async function savePendingAndAskConfirmation(from: string, pending: PendingConfirmation) {
+  await upsertSetting(pendingKey(from), JSON.stringify(pending));
+  await sendConfirmationButtonMessage({ to: from, pending });
 }
 
 async function handleImageMessage(from: string, mediaId: string) {
@@ -417,29 +530,31 @@ async function handleImageMessage(from: string, mediaId: string) {
     request,
   };
 
-  await upsertSetting(pendingKey(from), JSON.stringify(pending));
-  await sendTextMessage({
-    to: from,
-    text: buildConfirmationMessage(pending),
-  });
+  await savePendingAndAskConfirmation(from, pending);
 }
 
 async function handleTextMessage(from: string, text: string) {
   const normalized = text.trim().toLowerCase();
 
   if (!["confirmar", "confirma", "sim"].includes(normalized)) {
-    await sendTextMessage({
-      to: from,
-      text: "Envie uma foto do QR Code do pedido. Depois responda CONFIRMAR.",
+    const { requisicao, request } = await getRequestByManualCode(text);
+    await savePendingAndAskConfirmation(from, {
+      qrPayload: buildQrPayloadTextFromRequest(requisicao),
+      createdAt: new Date().toISOString(),
+      request,
     });
     return;
   }
 
+  await handleConfirmation(from);
+}
+
+async function handleConfirmation(from: string) {
   const pendingRaw = await getSetting(pendingKey(from));
   if (!pendingRaw) {
     await sendTextMessage({
       to: from,
-      text: "Nenhum QR Code aguardando confirmacao. Envie a foto do QR Code novamente.",
+      text: "Nenhum pedido aguardando confirmacao. Envie a foto do QR Code ou digite o COD abaixo do QR.",
     });
     return;
   }
@@ -450,7 +565,7 @@ async function handleTextMessage(from: string, text: string) {
     await deleteSetting(pendingKey(from));
     await sendTextMessage({
       to: from,
-      text: "Confirmacao expirada. Envie a foto do QR Code novamente.",
+      text: "Confirmacao expirada. Envie a foto do QR Code ou digite o COD novamente.",
     });
     return;
   }
@@ -519,14 +634,30 @@ Deno.serve(async (request) => {
             return;
           }
 
+          if (
+            message.type === "interactive" &&
+            message.interactive?.button_reply?.id === CONFIRM_BUTTON_ID
+          ) {
+            await handleConfirmation(from);
+            return;
+          }
+
+          if (message.type === "button" && message.button?.payload === CONFIRM_BUTTON_ID) {
+            await handleConfirmation(from);
+            return;
+          }
+
           await sendTextMessage({
             to: from,
-            text: "Envie uma foto do QR Code ou responda CONFIRMAR.",
+            text: "Envie uma foto do QR Code ou digite o COD abaixo do QR.",
           });
         } catch (error) {
           await sendTextMessage({
             to: from,
-            text: error instanceof Error ? error.message : "Nao foi possivel processar o QR Code.",
+            text:
+              error instanceof Error
+                ? `${error.message}\n\nSe a foto nao ler, digite o COD que aparece abaixo do QR Code.`
+                : "Nao foi possivel processar. Se a foto nao ler, digite o COD abaixo do QR Code.",
           });
         }
       }),
