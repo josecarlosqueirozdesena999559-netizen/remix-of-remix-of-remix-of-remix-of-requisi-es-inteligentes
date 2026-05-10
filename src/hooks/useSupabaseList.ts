@@ -6,7 +6,7 @@ export function useSupabaseList<T = Record<string, unknown>>(
   select = "*",
   orderBy: { column: string; ascending?: boolean } = { column: "created_at", ascending: false },
   realtimeTables: string[] = [table],
-  refreshIntervalMs = 1500,
+  refreshIntervalMs = 30000,
 ) {
   const [data, setData] = useState<T[]>();
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,39 @@ export function useSupabaseList<T = Record<string, unknown>>(
       channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table: realtimeTable },
-        () => void loadData(isActive),
+        (payload) => {
+          if (realtimeTable !== table) {
+            void loadData(isActive);
+            return;
+          }
+
+          setData((current) => {
+            const rows = current ?? [];
+            const eventType = payload.eventType;
+            const newRow = payload.new as T & { id?: string | number };
+            const oldRow = payload.old as T & { id?: string | number };
+
+            if (eventType === "DELETE") {
+              return rows.filter((row) => (row as { id?: string | number }).id !== oldRow.id);
+            }
+
+            if (!newRow?.id) return rows;
+
+            const nextRows = rows.some((row) => (row as { id?: string | number }).id === newRow.id)
+              ? rows.map((row) => ((row as { id?: string | number }).id === newRow.id ? newRow : row))
+              : orderBy.ascending
+                ? [...rows, newRow]
+                : [newRow, ...rows];
+
+            return [...nextRows].sort((left, right) => {
+              const leftValue = (left as Record<string, unknown>)[orderBy.column];
+              const rightValue = (right as Record<string, unknown>)[orderBy.column];
+              const comparison = String(leftValue ?? "").localeCompare(String(rightValue ?? ""));
+
+              return orderBy.ascending ? comparison : -comparison;
+            });
+          });
+        },
       );
     });
 

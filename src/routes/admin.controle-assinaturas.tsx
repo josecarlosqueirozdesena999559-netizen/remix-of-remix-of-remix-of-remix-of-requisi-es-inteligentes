@@ -83,7 +83,7 @@ function ControleAssinaturasPage() {
       setError(null);
 
       try {
-        const [{ profile }, usersResult, requestsResult, allRequestsResult, setoresResult] = await Promise.all([
+        const [{ profile }, usersResult, requestsResult, setoresResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("usuarios")
@@ -94,11 +94,8 @@ function ControleAssinaturasPage() {
             .from("requisicoes")
             .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status")
             .in("status", [...pendingStatuses])
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("requisicoes")
-            .select("id,saida_codigo,data,created_at")
-            .order("created_at", { ascending: true }),
+            .order("updated_at", { ascending: false })
+            .limit(20),
           supabase
             .from("setores")
             .select("nome,programa")
@@ -112,12 +109,11 @@ function ControleAssinaturasPage() {
           return;
         }
 
-        if (usersResult.error || requestsResult.error || allRequestsResult.error || setoresResult.error) {
+        if (usersResult.error || requestsResult.error || setoresResult.error) {
           throw new Error(
             usersResult.error?.message ||
               requestsResult.error?.message ||
               setoresResult.error?.message ||
-              allRequestsResult.error?.message ||
               "Erro ao carregar controle de assinaturas.",
           );
         }
@@ -127,7 +123,7 @@ function ControleAssinaturasPage() {
         const requests = ((requestsResult.data ?? []) as RequisicaoControle[]).filter((request) =>
           isPendingStatus(request.status),
         );
-        const codeMap = buildGlobalRequestCodes((allRequestsResult.data ?? []) as RequisicaoControle[]);
+        const codeMap = buildGlobalRequestCodes(requests);
         const bySetor = new Map<string, SetorControle>();
 
         requests.forEach((request) => {

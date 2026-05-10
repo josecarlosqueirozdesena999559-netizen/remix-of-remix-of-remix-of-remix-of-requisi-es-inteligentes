@@ -132,7 +132,8 @@ function MinhasAssinaturasPage() {
           .select(`${baseSelect},return_reason,return_target`)
           .eq("solicitante_cpf", profile.cpf)
           .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
-          .order("created_at", { ascending: false }),
+          .order("updated_at", { ascending: false })
+          .limit(20),
       ]);
 
       let { data, error } = requestsResult;
@@ -149,7 +150,8 @@ function MinhasAssinaturasPage() {
           .select(baseSelect)
           .eq("solicitante_cpf", profile.cpf)
           .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
-          .order("created_at", { ascending: false });
+          .order("updated_at", { ascending: false })
+          .limit(20);
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,
@@ -263,7 +265,6 @@ function MinhasAssinaturasPage() {
 
       setMessage(isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.");
       setRequests((current) => current.filter((item) => item.id !== request.id));
-      await loadRequests();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar PDF assinado.");
     } finally {

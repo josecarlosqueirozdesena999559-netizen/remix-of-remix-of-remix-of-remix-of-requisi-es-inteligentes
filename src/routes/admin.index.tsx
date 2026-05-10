@@ -45,7 +45,9 @@ function AdminHome() {
           const { data, error } = await supabase
             .from("requisicoes")
             .select("status,signed_attachment,admin_attachment")
-            .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"]);
+            .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
+            .order("updated_at", { ascending: false })
+            .limit(50);
 
           if (error) throw new Error(error.message);
           if (!active) return;
@@ -84,7 +86,9 @@ function AdminHome() {
             "aguardando_assinatura_requisicao",
             "aguardando_assinatura_saida",
             "correcao_requisicao",
-          ]);
+          ])
+          .order("updated_at", { ascending: false })
+          .limit(50);
 
         if (error) throw new Error(error.message);
         if (!active) return;

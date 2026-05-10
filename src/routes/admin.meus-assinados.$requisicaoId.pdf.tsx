@@ -11,7 +11,6 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
-import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
 import { resolveRequestForPdf } from "@/lib/request-resolver";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,22 +51,16 @@ function MeuAssinadoPdfPage() {
       setLoading(true);
       setError(null);
 
-      const [requestResult, allResult] = await Promise.all([
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment")
-          .eq("id", requisicaoId)
-          .maybeSingle(),
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,data,created_at")
-          .order("created_at", { ascending: true }),
-      ]);
+      const requestResult = await supabase
+        .from("requisicoes")
+        .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment")
+        .eq("id", requisicaoId)
+        .maybeSingle();
 
       if (!active) return;
 
-      if (requestResult.error || allResult.error) {
-        setError(requestResult.error?.message || allResult.error?.message || "Erro ao carregar PDF.");
+      if (requestResult.error) {
+        setError(requestResult.error.message || "Erro ao carregar PDF.");
         setLoading(false);
         return;
       }
@@ -79,8 +72,7 @@ function MeuAssinadoPdfPage() {
       }
 
       const request = requestResult.data as Requisicao;
-      const codeByRequestId = buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]);
-      const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
+      const code = request.saida_codigo || request.id;
       const requestAttachment = getRequestSignedAttachment(
         request.signed_attachment,
         request.status,

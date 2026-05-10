@@ -95,16 +95,13 @@ function Solicitacoes() {
       setError(null);
       try {
 
-      const [pendingResult, allResult, setoresResult] = await Promise.all([
+      const [pendingResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment")
           .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,data,created_at")
-          .order("created_at", { ascending: true }),
+          .order("updated_at", { ascending: false })
+          .limit(20),
         supabase
           .from("setores")
           .select("nome,programa")
@@ -113,8 +110,8 @@ function Solicitacoes() {
 
       if (!active) return;
 
-      if (pendingResult.error || allResult.error || setoresResult.error) {
-        setError(pendingResult.error?.message || allResult.error?.message || "Erro ao carregar solicitações.");
+      if (pendingResult.error || setoresResult.error) {
+        setError(pendingResult.error?.message || setoresResult.error?.message || "Erro ao carregar solicitações.");
       } else {
         const requests = (pendingResult.data ?? []) as Requisicao[];
         const locationOptions = (setoresResult.data ?? []) as LocationOption[];
@@ -165,7 +162,7 @@ function Solicitacoes() {
             ),
           })),
         );
-        setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]));
+        setCodeByRequestId(buildGlobalRequestCodes(pendingOutputRequests));
       }
 
       } catch (err) {

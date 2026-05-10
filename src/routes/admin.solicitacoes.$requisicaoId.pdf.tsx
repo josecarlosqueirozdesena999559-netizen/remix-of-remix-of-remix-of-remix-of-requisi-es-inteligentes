@@ -8,7 +8,7 @@ import {
   getRequestSignedAttachment,
   resolveAttachmentUrl,
 } from "@/lib/attachments";
-import { buildGlobalRequestCodes, formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
+import { formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
 import { createRequestPdfBlob, type RequestPdfData, type RequestPdfItem } from "@/lib/request-pdf";
 
 export const Route = createFileRoute("/admin/solicitacoes/$requisicaoId/pdf")({
@@ -93,22 +93,16 @@ function SolicitacaoPdfPage() {
       setLoading(true);
       setError(null);
 
-      const [requestResult, allResult] = await Promise.all([
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment")
-          .eq("id", requisicaoId)
-          .maybeSingle(),
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,data,created_at")
-          .order("created_at", { ascending: true }),
-      ]);
+      const requestResult = await supabase
+        .from("requisicoes")
+        .select("id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment")
+        .eq("id", requisicaoId)
+        .maybeSingle();
 
       if (!active) return;
 
-      if (requestResult.error || allResult.error) {
-        setError(requestResult.error?.message || allResult.error?.message || "Erro ao carregar requisição.");
+      if (requestResult.error) {
+        setError(requestResult.error.message || "Erro ao carregar requisição.");
         setLoading(false);
         return;
       }
@@ -120,8 +114,7 @@ function SolicitacaoPdfPage() {
       }
 
       const request = requestResult.data as Requisicao;
-      const codeByRequestId = buildGlobalRequestCodes((allResult.data ?? []) as Requisicao[]);
-      const code = request.saida_codigo || codeByRequestId.get(request.id) || `${formatRequestCodeDate(request.data || request.created_at)}001`;
+      const code = request.saida_codigo || `${formatRequestCodeDate(request.data || request.created_at)}001`;
       const signedRequestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
 
       if (!request.saida_codigo) {

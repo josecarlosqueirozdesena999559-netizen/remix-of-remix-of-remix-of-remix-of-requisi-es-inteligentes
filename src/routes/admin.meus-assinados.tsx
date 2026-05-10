@@ -86,7 +86,8 @@ function MeusAssinadosPage() {
           .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
           .eq("solicitante_cpf", profile.cpf)
           .eq("status", "concluido")
-          .order("created_at", { ascending: false });
+          .order("updated_at", { ascending: false })
+          .limit(20);
 
         if (error) throw new Error(error.message);
         if (active) {

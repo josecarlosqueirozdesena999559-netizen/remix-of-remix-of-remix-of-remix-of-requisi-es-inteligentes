@@ -108,15 +108,13 @@ function AssinadasPage() {
       setLoading(true);
       setError(null);
 
-      const [requestsResult, allResult, setoresResult] = await Promise.all([
+      const [requestsResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,data,created_at")
-          .order("created_at", { ascending: true }),
+          .eq("status", "concluido")
+          .order("updated_at", { ascending: false })
+          .limit(20),
         supabase
           .from("setores")
           .select("nome,programa")
@@ -125,10 +123,9 @@ function AssinadasPage() {
 
       if (!active) return;
 
-      if (requestsResult.error || allResult.error || setoresResult.error) {
+      if (requestsResult.error || setoresResult.error) {
         setError(
           requestsResult.error?.message ||
-            allResult.error?.message ||
             setoresResult.error?.message ||
             "Erro ao carregar requisições.",
         );
@@ -144,7 +141,7 @@ function AssinadasPage() {
             setor: resolveCanonicalLocationName(request.setor, locationOptions) || request.setor,
           })),
         );
-        setCodeByRequestId(buildGlobalRequestCodes((allResult.data ?? []) as RequisicaoAssinada[]));
+        setCodeByRequestId(buildGlobalRequestCodes(requests));
       }
 
       setLoading(false);
