@@ -80,8 +80,35 @@ function getStatusLabel(status: string) {
 function hasOutputDocument(request: RequisicaoAssinada) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      getAttachmentFile(request.admin_attachment),
+    getAttachmentFile(request.admin_attachment),
   );
+}
+
+async function fetchCompletedRequests() {
+  const pageSize = 1000;
+  let from = 0;
+  const requests: RequisicaoAssinada[] = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("requisicoes")
+      .select(
+        "id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment",
+      )
+      .eq("status", "concluido")
+      .order("updated_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as RequisicaoAssinada[];
+    requests.push(...page);
+
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return requests;
 }
 
 function AssinadasPage() {
@@ -108,43 +135,35 @@ function AssinadasPage() {
       setLoading(true);
       setError(null);
 
-      const [requestsResult, setoresResult] = await Promise.all([
-        supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment")
-          .eq("status", "concluido")
-          .order("updated_at", { ascending: false })
-          .limit(20),
-        supabase
-          .from("setores")
-          .select("nome,programa")
-          .order("nome", { ascending: true }),
-      ]);
+      try {
+        const [requests, setoresResult] = await Promise.all([
+          fetchCompletedRequests(),
+          supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
+        ]);
 
-      if (!active) return;
+        if (!active) return;
 
-      if (requestsResult.error || setoresResult.error) {
-        setError(
-          requestsResult.error?.message ||
-            setoresResult.error?.message ||
-            "Erro ao carregar requisições.",
-        );
-      } else {
-        const requests = (requestsResult.data ?? []) as RequisicaoAssinada[];
-        const locationOptions = (setoresResult.data ?? []) as LocationOption[];
+        if (setoresResult.error) {
+          setError(setoresResult.error?.message || "Erro ao carregar requisições.");
+        } else {
+          const locationOptions = (setoresResult.data ?? []) as LocationOption[];
 
-        setData(
-          requests.filter(
-            (request) => request.status === "concluido" && hasOutputDocument(request),
-          ).map((request) => ({
-            ...request,
-            setor: resolveCanonicalLocationName(request.setor, locationOptions) || request.setor,
-          })),
-        );
-        setCodeByRequestId(buildGlobalRequestCodes(requests));
+          setData(
+            requests
+              .filter((request) => request.status === "concluido" && hasOutputDocument(request))
+              .map((request) => ({
+                ...request,
+                setor:
+                  resolveCanonicalLocationName(request.setor, locationOptions) || request.setor,
+              })),
+          );
+          setCodeByRequestId(buildGlobalRequestCodes(requests));
+        }
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
+      } finally {
+        if (active) setLoading(false);
       }
-
-      setLoading(false);
     }
 
     load();
@@ -173,7 +192,7 @@ function AssinadasPage() {
   }
 
   const selectedRequests = selected
-    ? grouped.find(([local]) => local === selected)?.[1] ?? []
+    ? (grouped.find(([local]) => local === selected)?.[1] ?? [])
     : [];
 
   const openReview = (request: RequisicaoAssinada, mode: ReviewMode) => {
@@ -204,9 +223,17 @@ function AssinadasPage() {
     setError(null);
 
     try {
-      const requestAttachment = getRequestSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
-      const outputAttachment = getOutputSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
-      const adminAttachment = getAttachmentFile(reviewingRequest.admin_attachment) as AttachmentFile | null;
+      const requestAttachment = getRequestSignedAttachment(
+        reviewingRequest.signed_attachment,
+        reviewingRequest.status,
+      );
+      const outputAttachment = getOutputSignedAttachment(
+        reviewingRequest.signed_attachment,
+        reviewingRequest.status,
+      );
+      const adminAttachment = getAttachmentFile(
+        reviewingRequest.admin_attachment,
+      ) as AttachmentFile | null;
 
       if (reviewMode === "devolver") {
         if (reviewTarget === "requisicao") {
@@ -387,7 +414,10 @@ function AssinadasPage() {
               <tbody>
                 {selectedRequests.map((request) => {
                   const code = request.saida_codigo || codeByRequestId.get(request.id) || "-";
-                  const requestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
+                  const requestAttachment = getRequestSignedAttachment(
+                    request.signed_attachment,
+                    request.status,
+                  );
                   const outputAttachment =
                     getOutputSignedAttachment(request.signed_attachment, request.status) ||
                     getAttachmentFile(request.admin_attachment);
@@ -398,7 +428,9 @@ function AssinadasPage() {
                       <td className="px-3 py-2 text-foreground">{request.solicitante || "-"}</td>
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                       <td className="px-3 py-2 text-foreground">{code}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{getStatusLabel(request.status)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {getStatusLabel(request.status)}
+                      </td>
                       <td className="px-3 py-2 text-right">
                         <Button
                           type="button"
@@ -476,7 +508,9 @@ function AssinadasPage() {
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}</DialogTitle>
+            <DialogTitle>
+              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
+            </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
                 ? "Escolha se o erro está na requisição ou na saída para enviar o fluxo de volta ao ponto correto."

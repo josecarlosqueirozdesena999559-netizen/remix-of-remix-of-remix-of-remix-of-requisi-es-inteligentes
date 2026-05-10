@@ -53,8 +53,34 @@ function getStatusLabel(status: string) {
 function hasOutputDocument(request: Requisicao) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      getAttachmentFile(request.admin_attachment),
+    getAttachmentFile(request.admin_attachment),
   );
+}
+
+async function fetchCompletedUserRequests(cpf: string) {
+  const pageSize = 1000;
+  let from = 0;
+  const requests: Requisicao[] = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("requisicoes")
+      .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
+      .eq("solicitante_cpf", cpf)
+      .eq("status", "concluido")
+      .order("updated_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw new Error(error.message);
+
+    const page = (data ?? []) as Requisicao[];
+    requests.push(...page);
+
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return requests;
 }
 
 function MeusAssinadosPage() {
@@ -81,17 +107,9 @@ function MeusAssinadosPage() {
           return;
         }
 
-        const { data, error } = await supabase
-          .from("requisicoes")
-          .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
-          .eq("solicitante_cpf", profile.cpf)
-          .eq("status", "concluido")
-          .order("updated_at", { ascending: false })
-          .limit(20);
-
-        if (error) throw new Error(error.message);
+        const data = await fetchCompletedUserRequests(profile.cpf);
         if (active) {
-          setRequests(((data ?? []) as Requisicao[]).filter(hasOutputDocument));
+          setRequests(data.filter(hasOutputDocument));
         }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
@@ -162,7 +180,9 @@ function MeusAssinadosPage() {
                     <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                     <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
                     <td className="px-3 py-2 text-foreground">{request.saida_codigo || "-"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{getStatusLabel(request.status)}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {getStatusLabel(request.status)}
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <Button
                         type="button"
