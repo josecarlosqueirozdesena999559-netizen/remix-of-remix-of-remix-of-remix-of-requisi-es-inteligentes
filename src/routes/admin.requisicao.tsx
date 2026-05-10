@@ -30,6 +30,12 @@ interface ItemRow {
   unidade: string;
   categoria: string;
   subcategoria: string | null;
+  programa_produtos?: {
+    programas: {
+      id: string;
+      nome: string;
+    } | null;
+  }[];
 }
 
 interface EditableRequestItem {
@@ -92,6 +98,22 @@ function isAmbulatorialCategory(category: string) {
 
 function isExpedienteCategory(category: string) {
   return normalizeProductSearchValue(category) === "expediente";
+}
+
+function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfile | null) {
+  const linkedPrograms = item.programa_produtos
+    ?.map((link) => link.programas?.nome)
+    .filter(Boolean) as string[] | undefined;
+
+  if (!linkedPrograms?.length) return true;
+  if (profile?.is_admin) return true;
+
+  const profileProgram = normalizeProductSearchValue(profile?.setor);
+  if (!profileProgram) return false;
+
+  return linkedPrograms.some(
+    (programName) => normalizeProductSearchValue(programName) === profileProgram,
+  );
 }
 
 function buildRequestSections(categories: string[]) {
@@ -262,7 +284,7 @@ function CriarRequisicaoPage() {
           getCurrentUserProfile(),
           supabase
             .from("itens")
-            .select("id,nome,unidade,categoria,subcategoria")
+            .select("id,nome,unidade,categoria,subcategoria,programa_produtos(programas(id,nome))")
             .order("nome", { ascending: true }),
           editingRequestId
             ? supabase
@@ -368,6 +390,7 @@ function CriarRequisicaoPage() {
     return sortProductsByMaterialGroup(
       items.filter((item) => {
         if (!productHasCategory(item.categoria, selectedSection.baseCategory)) return false;
+        if (!isItemAllowedForProfileProgram(item, profile)) return false;
         if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
         if (!normalizedSearch) return true;
 
