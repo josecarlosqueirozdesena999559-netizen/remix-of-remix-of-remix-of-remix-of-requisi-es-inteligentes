@@ -1,0 +1,545 @@
+import { BinaryBitmap, HybridBinarizer, QRCodeReader, RGBLuminanceSource } from "npm:@zxing/library@0.21.3";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+
+const WHATSAPP_TEMPLATE_LANGUAGE = "pt_BR";
+const READY_TEMPLATE_NAME = "pedido_pronto_retirada";
+const SETTINGS_KEYS = [
+  "WHATSAPP_ACCESS_TOKEN",
+  "WHATSAPP_PHONE_NUMBER_ID",
+  "WHATSAPP_GRAPH_API_VERSION",
+  "WHATSAPP_WEBHOOK_VERIFY_TOKEN",
+  "WHATSAPP_ADMIN_NUMBERS",
+];
+
+type AppSetting = {
+  key: string;
+  value: string;
+};
+
+type RequestQrPayload = {
+  kind?: string;
+  version?: number;
+  requestId?: string;
+  requestCode?: string;
+  materialType?: string;
+  program?: string;
+  requester?: string;
+  requesterCpf?: string;
+  requestDate?: string;
+};
+
+type PendingConfirmation = {
+  qrPayload: string;
+  createdAt: string;
+  request: {
+    id: string;
+    requestCode: string;
+    materialType: string;
+    requester: string;
+    requesterCpf: string;
+    requestDate: string;
+  };
+};
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+function textResponse(body: string, status = 200) {
+  return new Response(body, {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/plain",
+    },
+  });
+}
+
+function valueOrDash(value: string | null | undefined) {
+  return value?.trim() || "-";
+}
+
+function normalizePhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if (digits.startsWith("55") && digits.length >= 12) return digits;
+
+  throw new Error("WhatsApp invalido.");
+}
+
+function normalizeComparisonValue(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized && normalized !== "-" ? normalized : null;
+}
+
+function pendingKey(phone: string) {
+  return `WHATSAPP_PENDING_QR_${phone}`;
+}
+
+function parseQrPayload(value: string) {
+  const parsed = JSON.parse(value) as RequestQrPayload;
+
+  if (
+    parsed.kind !== "almoxarifado_requisicao" ||
+    parsed.version !== 1 ||
+    !parsed.requestId
+  ) {
+    throw new Error("QR Code de requisicao invalido.");
+  }
+
+  return parsed;
+}
+
+async function supabaseFetch(path: string, init: RequestInit = {}) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Supabase nao configurado.");
+  }
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+      ...(init.headers ?? {}),
+    },
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(payload?.message ?? `Erro ${response.status} ao consultar Supabase.`);
+  }
+
+  return payload;
+}
+
+async function getSettings() {
+  const rows = (await supabaseFetch(
+    `app_settings?select=key,value&key=in.(${SETTINGS_KEYS.join(",")})`,
+  )) as AppSetting[];
+
+  const settings = new Map(rows.map((row) => [row.key, row.value]));
+  const accessToken =
+    settings.get("WHATSAPP_ACCESS_TOKEN")?.trim() ||
+    Deno.env.get("WHATSAPP_ACCESS_TOKEN")?.trim();
+  const phoneNumberId =
+    settings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim() ||
+    Deno.env.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
+  const graphApiVersion =
+    settings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
+    Deno.env.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
+    "v25.0";
+  const verifyToken =
+    settings.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN")?.trim() ||
+    Deno.env.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN")?.trim();
+  const adminNumbers = (settings.get("WHATSAPP_ADMIN_NUMBERS") || "")
+    .split(",")
+    .map((number) => number.trim())
+    .filter(Boolean);
+
+  if (!accessToken || !phoneNumberId) {
+    throw new Error("WhatsApp nao configurado.");
+  }
+
+  return { accessToken, phoneNumberId, graphApiVersion, verifyToken, adminNumbers };
+}
+
+async function upsertSetting(key: string, value: string) {
+  await supabaseFetch("app_settings?on_conflict=key", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify({ key, value }),
+  });
+}
+
+async function deleteSetting(key: string) {
+  await supabaseFetch(`app_settings?key=eq.${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+}
+
+async function getSetting(key: string) {
+  const rows = (await supabaseFetch(
+    `app_settings?select=value&key=eq.${encodeURIComponent(key)}&limit=1`,
+  )) as Array<{ value: string }>;
+
+  return rows[0]?.value || "";
+}
+
+async function sendTextMessage(input: { to: string; text: string }) {
+  const config = await getSettings();
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizePhoneNumber(input.to),
+        type: "text",
+        text: {
+          preview_url: false,
+          body: input.text,
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "Erro ao enviar WhatsApp.");
+  }
+}
+
+async function sendReadyTemplate(input: {
+  to: string;
+  requestCode: string;
+  materialType: string;
+  requestDate: string;
+}) {
+  const config = await getSettings();
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizePhoneNumber(input.to),
+        type: "template",
+        template: {
+          name: READY_TEMPLATE_NAME,
+          language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: input.requestCode },
+                { type: "text", text: input.materialType },
+                { type: "text", text: input.requestDate },
+              ],
+            },
+          ],
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "Erro ao enviar WhatsApp.");
+  }
+
+  return payload?.messages?.[0]?.id as string | undefined;
+}
+
+async function downloadMedia(mediaId: string) {
+  const config = await getSettings();
+  const mediaResponse = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${mediaId}`,
+    {
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+    },
+  );
+  const media = await mediaResponse.json().catch(() => null);
+
+  if (!mediaResponse.ok || !media?.url) {
+    throw new Error(media?.error?.message || "Nao foi possivel baixar a imagem.");
+  }
+
+  const fileResponse = await fetch(media.url, {
+    headers: { Authorization: `Bearer ${config.accessToken}` },
+  });
+
+  if (!fileResponse.ok) {
+    throw new Error("Nao foi possivel baixar a foto do QR Code.");
+  }
+
+  return new Uint8Array(await fileResponse.arrayBuffer());
+}
+
+async function decodeQrFromImage(bytes: Uint8Array) {
+  const image = await Image.decode(bytes);
+  const grayscale = new Uint8ClampedArray(image.width * image.height);
+
+  for (let pixel = 0, offset = 0; pixel < grayscale.length; pixel += 1, offset += 4) {
+    const red = image.bitmap[offset] || 0;
+    const green = image.bitmap[offset + 1] || 0;
+    const blue = image.bitmap[offset + 2] || 0;
+    grayscale[pixel] = Math.round(red * 0.299 + green * 0.587 + blue * 0.114);
+  }
+
+  const source = new RGBLuminanceSource(grayscale, image.width, image.height);
+  const bitmap = new BinaryBitmap(new HybridBinarizer(source));
+  return new QRCodeReader().decode(bitmap).getText();
+}
+
+async function getRequestByQrPayload(qrPayloadText: string) {
+  const qrPayload = parseQrPayload(qrPayloadText);
+  const rows = (await supabaseFetch(
+    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&id=eq.${encodeURIComponent(
+      qrPayload.requestId,
+    )}&limit=1`,
+  )) as Array<{
+    id: string;
+    saida_codigo: string | null;
+    categoria: string | null;
+    data: string | null;
+    solicitante: string | null;
+    solicitante_cpf: string | null;
+    status: string;
+  }>;
+
+  const requisicao = rows[0];
+  if (!requisicao) throw new Error("Requisicao nao encontrada.");
+
+  const requestCode = requisicao.saida_codigo || requisicao.id;
+  const qrRequestCode = normalizeComparisonValue(qrPayload.requestCode);
+  if (qrRequestCode && qrRequestCode !== requestCode) {
+    throw new Error("QR Code nao confere com a requisicao encontrada.");
+  }
+
+  return {
+    qrPayload,
+    requisicao,
+    request: {
+      id: requisicao.id,
+      requestCode: valueOrDash(requestCode),
+      materialType: valueOrDash(requisicao.categoria || qrPayload.materialType),
+      requester: valueOrDash(requisicao.solicitante || qrPayload.requester),
+      requesterCpf: valueOrDash(requisicao.solicitante_cpf || qrPayload.requesterCpf),
+      requestDate: valueOrDash(requisicao.data || qrPayload.requestDate),
+    },
+  };
+}
+
+async function findRequesterWhatsApp(input: {
+  solicitanteCpf: string | null;
+  solicitante: string | null;
+}) {
+  if (input.solicitanteCpf) {
+    const users = (await supabaseFetch(
+      `usuarios?select=nome,whatsapp&cpf=eq.${encodeURIComponent(input.solicitanteCpf)}&limit=1`,
+    )) as Array<{ nome: string | null; whatsapp: string | null }>;
+    if (users[0]) return users[0];
+  }
+
+  if (input.solicitante) {
+    const users = (await supabaseFetch(
+      `usuarios?select=nome,whatsapp&nome=eq.${encodeURIComponent(input.solicitante)}&limit=1`,
+    )) as Array<{ nome: string | null; whatsapp: string | null }>;
+    if (users[0]) return users[0];
+  }
+
+  return undefined;
+}
+
+async function confirmPending(pending: PendingConfirmation) {
+  const { requisicao, request } = await getRequestByQrPayload(pending.qrPayload);
+
+  await supabaseFetch(`requisicoes?id=eq.${encodeURIComponent(requisicao.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      status: "pronto_retirada",
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  const user = await findRequesterWhatsApp({
+    solicitanteCpf: requisicao.solicitante_cpf,
+    solicitante: requisicao.solicitante,
+  });
+
+  let messageId: string | undefined;
+  let notificationSkippedReason: string | undefined;
+
+  if (user?.whatsapp?.trim()) {
+    messageId = await sendReadyTemplate({
+      to: user.whatsapp,
+      requestCode: request.requestCode,
+      materialType: request.materialType,
+      requestDate: request.requestDate,
+    });
+  } else {
+    notificationSkippedReason = "Usuario sem WhatsApp cadastrado.";
+  }
+
+  return { request, messageId, notificationSkippedReason };
+}
+
+function buildConfirmationMessage(pending: PendingConfirmation) {
+  return [
+    "Pedido encontrado. Confira antes de confirmar:",
+    "",
+    `Usuario: ${pending.request.requester}`,
+    `CPF: ${pending.request.requesterCpf}`,
+    `Tipo: ${pending.request.materialType}`,
+    `Numero: ${pending.request.requestCode}`,
+    `Data: ${pending.request.requestDate}`,
+    "",
+    "Responda CONFIRMAR para avisar o responsavel que o pedido pode ser retirado.",
+  ].join("\n");
+}
+
+async function handleImageMessage(from: string, mediaId: string) {
+  const image = await downloadMedia(mediaId);
+  const qrText = await decodeQrFromImage(image);
+  const { request } = await getRequestByQrPayload(qrText);
+  const pending: PendingConfirmation = {
+    qrPayload: qrText,
+    createdAt: new Date().toISOString(),
+    request,
+  };
+
+  await upsertSetting(pendingKey(from), JSON.stringify(pending));
+  await sendTextMessage({
+    to: from,
+    text: buildConfirmationMessage(pending),
+  });
+}
+
+async function handleTextMessage(from: string, text: string) {
+  const normalized = text.trim().toLowerCase();
+
+  if (!["confirmar", "confirma", "sim"].includes(normalized)) {
+    await sendTextMessage({
+      to: from,
+      text: "Envie uma foto do QR Code do pedido. Depois responda CONFIRMAR.",
+    });
+    return;
+  }
+
+  const pendingRaw = await getSetting(pendingKey(from));
+  if (!pendingRaw) {
+    await sendTextMessage({
+      to: from,
+      text: "Nenhum QR Code aguardando confirmacao. Envie a foto do QR Code novamente.",
+    });
+    return;
+  }
+
+  const pending = JSON.parse(pendingRaw) as PendingConfirmation;
+  const ageMs = Date.now() - Date.parse(pending.createdAt);
+  if (!Number.isFinite(ageMs) || ageMs > 15 * 60 * 1000) {
+    await deleteSetting(pendingKey(from));
+    await sendTextMessage({
+      to: from,
+      text: "Confirmacao expirada. Envie a foto do QR Code novamente.",
+    });
+    return;
+  }
+
+  const result = await confirmPending(pending);
+  await deleteSetting(pendingKey(from));
+
+  await sendTextMessage({
+    to: from,
+    text: result.notificationSkippedReason
+      ? `Pedido ${result.request.requestCode} confirmado. ${result.notificationSkippedReason}`
+      : `Pedido ${result.request.requestCode} confirmado. Responsavel avisado no WhatsApp.`,
+  });
+}
+
+function extractMessages(payload: any) {
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  return entries.flatMap((entry: any) =>
+    (Array.isArray(entry?.changes) ? entry.changes : []).flatMap((change: any) =>
+      Array.isArray(change?.value?.messages) ? change.value.messages : [],
+    ),
+  );
+}
+
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  try {
+    if (request.method === "GET") {
+      const url = new URL(request.url);
+      const mode = url.searchParams.get("hub.mode");
+      const token = url.searchParams.get("hub.verify_token");
+      const challenge = url.searchParams.get("hub.challenge") || "";
+      const settings = await getSettings();
+
+      if (mode === "subscribe" && token && token === settings.verifyToken) {
+        return textResponse(challenge);
+      }
+
+      return textResponse("Forbidden", 403);
+    }
+
+    if (request.method !== "POST") {
+      return jsonResponse({ ok: false, error: "Metodo nao permitido." }, 405);
+    }
+
+    const settings = await getSettings();
+    const payload = await request.json().catch(() => ({}));
+    const messages = extractMessages(payload);
+
+    await Promise.all(
+      messages.map(async (message: any) => {
+        const from = normalizePhoneNumber(String(message?.from || ""));
+        if (!settings.adminNumbers.includes(from)) {
+          return;
+        }
+
+        try {
+          if (message.type === "image" && message.image?.id) {
+            await handleImageMessage(from, message.image.id);
+            return;
+          }
+
+          if (message.type === "text" && typeof message.text?.body === "string") {
+            await handleTextMessage(from, message.text.body);
+            return;
+          }
+
+          await sendTextMessage({
+            to: from,
+            text: "Envie uma foto do QR Code ou responda CONFIRMAR.",
+          });
+        } catch (error) {
+          await sendTextMessage({
+            to: from,
+            text: error instanceof Error ? error.message : "Nao foi possivel processar o QR Code.",
+          });
+        }
+      }),
+    );
+
+    return jsonResponse({ ok: true });
+  } catch (error) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : "Erro no webhook do WhatsApp.",
+      },
+      400,
+    );
+  }
+});

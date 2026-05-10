@@ -155,3 +155,43 @@ Variaveis:
 {{2}} = tipo de material
 {{3}} = data da requisicao
 ```
+
+## Webhook para leitura do QR pelo WhatsApp
+
+Tambem existe o fluxo por WhatsApp:
+
+1. O administrador cadastra um ou mais numeros autorizados em **Configuracoes > WhatsApp dos administradores**.
+2. O administrador envia uma foto do QR Code para o numero oficial do almoxarifado.
+3. A Edge Function `whatsapp-webhook` baixa a imagem, le o QR Code e responde ao administrador com:
+
+```txt
+Usuario
+CPF
+Tipo
+Numero
+Data
+```
+
+4. O administrador responde `CONFIRMAR`.
+5. A Function marca a requisicao como `pronto_retirada` e envia o template `pedido_pronto_retirada` ao responsavel pelo pedido.
+
+URL do webhook:
+
+```txt
+https://xzoiqjsttggtrjlrhcjm.supabase.co/functions/v1/whatsapp-webhook
+```
+
+Configure no Meta Business:
+
+```txt
+Callback URL = https://xzoiqjsttggtrjlrhcjm.supabase.co/functions/v1/whatsapp-webhook
+Verify token = valor salvo em WHATSAPP_WEBHOOK_VERIFY_TOKEN
+Webhook fields = messages
+```
+
+Configuracoes usadas:
+
+```txt
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=<token de verificacao do webhook>
+WHATSAPP_ADMIN_NUMBERS=<numeros autorizados separados por virgula>
+```

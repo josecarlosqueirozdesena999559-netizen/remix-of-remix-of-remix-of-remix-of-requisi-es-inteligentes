@@ -1,12 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { KeyRound, Loader2, Mail, Save } from "lucide-react";
+import { KeyRound, Loader2, Mail, Save, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getWhatsAppAdminNumbers,
+  saveWhatsAppAdminNumbers,
+} from "@/lib/app-settings-actions";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/configuracoes")({
@@ -31,6 +36,11 @@ function ConfiguracoesPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminNumbers, setAdminNumbers] = useState("");
+  const [savingAdminNumbers, setSavingAdminNumbers] = useState(false);
+  const [adminNumbersMessage, setAdminNumbersMessage] = useState<string | null>(null);
+  const [adminNumbersError, setAdminNumbersError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -51,6 +61,21 @@ function ConfiguracoesPage() {
         const currentEmail = user.email ?? profile?.email ?? "";
         setEmailAtual(currentEmail);
         setNovoEmail(currentEmail);
+        setIsAdmin(Boolean(profile?.is_admin));
+
+        if (profile?.is_admin) {
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) throw new Error(sessionError.message);
+
+          const accessToken = sessionData.session?.access_token;
+          if (!accessToken) throw new Error("Sessao expirada.");
+
+          const result = await getWhatsAppAdminNumbers({
+            data: {},
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          setAdminNumbers(result.numbers.join("\n"));
+        }
       } catch (error) {
         if (active) {
           setEmailError(getErrorMessage(error, "Erro ao carregar usuário."));
@@ -129,6 +154,33 @@ function ConfiguracoesPage() {
       setPasswordError(getErrorMessage(error, "Erro ao alterar senha."));
     } finally {
       setSavingPassword(false);
+    }
+  };
+
+  const handleAdminNumbersSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAdminNumbersError(null);
+    setAdminNumbersMessage(null);
+    setSavingAdminNumbers(true);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessao expirada.");
+
+      const result = await saveWhatsAppAdminNumbers({
+        data: { numbers: adminNumbers },
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      setAdminNumbers(result.numbers.join("\n"));
+      setAdminNumbersMessage("Numeros autorizados salvos.");
+    } catch (error) {
+      setAdminNumbersError(getErrorMessage(error, "Erro ao salvar numeros."));
+    } finally {
+      setSavingAdminNumbers(false);
     }
   };
 
@@ -254,6 +306,54 @@ function ConfiguracoesPage() {
               </form>
             </CardContent>
           </Card>
+
+          {isAdmin && (
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Smartphone className="h-5 w-5 text-primary" />
+                  WhatsApp dos administradores
+                </CardTitle>
+                <CardDescription>
+                  Numeros autorizados a enviar foto do QR Code para confirmar retirada.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-4" onSubmit={handleAdminNumbersSubmit}>
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-whatsapp-numbers">Numeros autorizados</Label>
+                    <Textarea
+                      id="admin-whatsapp-numbers"
+                      value={adminNumbers}
+                      onChange={(event) => setAdminNumbers(event.target.value)}
+                      placeholder={"5588999999999\n5588988888888"}
+                      rows={5}
+                    />
+                  </div>
+
+                  {adminNumbersError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{adminNumbersError}</AlertDescription>
+                    </Alert>
+                  )}
+                  {adminNumbersMessage && (
+                    <Alert>
+                      <AlertDescription>{adminNumbersMessage}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={savingAdminNumbers}>
+                    {savingAdminNumbers ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Salvar numeros
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>
