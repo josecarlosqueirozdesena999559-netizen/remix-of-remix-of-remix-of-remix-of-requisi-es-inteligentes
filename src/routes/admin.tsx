@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { saveUserWhatsAppAndSendWelcome } from "@/lib/whatsapp-actions";
 import {
   getCurrentUserProfile,
   isUserProfileIncomplete,
@@ -106,15 +105,23 @@ function AdminLayout() {
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
 
-      const result = await saveUserWhatsAppAndSendWelcome({
-        data: {
-          profileId: profile.id,
-          whatsapp: normalized,
+      const { data: result, error: saveError } = await supabase.functions.invoke(
+        "save-user-whatsapp",
+        {
+          body: {
+            profileId: profile.id,
+            whatsapp: normalized,
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      );
+
+      if (saveError) throw new Error(saveError.message);
+      if (!result?.ok) {
+        throw new Error(result?.error || "Erro ao salvar WhatsApp. Tente novamente.");
+      }
 
       const savedWhatsApp = result.whatsapp || normalized;
       setWhatsappConfirmed(true);
