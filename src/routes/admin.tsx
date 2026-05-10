@@ -89,7 +89,7 @@ function AdminLayout() {
     const normalized = digits.startsWith("55") ? digits : `55${digits}`;
 
     if (normalized.length < 12 || normalized.length > 13) {
-      setWhatsappError("Informe DDD e número do WhatsApp.");
+      setWhatsappError("Informe um WhatsApp válido.");
       return;
     }
 
@@ -279,15 +279,11 @@ function AdminLayout() {
                 id="whatsapp"
                 inputMode="numeric"
                 autoComplete="tel"
-                placeholder="88996551232"
                 value={whatsapp}
                 onChange={(event) => setWhatsapp(event.target.value)}
                 disabled={savingWhatsApp}
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                Informe DDD e número. O sistema salva no formato Brasil automaticamente.
-              </p>
             </div>
 
             {whatsappError && <p className="text-sm text-destructive">{whatsappError}</p>}
