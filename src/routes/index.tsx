@@ -49,26 +49,28 @@ function Index() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md p-8 shadow-sm">
-        <h1 className="mb-6 text-center text-2xl text-primary">Acesso ao Sistema</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+      <Card className="w-full max-w-sm rounded-md p-6 shadow-sm">
+        <h1 className="mb-5 text-center text-xl text-primary">Acesso ao Sistema</h1>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
             <Label htmlFor="email">E-mail</Label>
             <Input
               id="email"
               type="email"
               placeholder="Informe seu e-mail"
+              className="h-9 rounded-md"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label htmlFor="senha">Senha</Label>
             <Input
               id="senha"
               type="password"
               placeholder="Informe sua senha"
+              className="h-9 rounded-md"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
@@ -77,7 +79,7 @@ function Index() {
           {error && (
             <p className="text-sm text-destructive text-center">{error}</p>
           )}
-          <Button type="submit" className="w-full">Entrar</Button>
+          <Button type="submit" className="h-9 w-full rounded-md">Entrar</Button>
         </form>
       </Card>
     </div>
