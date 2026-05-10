@@ -101,19 +101,31 @@ function isExpedienteCategory(category: string) {
 }
 
 function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfile | null) {
-  const linkedPrograms = item.programa_produtos
-    ?.map((link) => link.programas?.nome)
-    .filter(Boolean) as string[] | undefined;
+  const linkedProgramRows = item.programa_produtos ?? [];
+  if (linkedProgramRows.length === 0) return true;
 
-  if (!linkedPrograms?.length) return true;
-  if (profile?.is_admin) return true;
+  const linkedPrograms = linkedProgramRows
+    .map((link) => link.programas?.nome)
+    .filter(Boolean) as string[];
 
-  const profileProgram = normalizeProductSearchValue(profile?.setor);
-  if (!profileProgram) return false;
+  if (linkedPrograms.length === 0) return false;
 
-  return linkedPrograms.some(
-    (programName) => normalizeProductSearchValue(programName) === profileProgram,
-  );
+  const profilePrograms = [profile?.setor, profile?.unidade_nome]
+    .map((value) => normalizeProductSearchValue(value))
+    .filter(Boolean);
+
+  if (profilePrograms.length === 0) return false;
+
+  return linkedPrograms.some((programName) => {
+    const linkedProgram = normalizeProductSearchValue(programName);
+
+    return profilePrograms.some(
+      (profileProgram) =>
+        linkedProgram === profileProgram ||
+        linkedProgram.includes(profileProgram) ||
+        profileProgram.includes(linkedProgram),
+    );
+  });
 }
 
 function buildRequestSections(categories: string[]) {
