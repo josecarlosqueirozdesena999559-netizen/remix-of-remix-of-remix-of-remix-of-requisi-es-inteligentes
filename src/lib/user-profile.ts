@@ -9,6 +9,7 @@ export interface CurrentUserProfile {
   funcao: string | null;
   setor: string | null;
   unidade_nome: string | null;
+  whatsapp: string | null;
   is_admin: boolean;
   categorias_permitidas: unknown;
 }
@@ -32,7 +33,8 @@ export async function getCurrentUserProfile() {
     return { user: null, profile: null };
   }
 
-  const select = "id,auth_user_id,nome,email,cpf,funcao,setor,unidade_nome,is_admin,categorias_permitidas";
+  const select =
+    "id,auth_user_id,nome,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
   const { data: byAuthId, error: authIdError } = await supabase
     .from("usuarios")
     .select(select)

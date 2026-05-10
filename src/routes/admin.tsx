@@ -1,7 +1,18 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2, Send } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { saveUserWhatsAppAndSendWelcome } from "@/lib/whatsapp-actions";
 import {
   getCurrentUserProfile,
   isUserProfileIncomplete,
@@ -17,6 +28,9 @@ function AdminLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [openCadastros, setOpenCadastros] = useState(pathname.startsWith("/admin/cadastros"));
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
+  const [whatsapp, setWhatsapp] = useState("");
+  const [savingWhatsApp, setSavingWhatsApp] = useState(false);
+  const [whatsappError, setWhatsappError] = useState<string | null>(null);
 
   useEffect(() => {
     if (pathname.startsWith("/admin/cadastros")) setOpenCadastros(true);
@@ -39,6 +53,7 @@ function AdminLayout() {
         }
 
         setProfile(profile);
+        setWhatsapp(profile?.whatsapp ?? "");
 
         if (isUserProfileIncomplete(profile)) {
           navigate({ to: "/admin/completar-cadastro" });
@@ -59,6 +74,55 @@ function AdminLayout() {
     "block rounded-md px-3 py-2 text-sm text-sidebar-foreground/90 hover:bg-sidebar-accent transition-colors";
   const activeCls = "bg-sidebar-accent text-sidebar-foreground";
   const isAdmin = profile?.is_admin !== false;
+  const mustRegisterWhatsApp =
+    Boolean(profile?.id) &&
+    !profile?.is_admin &&
+    !profile?.whatsapp?.trim() &&
+    pathname !== "/admin/completar-cadastro";
+
+  const handleSaveWhatsApp = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!profile?.id) return;
+
+    const digits = whatsapp.replace(/\D/g, "");
+    const normalized = digits.startsWith("55") ? digits : `55${digits}`;
+
+    if (normalized.length < 12 || normalized.length > 13) {
+      setWhatsappError("Informe DDD e número do WhatsApp.");
+      return;
+    }
+
+    setSavingWhatsApp(true);
+    setWhatsappError(null);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      const result = await saveUserWhatsAppAndSendWelcome({
+        data: {
+          profileId: profile.id,
+          whatsapp: normalized,
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      setProfile({ ...profile, whatsapp: result.whatsapp });
+      setWhatsapp(result.whatsapp);
+    } catch (err) {
+      setWhatsappError(
+        err instanceof Error ? err.message : "Erro ao salvar WhatsApp. Tente novamente.",
+      );
+    } finally {
+      setSavingWhatsApp(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -199,6 +263,46 @@ function AdminLayout() {
       <main className="flex-1 p-8">
         <Outlet />
       </main>
+      <Dialog open={mustRegisterWhatsApp} onOpenChange={() => {}}>
+        <DialogContent className="[&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle>Informe seu WhatsApp</DialogTitle>
+            <DialogDescription>
+              Você receberá notificações sobre pendências e pedidos separados para retirada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleSaveWhatsApp}>
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp">WhatsApp</Label>
+              <Input
+                id="whatsapp"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="88996551232"
+                value={whatsapp}
+                onChange={(event) => setWhatsapp(event.target.value)}
+                disabled={savingWhatsApp}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Informe DDD e número. O sistema salva no formato Brasil automaticamente.
+              </p>
+            </div>
+
+            {whatsappError && <p className="text-sm text-destructive">{whatsappError}</p>}
+
+            <Button type="submit" className="w-full gap-2" disabled={savingWhatsApp}>
+              {savingWhatsApp ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Confirmar WhatsApp
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
