@@ -35,3 +35,30 @@ wrangler secret put WHATSAPP_GRAPH_API_VERSION
 Seu pedido número {codigo}, tipo {tipo}, está separado.
 Por favor, venha retirar no almoxarifado.
 ```
+
+## Template de boas-vindas
+
+Quando o usuário informa o WhatsApp no sistema, o backend envia o template:
+
+```txt
+boas_vindas_almoxarifado
+```
+
+Idioma:
+
+```txt
+pt_BR
+```
+
+Corpo sugerido no Meta Business:
+
+```txt
+Olá, {{1}}. Bem-vindo ao número oficial do Almoxarifado.
+Por aqui você também receberá notificações para regularizar assinaturas pendentes e saber quando seus pedidos estiverem prontos para retirada.
+```
+
+Exemplo para a variável `{{1}}`:
+
+```txt
+Maria Silva
+```

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from "@/lib/product-options";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/usuarios/$usuarioId")({
   component: UsuarioFormPage,
@@ -153,7 +154,7 @@ function UsuarioFormPage() {
 
     const local = locais.find((item) => item.nome === nextLocal);
     if (local?.programa) {
-      setSetor(local.programa);
+      setSetor(formatProgramName(local.programa));
     }
   };
 

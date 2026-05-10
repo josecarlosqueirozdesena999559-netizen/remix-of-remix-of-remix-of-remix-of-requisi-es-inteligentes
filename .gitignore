@@ -20,6 +20,7 @@ dist-ssr
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+supabase/.temp/
 
 # Editor directories and files
 .vscode/*
@@ -31,3 +32,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Android
+RequisiCode/.gradle/
+RequisiCode/build/
+RequisiCode/app/build/
+RequisiCode/local.properties

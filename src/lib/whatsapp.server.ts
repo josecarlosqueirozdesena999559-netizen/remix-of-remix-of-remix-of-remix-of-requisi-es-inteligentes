@@ -51,8 +51,6 @@ type WhatsAppConfig = {
   graphApiVersion: string;
 };
 
-let whatsappConfigPromise: Promise<WhatsAppConfig> | null = null;
-
 function getEnvValue(name: WhatsAppSettingKey) {
   const value = process.env[name]?.trim();
   return value || null;
@@ -75,50 +73,44 @@ async function getAppSettings() {
 }
 
 async function getWhatsAppConfig() {
-  if (whatsappConfigPromise) return whatsappConfigPromise;
+  const envAccessToken = getEnvValue("WHATSAPP_ACCESS_TOKEN");
+  const envPhoneNumberId = getEnvValue("WHATSAPP_PHONE_NUMBER_ID");
+  const envGraphApiVersion = getEnvValue("WHATSAPP_GRAPH_API_VERSION");
 
-  whatsappConfigPromise = (async () => {
-    const envAccessToken = getEnvValue("WHATSAPP_ACCESS_TOKEN");
-    const envPhoneNumberId = getEnvValue("WHATSAPP_PHONE_NUMBER_ID");
-    const envGraphApiVersion = getEnvValue("WHATSAPP_GRAPH_API_VERSION");
-
-    if (envAccessToken && envPhoneNumberId) {
-      return {
-        accessToken: envAccessToken,
-        phoneNumberId: envPhoneNumberId,
-        graphApiVersion: envGraphApiVersion || DEFAULT_GRAPH_API_VERSION,
-      };
-    }
-
-    const appSettings = await getAppSettings();
-    const accessToken = envAccessToken || appSettings.get("WHATSAPP_ACCESS_TOKEN")?.trim();
-    const phoneNumberId = envPhoneNumberId || appSettings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
-    const graphApiVersion =
-      envGraphApiVersion ||
-      appSettings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
-      DEFAULT_GRAPH_API_VERSION;
-
-    const missing = [
-      ...(!accessToken ? ["WHATSAPP_ACCESS_TOKEN"] : []),
-      ...(!phoneNumberId ? ["WHATSAPP_PHONE_NUMBER_ID"] : []),
-    ];
-
-    if (missing.length) {
-      throw new Error(`Missing WhatsApp setting(s): ${missing.join(", ")}`);
-    }
-
+  if (envAccessToken && envPhoneNumberId) {
     return {
-      accessToken,
-      phoneNumberId,
-      graphApiVersion,
+      accessToken: envAccessToken,
+      phoneNumberId: envPhoneNumberId,
+      graphApiVersion: envGraphApiVersion || DEFAULT_GRAPH_API_VERSION,
     };
-  })();
+  }
 
-  return whatsappConfigPromise;
+  const appSettings = await getAppSettings();
+  const accessToken = envAccessToken || appSettings.get("WHATSAPP_ACCESS_TOKEN")?.trim();
+  const phoneNumberId = envPhoneNumberId || appSettings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
+  const graphApiVersion =
+    envGraphApiVersion ||
+    appSettings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
+    DEFAULT_GRAPH_API_VERSION;
+
+  const missing = [
+    ...(!accessToken ? ["WHATSAPP_ACCESS_TOKEN"] : []),
+    ...(!phoneNumberId ? ["WHATSAPP_PHONE_NUMBER_ID"] : []),
+  ];
+
+  if (missing.length) {
+    throw new Error(`Missing WhatsApp setting(s): ${missing.join(", ")}`);
+  }
+
+  return {
+    accessToken,
+    phoneNumberId,
+    graphApiVersion,
+  };
 }
 
 export function clearWhatsAppConfigCache() {
-  whatsappConfigPromise = null;
+  return;
 }
 
 function getWhatsAppRequestUrl(config: WhatsAppConfig) {

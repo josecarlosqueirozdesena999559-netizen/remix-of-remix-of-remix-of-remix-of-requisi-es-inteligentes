@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
 import { normalizeProductCategory } from "@/lib/product-options";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/usuarios")({
   component: UsuariosPage,
@@ -49,7 +50,7 @@ function UsuariosPage() {
     { key: "email", label: "E-mail" },
     { key: "cpf", label: "CPF", render: (r) => r.cpf || "—" },
     { key: "unidade_nome", label: "Local", render: (r) => r.unidade_nome || r.setor || "—" },
-    { key: "setor", label: "Programa", render: (r) => r.setor || "—" },
+    { key: "setor", label: "Programa", render: (r) => formatProgramName(r.setor) || "—" },
     { key: "categorias_permitidas", label: "Tipos que pode pedir", render: renderCategorias },
   ];
 

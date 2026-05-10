@@ -26,10 +26,16 @@ export function buildRequestTemplateParameters(data: RequestWhatsAppTemplateData
   ];
 }
 
-export function buildWelcomeWhatsAppMessage() {
+export function buildWelcomeTemplateParameters(data: { requesterName?: string | null }) {
+  return [valueOrDash(data.requesterName)];
+}
+
+export function buildWelcomeWhatsAppMessage(data: { requesterName?: string | null } = {}) {
+  const requesterName = valueOrDash(data.requesterName);
+
   return [
-    "Bem-vindo ao Almoxarifado da Saúde.",
-    "Por aqui você será notificado se tiver pendências ou quando seu pedido estiver separado.",
+    `Olá, ${requesterName}. Bem-vindo ao número oficial do Almoxarifado.`,
+    "Por aqui você também receberá notificações para regularizar assinaturas pendentes e saber quando seus pedidos estiverem prontos para retirada.",
   ].join("\n");
 }
 

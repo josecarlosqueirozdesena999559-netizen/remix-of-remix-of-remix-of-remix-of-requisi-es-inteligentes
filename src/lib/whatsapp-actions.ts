@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   buildRequestTemplateParameters,
+  buildWelcomeTemplateParameters,
   WHATSAPP_TEMPLATE_LANGUAGE,
   WHATSAPP_TEMPLATE_NAMES,
 } from "@/lib/whatsapp-templates";
@@ -151,15 +152,30 @@ export const saveUserWhatsAppAndSendWelcome = createServerFn({ method: "POST" })
 
     if (updateError) throw new Error(updateError.message);
 
-    const messageResult = await sendWhatsAppTemplateMessage({
-      to: whatsapp,
-      templateName: WHATSAPP_TEMPLATE_NAMES.welcome,
-      languageCode: WHATSAPP_TEMPLATE_LANGUAGE,
-    });
+    let messageId: string | undefined;
+    let welcomeError: string | undefined;
+
+    try {
+      const messageResult = await sendWhatsAppTemplateMessage({
+        to: whatsapp,
+        templateName: WHATSAPP_TEMPLATE_NAMES.welcome,
+        languageCode: WHATSAPP_TEMPLATE_LANGUAGE,
+        bodyParameters: buildWelcomeTemplateParameters({
+          requesterName: profile.nome,
+        }),
+      });
+      messageId = messageResult.messageId;
+    } catch (error) {
+      welcomeError =
+        error instanceof Error
+          ? error.message
+          : "WhatsApp salvo, mas não foi possível enviar a mensagem de boas-vindas.";
+    }
 
     return {
       whatsapp,
-      messageId: messageResult.messageId,
+      messageId,
+      welcomeError,
     };
   });
 

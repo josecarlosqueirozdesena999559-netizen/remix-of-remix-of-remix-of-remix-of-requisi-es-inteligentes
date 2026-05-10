@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/locais")({
   component: LocaisPage,
@@ -21,7 +22,7 @@ function LocaisPage() {
   const columns: Column<Setor>[] = [
     { key: "nome", label: "Nome" },
     { key: "responsavel", label: "Responsável", render: (r) => r.responsavel || "—" },
-    { key: "programa", label: "Programa", render: (r) => r.programa || "—" },
+    { key: "programa", label: "Programa", render: (r) => formatProgramName(r.programa) || "—" },
     { key: "descricao", label: "Descrição", render: (r) => r.descricao || "—" },
   ];
 
