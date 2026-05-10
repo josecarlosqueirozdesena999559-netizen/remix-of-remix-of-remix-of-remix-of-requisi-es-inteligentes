@@ -6,7 +6,7 @@ const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
 const PDF_PAGE_BOTTOM_MARGIN = 16;
-const PDF_SIGNATURE_SECTION_HEIGHT = 58;
+const PDF_SIGNATURE_SECTION_HEIGHT = 94;
 const PDF_SIGNATURE_SECTION_GAP = 10;
 const PDF_SIGNATURE_PAGE_START_Y = 100;
 
@@ -393,7 +393,6 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     ? PDF_SIGNATURE_PAGE_START_Y
     : finalY + PDF_SIGNATURE_SECTION_GAP;
   doc.setPage(finalTotalPages);
-  drawRequestQrCode(doc, qrDataUrl, pageWidth / 2, footerTopY + 2);
   drawSignatureBlock(
     doc,
     pageWidth - PDF_MARGIN - 40,
@@ -411,6 +410,7 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     request.requesterDisplayCpf || request.solicitante_cpf || "-",
     request.requesterDisplayRole || request.solicitante_funcao || "Solicitante do setor",
   );
+  drawRequestQrCode(doc, qrDataUrl, pageWidth / 2, footerTopY + 58);
 
   return doc.output("blob");
 }
