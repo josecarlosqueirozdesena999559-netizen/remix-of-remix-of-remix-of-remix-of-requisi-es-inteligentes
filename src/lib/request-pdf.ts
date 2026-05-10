@@ -410,7 +410,7 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     request.requesterDisplayCpf || request.solicitante_cpf || "-",
     request.requesterDisplayRole || request.solicitante_funcao || "Solicitante do setor",
   );
-  drawRequestQrCode(doc, qrDataUrl, pageWidth / 2, footerTopY + 58);
+  drawRequestQrCode(doc, qrDataUrl, pageWidth - PDF_MARGIN - 16, footerTopY + 58);
 
   return doc.output("blob");
 }
