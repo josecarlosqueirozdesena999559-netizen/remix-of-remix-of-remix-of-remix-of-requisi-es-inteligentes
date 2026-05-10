@@ -16,6 +16,13 @@ export interface WhatsAppTextMessageInput {
   previewUrl?: boolean;
 }
 
+export interface WhatsAppTemplateMessageInput {
+  to: string;
+  templateName: string;
+  languageCode?: string;
+  bodyParameters?: Array<string | number | null | undefined>;
+}
+
 export interface WhatsAppMessageResult {
   messageId: string;
   contactWaId?: string;
@@ -183,6 +190,83 @@ export async function sendWhatsAppTextMessage({
     const error = errorPayload?.error;
     const details = [
       error?.message || `Erro ${response.status} ao enviar WhatsApp.`,
+      error?.code ? `code=${error.code}` : "",
+      error?.error_subcode ? `subcode=${error.error_subcode}` : "",
+      error?.fbtrace_id ? `trace=${error.fbtrace_id}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    throw new Error(details);
+  }
+
+  const successPayload = payload as WhatsAppMessagesResponse | null;
+  const messageId = successPayload?.messages?.[0]?.id;
+
+  if (!messageId) {
+    throw new Error("WhatsApp enviado, mas a resposta não retornou o id da mensagem.");
+  }
+
+  return {
+    messageId,
+    contactWaId: successPayload?.contacts?.[0]?.wa_id,
+  };
+}
+
+export async function sendWhatsAppTemplateMessage({
+  to,
+  templateName,
+  languageCode = "pt_BR",
+  bodyParameters = [],
+}: WhatsAppTemplateMessageInput): Promise<WhatsAppMessageResult> {
+  const config = await getWhatsAppConfig();
+  const { url } = getWhatsAppRequestUrl(config);
+  const recipient = normalizeWhatsAppPhoneNumber(to);
+  const parameters = bodyParameters.map((value) => ({
+    type: "text",
+    text: String(value ?? "-"),
+  }));
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: recipient,
+      type: "template",
+      template: {
+        name: templateName,
+        language: {
+          code: languageCode,
+        },
+        ...(parameters.length
+          ? {
+              components: [
+                {
+                  type: "body",
+                  parameters,
+                },
+              ],
+            }
+          : {}),
+      },
+    }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | WhatsAppMessagesResponse
+    | WhatsAppErrorResponse
+    | null;
+
+  if (!response.ok) {
+    const errorPayload = payload as WhatsAppErrorResponse | null;
+    const error = errorPayload?.error;
+    const details = [
+      error?.message || `Erro ${response.status} ao enviar template WhatsApp.`,
       error?.code ? `code=${error.code}` : "",
       error?.error_subcode ? `subcode=${error.error_subcode}` : "",
       error?.fbtrace_id ? `trace=${error.fbtrace_id}` : "",

@@ -18,7 +18,9 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import { normalizeProgramKey } from "@/lib/program-options";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
+import { notifyRequestCreated } from "@/lib/whatsapp-actions";
 
 export const Route = createFileRoute("/admin/requisicao")({
   component: CriarRequisicaoPage,
@@ -101,10 +103,7 @@ function isExpedienteCategory(category: string) {
 }
 
 function getProgramMatchKey(value: string | null | undefined) {
-  const normalized = normalizeProductSearchValue(value);
-  if (normalized.includes("odonto")) return "odontologico";
-
-  return normalized;
+  return normalizeProgramKey(value);
 }
 
 function getItemProgramKeys(item: ItemRow) {
@@ -498,6 +497,7 @@ function CriarRequisicaoPage() {
     };
 
     let requestError = null;
+    let savedRequestId = editingRequestId;
 
     if (editingRequestId) {
       const updateResult = await supabase.from("requisicoes").update(payload).eq("id", editingRequestId);
@@ -512,15 +512,19 @@ function CriarRequisicaoPage() {
         requestError = fallbackResult.error;
       }
     } else {
-      const insertResult = await supabase.from("requisicoes").insert(payload);
+      const insertResult = await supabase.from("requisicoes").insert(payload).select("id").single();
       requestError = insertResult.error;
+      savedRequestId = insertResult.data?.id || "";
 
       if (requestError && isMissingReturnFeedbackColumnError(requestError.message)) {
         const fallbackResult = await supabase
           .from("requisicoes")
-          .insert(omitReturnFeedbackFields(payload));
+          .insert(omitReturnFeedbackFields(payload))
+          .select("id")
+          .single();
 
         requestError = fallbackResult.error;
+        savedRequestId = fallbackResult.data?.id || "";
       }
     }
 
@@ -528,6 +532,23 @@ function CriarRequisicaoPage() {
       setError(requestError.message);
       setSaving(false);
       return;
+    }
+
+    if (savedRequestId) {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw new Error(sessionError.message);
+
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error("Sessão expirada.");
+
+        await notifyRequestCreated({
+          data: { requestId: savedRequestId },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     setSaving(false);

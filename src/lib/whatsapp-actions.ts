@@ -1,17 +1,24 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  buildRequestTemplateParameters,
+  WHATSAPP_TEMPLATE_LANGUAGE,
+  WHATSAPP_TEMPLATE_NAMES,
+} from "@/lib/whatsapp-templates";
 import {
   normalizeWhatsAppPhoneNumber,
-  sendWhatsAppTextMessage,
+  sendWhatsAppTemplateMessage,
 } from "@/lib/whatsapp.server";
-
-const WELCOME_MESSAGE =
-  "Bem-vindo ao Almoxarifado da Saúde. Por aqui você será notificado se tiver pendências ou quando seu pedido estiver separado.";
 
 type SaveUserWhatsAppInput = {
   profileId: string;
   whatsapp: string;
+};
+
+type RequestNotificationInput = {
+  requestId: string;
 };
 
 function validateSaveUserWhatsAppInput(input: unknown): SaveUserWhatsAppInput {
@@ -32,6 +39,91 @@ function validateSaveUserWhatsAppInput(input: unknown): SaveUserWhatsAppInput {
   return {
     profileId: data.profileId,
     whatsapp: data.whatsapp,
+  };
+}
+
+function validateRequestNotificationInput(input: unknown): RequestNotificationInput {
+  if (!input || typeof input !== "object") {
+    throw new Error("Dados da requisição inválidos.");
+  }
+
+  const data = input as Partial<RequestNotificationInput>;
+
+  if (!data.requestId || typeof data.requestId !== "string") {
+    throw new Error("Requisição não informada.");
+  }
+
+  return { requestId: data.requestId };
+}
+
+async function getRequestNotificationData(requestId: string) {
+  const { data: request, error: requestError } = await (supabaseAdmin as any)
+    .from("requisicoes")
+    .select("id,saida_codigo,categoria,data,solicitante,solicitante_cpf")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (requestError) throw new Error(requestError.message);
+  if (!request) throw new Error("Requisição não encontrada.");
+
+  let profile: { whatsapp: string | null; nome: string | null } | null = null;
+
+  if (request.solicitante_cpf) {
+    const { data: profileByCpf, error: profileError } = await (supabaseAdmin as any)
+      .from("usuarios")
+      .select("nome,whatsapp")
+      .eq("cpf", request.solicitante_cpf)
+      .maybeSingle();
+
+    if (profileError) throw new Error(profileError.message);
+    profile = profileByCpf;
+  }
+
+  if (!profile && request.solicitante) {
+    const { data: profileByName, error: profileError } = await (supabaseAdmin as any)
+      .from("usuarios")
+      .select("nome,whatsapp")
+      .eq("nome", request.solicitante)
+      .maybeSingle();
+
+    if (profileError) throw new Error(profileError.message);
+    profile = profileByName;
+  }
+
+  const whatsapp = profile?.whatsapp?.trim();
+
+  return {
+    whatsapp,
+    requestCode: request.saida_codigo || request.id,
+    materialType: request.categoria,
+    requestDate: request.data,
+    requesterName: profile?.nome || request.solicitante,
+  };
+}
+
+async function sendRequestNotification(
+  requestId: string,
+  templateName: string,
+) {
+  const notificationData = await getRequestNotificationData(requestId);
+
+  if (!notificationData.whatsapp) {
+    return {
+      skipped: true,
+      reason: "Usuário sem WhatsApp cadastrado.",
+    };
+  }
+
+  const messageResult = await sendWhatsAppTemplateMessage({
+    to: notificationData.whatsapp,
+    templateName,
+    languageCode: WHATSAPP_TEMPLATE_LANGUAGE,
+    bodyParameters: buildRequestTemplateParameters(notificationData),
+  });
+
+  return {
+    skipped: false,
+    messageId: messageResult.messageId,
   };
 }
 
@@ -59,13 +151,35 @@ export const saveUserWhatsAppAndSendWelcome = createServerFn({ method: "POST" })
 
     if (updateError) throw new Error(updateError.message);
 
-    const messageResult = await sendWhatsAppTextMessage({
+    const messageResult = await sendWhatsAppTemplateMessage({
       to: whatsapp,
-      body: WELCOME_MESSAGE,
+      templateName: WHATSAPP_TEMPLATE_NAMES.welcome,
+      languageCode: WHATSAPP_TEMPLATE_LANGUAGE,
     });
 
     return {
       whatsapp,
       messageId: messageResult.messageId,
     };
+  });
+
+export const notifyRequestCreated = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data }) => {
+    const input = validateRequestNotificationInput(data);
+    return sendRequestNotification(input.requestId, WHATSAPP_TEMPLATE_NAMES.requestCreated);
+  });
+
+export const notifyOutputAttached = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data }) => {
+    const input = validateRequestNotificationInput(data);
+    return sendRequestNotification(input.requestId, WHATSAPP_TEMPLATE_NAMES.outputAttached);
+  });
+
+export const notifyRequestReadyForPickup = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data }) => {
+    const input = validateRequestNotificationInput(data);
+    return sendRequestNotification(input.requestId, WHATSAPP_TEMPLATE_NAMES.readyForPickup);
   });

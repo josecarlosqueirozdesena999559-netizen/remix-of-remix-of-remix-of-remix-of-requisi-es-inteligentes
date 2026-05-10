@@ -31,6 +31,7 @@ import {
 } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
+import { notifyOutputAttached } from "@/lib/whatsapp-actions";
 
 export const Route = createFileRoute("/admin/solicitacoes")({
   component: Solicitacoes,
@@ -99,7 +100,7 @@ function Solicitacoes() {
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment")
-          .in("status", ["recebido", "requisicao_assinada"])
+          .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("updated_at", { ascending: false }),
         supabase
           .from("setores")
@@ -260,8 +261,29 @@ function Solicitacoes() {
 
       await removeAttachmentFile(previousAdminAttachment);
 
+      let notificationMessage = "";
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw new Error(sessionError.message);
+
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error("Sessão expirada.");
+
+        const notificationResult = await notifyOutputAttached({
+          data: { requestId: request.id },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (notificationResult.skipped) {
+          notificationMessage = ` ${notificationResult.reason}`;
+        }
+      } catch (notificationError) {
+        console.error(notificationError);
+        notificationMessage = " Não foi possível enviar a notificação por WhatsApp.";
+      }
+
       setData((current) => current?.filter((item) => item.id !== request.id));
-      setUploadMessage("Documento de saída enviado.");
+      setUploadMessage(`Documento de saída enviado.${notificationMessage}`);
     } catch (err) {
       setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de saída.");
     } finally {
