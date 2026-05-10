@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.save-user-whatsapp]
 verify_jwt = false
+
+[functions.notify-request-whatsapp]
+verify_jwt = false

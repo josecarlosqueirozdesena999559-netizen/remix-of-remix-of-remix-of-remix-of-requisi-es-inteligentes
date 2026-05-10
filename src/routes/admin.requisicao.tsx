@@ -20,7 +20,7 @@ import {
 } from "@/lib/request-return-feedback";
 import { normalizeProgramKey } from "@/lib/program-options";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
-import { notifyRequestCreated } from "@/lib/whatsapp-actions";
+import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/requisicao")({
   component: CriarRequisicaoPage,
@@ -536,15 +536,9 @@ function CriarRequisicaoPage() {
 
     if (savedRequestId) {
       try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw new Error(sessionError.message);
-
-        const accessToken = sessionData.session?.access_token;
-        if (!accessToken) throw new Error("Sessão expirada.");
-
-        await notifyRequestCreated({
-          data: { requestId: savedRequestId },
-          headers: { Authorization: `Bearer ${accessToken}` },
+        await notifyRequestByWhatsApp({
+          requestId: savedRequestId,
+          notificationType: "requestCreated",
         });
       } catch (err) {
         console.error(err);

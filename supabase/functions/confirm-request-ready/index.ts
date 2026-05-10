@@ -4,6 +4,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const WHATSAPP_TEMPLATE_LANGUAGE = "pt_BR";
+const WHATSAPP_TEMPLATE_NAMES = {
+  readyForPickup: "pedido_pronto_retirada",
+} as const;
+
 type RequestQrPayload = {
   kind?: string;
   version?: number;
@@ -147,8 +152,8 @@ async function sendReadyTemplate(input: {
         to: recipient,
         type: "template",
         template: {
-          name: "pedido_pronto_retirada",
-          language: { code: "pt_BR" },
+          name: WHATSAPP_TEMPLATE_NAMES.readyForPickup,
+          language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
           components: [
             {
               type: "body",

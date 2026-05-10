@@ -62,3 +62,96 @@ Exemplo para a variável `{{1}}`:
 ```txt
 Maria Silva
 ```
+
+## Template de requisicao gerada
+
+Quando o usuario cria ou reenvia uma requisicao, o backend envia o template:
+
+```txt
+pedido_gerado_assinatura
+```
+
+Idioma:
+
+```txt
+pt_BR
+```
+
+Corpo sugerido no Meta Business:
+
+```txt
+Seu pedido numero {{1}} foi gerado.
+Tipo de material solicitado: {{2}}
+Data: {{3}}
+Por favor, assine a requisicao para que o almoxarifado receba o pedido.
+```
+
+Variaveis:
+
+```txt
+{{1}} = numero/codigo da requisicao
+{{2}} = tipo de material
+{{3}} = data da requisicao
+```
+
+## Template de assinatura de saida
+
+Quando o almoxarifado anexa o documento de saida e a requisicao passa a aguardar assinatura de saida, o backend envia o template:
+
+```txt
+saida_anexada_pedido
+```
+
+Idioma:
+
+```txt
+pt_BR
+```
+
+Corpo sugerido no Meta Business:
+
+```txt
+A saida do seu pedido numero {{1}} foi gerada pelo almoxarifado.
+Tipo de material solicitado: {{2}}
+Data: {{3}}
+Por favor, assine o documento de saida para concluir o processo.
+```
+
+Variaveis:
+
+```txt
+{{1}} = numero/codigo da requisicao
+{{2}} = tipo de material
+{{3}} = data da requisicao
+```
+
+## Template de retirada
+
+Quando o QR Code e lido pelo aplicativo RequisiCode e o pedido fica pronto para retirada, a Edge Function envia o template:
+
+```txt
+pedido_pronto_retirada
+```
+
+Idioma:
+
+```txt
+pt_BR
+```
+
+Corpo sugerido no Meta Business:
+
+```txt
+Seu pedido numero {{1}} esta pronto para retirada.
+Tipo de material solicitado: {{2}}
+Data: {{3}}
+Por favor, venha retirar no almoxarifado.
+```
+
+Variaveis:
+
+```txt
+{{1}} = numero/codigo da requisicao
+{{2}} = tipo de material
+{{3}} = data da requisicao
+```

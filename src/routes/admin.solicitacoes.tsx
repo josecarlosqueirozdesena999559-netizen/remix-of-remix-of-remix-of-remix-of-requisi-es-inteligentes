@@ -31,7 +31,7 @@ import {
 } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
-import { notifyOutputAttached } from "@/lib/whatsapp-actions";
+import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/solicitacoes")({
   component: Solicitacoes,
@@ -263,15 +263,9 @@ function Solicitacoes() {
 
       let notificationMessage = "";
       try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw new Error(sessionError.message);
-
-        const accessToken = sessionData.session?.access_token;
-        if (!accessToken) throw new Error("Sessão expirada.");
-
-        const notificationResult = await notifyOutputAttached({
-          data: { requestId: request.id },
-          headers: { Authorization: `Bearer ${accessToken}` },
+        const notificationResult = await notifyRequestByWhatsApp({
+          requestId: request.id,
+          notificationType: "outputAttached",
         });
 
         if (notificationResult.skipped) {
