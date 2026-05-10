@@ -122,13 +122,20 @@ function itemMatchesSection(item: ItemRow, section: RequestSection) {
   return getItemProgramKeys(item).includes(sectionProgram);
 }
 
-function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfile | null) {
+function isItemAllowedForProfileProgram(
+  item: ItemRow,
+  profile: CurrentUserProfile | null,
+  section: RequestSection,
+) {
   const linkedProgramRows = item.programa_produtos ?? [];
   if (linkedProgramRows.length === 0) return true;
 
   const linkedPrograms = getItemProgramKeys(item);
 
   if (linkedPrograms.length === 0) return false;
+
+  const sectionProgram = getProgramMatchKey(section.baseCategory);
+  if (sectionProgram && linkedPrograms.includes(sectionProgram)) return true;
 
   const profilePrograms = [profile?.setor, profile?.unidade_nome]
     .map((value) => getProgramMatchKey(value))
@@ -422,7 +429,7 @@ function CriarRequisicaoPage() {
     return sortProductsByMaterialGroup(
       items.filter((item) => {
         if (!itemMatchesSection(item, selectedSection)) return false;
-        if (!isItemAllowedForProfileProgram(item, profile)) return false;
+        if (!isItemAllowedForProfileProgram(item, profile, selectedSection)) return false;
         if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
         if (!normalizedSearch) return true;
 
