@@ -91,6 +91,29 @@ function normalizePhoneNumber(value: string) {
   throw new Error("WhatsApp invalido.");
 }
 
+function getBrazilianPhoneVariants(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  const variants = new Set<string>([digits]);
+
+  if (digits.startsWith("55") && digits.length === 13 && digits[4] === "9") {
+    variants.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+  }
+
+  if (digits.startsWith("55") && digits.length === 12) {
+    variants.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+  }
+
+  return variants;
+}
+
+function isAuthorizedAdminNumber(from: string, adminNumbers: string[]) {
+  const fromVariants = getBrazilianPhoneVariants(from);
+  return adminNumbers.some((adminNumber) => {
+    const adminVariants = getBrazilianPhoneVariants(adminNumber);
+    return [...fromVariants].some((variant) => adminVariants.has(variant));
+  });
+}
+
 function normalizeComparisonValue(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized && normalized !== "-" ? normalized : null;
@@ -98,6 +121,10 @@ function normalizeComparisonValue(value: string | null | undefined) {
 
 function pendingKey(phone: string) {
   return `WHATSAPP_PENDING_QR_${phone}`;
+}
+
+function pendingKeys(phone: string) {
+  return [...getBrazilianPhoneVariants(phone)].map(pendingKey);
 }
 
 function parseQrPayload(value: string) {
@@ -193,6 +220,23 @@ async function getSetting(key: string) {
   )) as Array<{ value: string }>;
 
   return rows[0]?.value || "";
+}
+
+async function upsertPendingConfirmation(phone: string, pending: PendingConfirmation) {
+  await Promise.all(pendingKeys(phone).map((key) => upsertSetting(key, JSON.stringify(pending))));
+}
+
+async function getPendingConfirmation(phone: string) {
+  for (const key of pendingKeys(phone)) {
+    const value = await getSetting(key);
+    if (value) return value;
+  }
+
+  return "";
+}
+
+async function deletePendingConfirmation(phone: string) {
+  await Promise.all(pendingKeys(phone).map((key) => deleteSetting(key)));
 }
 
 async function sendTextMessage(input: { to: string; text: string }) {
@@ -516,7 +560,7 @@ function buildConfirmationMessage(pending: PendingConfirmation) {
 }
 
 async function savePendingAndAskConfirmation(from: string, pending: PendingConfirmation) {
-  await upsertSetting(pendingKey(from), JSON.stringify(pending));
+  await upsertPendingConfirmation(from, pending);
   await sendConfirmationButtonMessage({ to: from, pending });
 }
 
@@ -550,7 +594,7 @@ async function handleTextMessage(from: string, text: string) {
 }
 
 async function handleConfirmation(from: string) {
-  const pendingRaw = await getSetting(pendingKey(from));
+  const pendingRaw = await getPendingConfirmation(from);
   if (!pendingRaw) {
     await sendTextMessage({
       to: from,
@@ -562,7 +606,7 @@ async function handleConfirmation(from: string) {
   const pending = JSON.parse(pendingRaw) as PendingConfirmation;
   const ageMs = Date.now() - Date.parse(pending.createdAt);
   if (!Number.isFinite(ageMs) || ageMs > 15 * 60 * 1000) {
-    await deleteSetting(pendingKey(from));
+    await deletePendingConfirmation(from);
     await sendTextMessage({
       to: from,
       text: "Confirmacao expirada. Envie a foto do QR Code ou digite o COD novamente.",
@@ -571,7 +615,7 @@ async function handleConfirmation(from: string) {
   }
 
   const result = await confirmPending(pending);
-  await deleteSetting(pendingKey(from));
+  await deletePendingConfirmation(from);
 
   await sendTextMessage({
     to: from,
@@ -619,7 +663,7 @@ Deno.serve(async (request) => {
     await Promise.all(
       messages.map(async (message: any) => {
         const from = normalizePhoneNumber(String(message?.from || ""));
-        if (!settings.adminNumbers.includes(from)) {
+        if (!isAuthorizedAdminNumber(from, settings.adminNumbers)) {
           return;
         }
 
@@ -636,13 +680,20 @@ Deno.serve(async (request) => {
 
           if (
             message.type === "interactive" &&
-            message.interactive?.button_reply?.id === CONFIRM_BUTTON_ID
+            (message.interactive?.button_reply?.id === CONFIRM_BUTTON_ID ||
+              String(message.interactive?.button_reply?.title || "").trim().toLowerCase() ===
+                "confirmar")
           ) {
             await handleConfirmation(from);
             return;
           }
 
-          if (message.type === "button" && message.button?.payload === CONFIRM_BUTTON_ID) {
+          if (
+            message.type === "button" &&
+            (message.button?.payload === CONFIRM_BUTTON_ID ||
+              String(message.button?.text || message.button?.payload || "").trim().toLowerCase() ===
+                "confirmar")
+          ) {
             await handleConfirmation(from);
             return;
           }
