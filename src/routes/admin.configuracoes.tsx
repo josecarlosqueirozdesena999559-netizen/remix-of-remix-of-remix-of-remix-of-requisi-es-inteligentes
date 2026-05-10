@@ -8,11 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getWhatsAppAdminNumbers,
-  saveWhatsAppAdminNumbers,
-} from "@/lib/app-settings-actions";
 import { getCurrentUserProfile } from "@/lib/user-profile";
+
+const WHATSAPP_ADMIN_NUMBERS_KEY = "WHATSAPP_ADMIN_NUMBERS";
 
 export const Route = createFileRoute("/admin/configuracoes")({
   component: ConfiguracoesPage,
@@ -23,17 +21,52 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function getNumbersFromResult(result: unknown): string[] {
-  if (Array.isArray(result)) return result.map(String);
+function normalizeWhatsAppPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
 
-  if (result && typeof result === "object") {
-    const response = result as { numbers?: unknown; data?: unknown; result?: unknown };
-    if (Array.isArray(response.numbers)) return response.numbers.map(String);
-    if (response.data) return getNumbersFromResult(response.data);
-    if (response.result) return getNumbersFromResult(response.result);
-  }
+  if (!digits) return "";
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) return digits;
 
-  return [];
+  throw new Error(`WhatsApp invalido: ${value}`);
+}
+
+function parseAdminNumbers(value: string) {
+  return value
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map(normalizeWhatsAppPhoneNumber)
+    .filter((item, index, items) => items.indexOf(item) === index);
+}
+
+async function loadWhatsAppAdminNumbers() {
+  const { data, error } = await (supabase as any)
+    .from("app_settings")
+    .select("value")
+    .eq("key", WHATSAPP_ADMIN_NUMBERS_KEY)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return parseAdminNumbers(data?.value || "");
+}
+
+async function saveWhatsAppAdminNumbersDirect(rawNumbers: string) {
+  const numbers = parseAdminNumbers(rawNumbers);
+  const { data, error } = await (supabase as any)
+    .from("app_settings")
+    .upsert(
+      {
+        key: WHATSAPP_ADMIN_NUMBERS_KEY,
+        value: numbers.join(","),
+      },
+      { onConflict: "key" },
+    )
+    .select("value")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return parseAdminNumbers(data?.value || numbers.join(","));
 }
 
 function ConfiguracoesPage() {
@@ -78,17 +111,7 @@ function ConfiguracoesPage() {
 
         if (profile?.is_admin) {
           try {
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw new Error(sessionError.message);
-
-            const accessToken = sessionData.session?.access_token;
-            if (!accessToken) throw new Error("Sessao expirada.");
-
-            const result = await getWhatsAppAdminNumbers({
-              data: {},
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-            setAdminNumbers(getNumbersFromResult(result).join("\n"));
+            setAdminNumbers((await loadWhatsAppAdminNumbers()).join("\n"));
           } catch (error) {
             setAdminNumbersError(getErrorMessage(error, "Erro ao carregar numeros."));
           }
@@ -181,18 +204,7 @@ function ConfiguracoesPage() {
     setSavingAdminNumbers(true);
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw new Error(sessionError.message);
-
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Sessao expirada.");
-
-      const result = await saveWhatsAppAdminNumbers({
-        data: { numbers: adminNumbers },
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      setAdminNumbers(getNumbersFromResult(result).join("\n"));
+      setAdminNumbers((await saveWhatsAppAdminNumbersDirect(adminNumbers)).join("\n"));
       setAdminNumbersMessage("Numeros autorizados salvos.");
     } catch (error) {
       setAdminNumbersError(getErrorMessage(error, "Erro ao salvar numeros."));
