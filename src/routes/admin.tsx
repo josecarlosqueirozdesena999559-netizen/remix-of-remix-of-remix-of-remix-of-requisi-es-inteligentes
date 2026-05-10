@@ -31,7 +31,6 @@ function AdminLayout() {
   const [whatsapp, setWhatsapp] = useState("");
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
-  const [whatsappNotice, setWhatsappNotice] = useState<string | null>(null);
   const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
 
   useEffect(() => {
@@ -99,7 +98,6 @@ function AdminLayout() {
 
     setSavingWhatsApp(true);
     setWhatsappError(null);
-    setWhatsappNotice(null);
 
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -122,11 +120,7 @@ function AdminLayout() {
       setWhatsappConfirmed(true);
       setProfile((current) => (current ? { ...current, whatsapp: savedWhatsApp } : current));
       setWhatsapp(savedWhatsApp);
-      if (result.welcomeError) {
-        setWhatsappNotice("WhatsApp salvo. A mensagem de boas-vindas não foi enviada.");
-      } else {
-        setWhatsappNotice("WhatsApp salvo e mensagem de boas-vindas enviada.");
-      }
+      if (result.welcomeError) console.error(result.welcomeError);
     } catch (err) {
       setWhatsappError(
         err instanceof Error ? err.message : "Erro ao salvar WhatsApp. Tente novamente.",
@@ -311,11 +305,6 @@ function AdminLayout() {
           </form>
         </DialogContent>
       </Dialog>
-      {whatsappNotice && (
-        <div className="fixed bottom-4 right-4 max-w-sm rounded-md border bg-card px-4 py-3 text-sm text-card-foreground shadow">
-          {whatsappNotice}
-        </div>
-      )}
     </div>
   );
 }

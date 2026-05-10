@@ -133,24 +133,38 @@ export const saveUserWhatsAppAndSendWelcome = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const input = validateSaveUserWhatsAppInput(data);
     const whatsapp = normalizeWhatsAppPhoneNumber(input.whatsapp);
-    const supabase = (context as any).supabase;
     const userId = (context as any).userId;
+    const userEmail = (context as any).claims?.email as string | undefined;
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await (supabaseAdmin as any)
       .from("usuarios")
-      .select("id,nome,whatsapp")
+      .select("id,nome,email,auth_user_id,whatsapp")
       .eq("id", input.profileId)
       .maybeSingle();
 
     if (profileError) throw new Error(profileError.message);
     if (!profile) throw new Error("Perfil do usuário não encontrado.");
 
-    const { error: updateError } = await supabase
+    const profileEmail = typeof profile.email === "string" ? profile.email.trim().toLowerCase() : "";
+    const currentUserEmail = userEmail?.trim().toLowerCase() || "";
+    const belongsToCurrentUser =
+      profile.auth_user_id === userId || (!profile.auth_user_id && profileEmail === currentUserEmail);
+
+    if (!belongsToCurrentUser) {
+      throw new Error("Você não tem permissão para alterar este perfil.");
+    }
+
+    const { data: updatedProfile, error: updateError } = await (supabaseAdmin as any)
       .from("usuarios")
       .update({ auth_user_id: userId, whatsapp })
-      .eq("id", input.profileId);
+      .eq("id", input.profileId)
+      .select("whatsapp")
+      .single();
 
     if (updateError) throw new Error(updateError.message);
+    if (!updatedProfile?.whatsapp) {
+      throw new Error("Não foi possível salvar o WhatsApp do usuário.");
+    }
 
     let messageId: string | undefined;
     let welcomeError: string | undefined;
@@ -173,7 +187,7 @@ export const saveUserWhatsAppAndSendWelcome = createServerFn({ method: "POST" })
     }
 
     return {
-      whatsapp,
+      whatsapp: updatedProfile.whatsapp,
       messageId,
       welcomeError,
     };

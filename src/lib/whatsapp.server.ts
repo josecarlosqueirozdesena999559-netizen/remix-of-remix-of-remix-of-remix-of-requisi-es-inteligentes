@@ -77,20 +77,12 @@ async function getWhatsAppConfig() {
   const envPhoneNumberId = getEnvValue("WHATSAPP_PHONE_NUMBER_ID");
   const envGraphApiVersion = getEnvValue("WHATSAPP_GRAPH_API_VERSION");
 
-  if (envAccessToken && envPhoneNumberId) {
-    return {
-      accessToken: envAccessToken,
-      phoneNumberId: envPhoneNumberId,
-      graphApiVersion: envGraphApiVersion || DEFAULT_GRAPH_API_VERSION,
-    };
-  }
-
   const appSettings = await getAppSettings();
-  const accessToken = envAccessToken || appSettings.get("WHATSAPP_ACCESS_TOKEN")?.trim();
-  const phoneNumberId = envPhoneNumberId || appSettings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
+  const accessToken = appSettings.get("WHATSAPP_ACCESS_TOKEN")?.trim() || envAccessToken;
+  const phoneNumberId = appSettings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim() || envPhoneNumberId;
   const graphApiVersion =
-    envGraphApiVersion ||
     appSettings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
+    envGraphApiVersion ||
     DEFAULT_GRAPH_API_VERSION;
 
   const missing = [

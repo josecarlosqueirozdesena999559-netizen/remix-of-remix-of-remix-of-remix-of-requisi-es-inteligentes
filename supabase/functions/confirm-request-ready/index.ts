@@ -107,23 +107,15 @@ async function getWhatsAppSettings() {
   const envPhoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
   const envGraphApiVersion = Deno.env.get("WHATSAPP_GRAPH_API_VERSION")?.trim();
 
-  if (envAccessToken && envPhoneNumberId) {
-    return {
-      accessToken: envAccessToken,
-      phoneNumberId: envPhoneNumberId,
-      graphApiVersion: envGraphApiVersion || "v25.0",
-    };
-  }
-
   const rows = (await supabaseFetch(
     "app_settings?select=key,value&key=in.(WHATSAPP_ACCESS_TOKEN,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_GRAPH_API_VERSION)",
   )) as AppSetting[];
 
   const settings = new Map(rows.map((row) => [row.key, row.value]));
-  const accessToken = envAccessToken || settings.get("WHATSAPP_ACCESS_TOKEN")?.trim();
-  const phoneNumberId = envPhoneNumberId || settings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
+  const accessToken = settings.get("WHATSAPP_ACCESS_TOKEN")?.trim() || envAccessToken;
+  const phoneNumberId = settings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim() || envPhoneNumberId;
   const graphApiVersion =
-    envGraphApiVersion || settings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() || "v25.0";
+    settings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() || envGraphApiVersion || "v25.0";
 
   if (!accessToken || !phoneNumberId) {
     throw new Error("WhatsApp não configurado.");
