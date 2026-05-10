@@ -116,9 +116,10 @@ function getItemProgramKeys(item: ItemRow) {
 function itemMatchesSection(item: ItemRow, section: RequestSection) {
   if (productHasCategory(item.categoria, section.baseCategory)) return true;
 
-  if (getProgramMatchKey(section.baseCategory) !== "odontologico") return false;
+  const sectionProgram = getProgramMatchKey(section.baseCategory);
+  if (!sectionProgram) return false;
 
-  return getItemProgramKeys(item).includes("odontologico");
+  return getItemProgramKeys(item).includes(sectionProgram);
 }
 
 function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfile | null) {
