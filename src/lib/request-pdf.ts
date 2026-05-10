@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { createRequestQrDataUrl } from "@/lib/request-qr";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
@@ -291,9 +292,29 @@ function drawSignatureBlock(
   doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 84 });
 }
 
+function drawRequestQrCode(doc: jsPDF, qrDataUrl: string, centerX: number, topY: number) {
+  const size = 22;
+
+  doc.setDrawColor(190, 198, 210);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(centerX - size / 2 - 2, topY - 2, size + 4, size + 12, 1.5, 1.5);
+  doc.addImage(qrDataUrl, "PNG", centerX - size / 2, topY, size, size);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfAscii("QR CONFERENCIA"), centerX, topY + size + 5, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.2);
+  doc.text(toPdfAscii("Almoxarifado"), centerX, topY + size + 9, { align: "center" });
+  doc.setTextColor(20, 24, 28);
+}
+
 export async function createRequestPdfBlob(request: RequestPdfData) {
   const doc = new jsPDF() as JsPdfWithAutoTable;
   const logoDataUrl = await loadPdfLogoDataUrl();
+  const qrDataUrl = await createRequestQrDataUrl(request);
   const bodyRows = getRequestItemsForPdf(request);
 
   doc.setProperties({
@@ -372,6 +393,7 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     ? PDF_SIGNATURE_PAGE_START_Y
     : finalY + PDF_SIGNATURE_SECTION_GAP;
   doc.setPage(finalTotalPages);
+  drawRequestQrCode(doc, qrDataUrl, pageWidth / 2, footerTopY + 2);
   drawSignatureBlock(
     doc,
     pageWidth - PDF_MARGIN - 40,
