@@ -64,17 +64,21 @@ function ConfiguracoesPage() {
         setIsAdmin(Boolean(profile?.is_admin));
 
         if (profile?.is_admin) {
-          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-          if (sessionError) throw new Error(sessionError.message);
+          try {
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw new Error(sessionError.message);
 
-          const accessToken = sessionData.session?.access_token;
-          if (!accessToken) throw new Error("Sessao expirada.");
+            const accessToken = sessionData.session?.access_token;
+            if (!accessToken) throw new Error("Sessao expirada.");
 
-          const result = await getWhatsAppAdminNumbers({
-            data: {},
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          setAdminNumbers(result.numbers.join("\n"));
+            const result = await getWhatsAppAdminNumbers({
+              data: {},
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            setAdminNumbers(result.numbers.join("\n"));
+          } catch (error) {
+            setAdminNumbersError(getErrorMessage(error, "Erro ao carregar numeros."));
+          }
         }
       } catch (error) {
         if (active) {

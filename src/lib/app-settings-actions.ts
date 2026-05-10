@@ -24,7 +24,7 @@ function parseNumbers(value: string) {
     .filter((item, index, items) => items.indexOf(item) === index);
 }
 
-async function requireAdmin(userId: string) {
+async function requireAdmin(userId: string, email?: string | null) {
   const { data: profile, error } = await (supabaseAdmin as any)
     .from("usuarios")
     .select("id,is_admin")
@@ -32,13 +32,27 @@ async function requireAdmin(userId: string) {
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!profile?.is_admin) throw new Error("Apenas administradores podem alterar esta configuracao.");
+  if (profile?.is_admin) return;
+
+  const normalizedEmail = email?.trim().toLowerCase();
+  if (normalizedEmail) {
+    const { data: profileByEmail, error: emailError } = await (supabaseAdmin as any)
+      .from("usuarios")
+      .select("id,is_admin")
+      .ilike("email", normalizedEmail)
+      .maybeSingle();
+
+    if (emailError) throw new Error(emailError.message);
+    if (profileByEmail?.is_admin) return;
+  }
+
+  throw new Error("Apenas administradores podem alterar esta configuracao.");
 }
 
 export const getWhatsAppAdminNumbers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await requireAdmin((context as any).userId);
+    await requireAdmin((context as any).userId, (context as any).claims?.email);
 
     const { data, error } = await (supabaseAdmin as any)
       .from("app_settings")
@@ -56,7 +70,7 @@ export const getWhatsAppAdminNumbers = createServerFn({ method: "POST" })
 export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }) => {
-    await requireAdmin((context as any).userId);
+    await requireAdmin((context as any).userId, (context as any).claims?.email);
 
     const rawNumbers =
       data && typeof data === "object" && typeof (data as any).numbers === "string"
