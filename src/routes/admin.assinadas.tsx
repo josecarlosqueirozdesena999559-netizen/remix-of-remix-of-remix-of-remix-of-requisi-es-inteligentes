@@ -69,10 +69,10 @@ function getRequestMonth(request: Pick<RequisicaoAssinada, "data" | "created_at"
 }
 
 function getStatusLabel(status: string) {
-  if (status === "concluido") return "Concluida";
-  if (status === "requisicao_assinada") return "Requisicao assinada";
-  if (status === "recebido") return "Requisicao assinada";
-  if (status === "aguardando_assinatura_saida") return "Aguardando saida";
+  if (status === "concluido") return "Concluída";
+  if (status === "requisicao_assinada") return "Requisição assinada";
+  if (status === "recebido") return "Requisição assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saída";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
   return status || "-";
 }
@@ -130,7 +130,7 @@ function AssinadasPage() {
           requestsResult.error?.message ||
             allResult.error?.message ||
             setoresResult.error?.message ||
-            "Erro ao carregar requisicoes.",
+            "Erro ao carregar requisições.",
         );
       } else {
         const requests = (requestsResult.data ?? []) as RequisicaoAssinada[];
@@ -244,7 +244,7 @@ function AssinadasPage() {
 
           if (updateError) throw new Error(updateError.message);
 
-          setMessage("Requisicao devolvida para correcao do usuario.");
+          setMessage("Requisição devolvida para correção do usuário.");
         } else {
           await Promise.all([
             removeAttachmentFile(outputAttachment),
@@ -278,7 +278,7 @@ function AssinadasPage() {
 
           if (updateError) throw new Error(updateError.message);
 
-          setMessage("Saida devolvida para ajuste do admin.");
+          setMessage("Saída devolvida para ajuste do admin.");
         }
       } else {
         await Promise.all([
@@ -312,13 +312,13 @@ function AssinadasPage() {
 
         if (updateError) throw new Error(updateError.message);
 
-        setMessage("Requisicao excluida da fila.");
+        setMessage("Requisição excluída da fila.");
       }
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
       closeReview();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao revisar requisicao.");
+      setError(err instanceof Error ? err.message : "Erro ao revisar requisição.");
     } finally {
       setReviewSaving(false);
     }
@@ -327,13 +327,13 @@ function AssinadasPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Inicio / Assinadas</p>
-        <h2 className="text-2xl text-foreground">Requisicoes assinadas</h2>
+        <p className="text-sm text-muted-foreground">Início / Assinadas</p>
+        <h2 className="text-2xl text-foreground">Requisições assinadas</h2>
       </div>
 
       <Card className="p-4">
         <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-          Mes
+          Mês
           <input
             type="month"
             value={selectedMonth}
@@ -356,7 +356,7 @@ function AssinadasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : grouped.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisicao encontrada neste mes.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma requisição encontrada neste mês.</Card>
       ) : selected ? (
         <Card className="p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -379,12 +379,12 @@ function AssinadasPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left font-normal">Usuario</th>
+                  <th className="px-3 py-2 text-left font-normal">Usuário</th>
                   <th className="px-3 py-2 text-left font-normal">Data</th>
-                  <th className="px-3 py-2 text-left font-normal">Numero</th>
+                  <th className="px-3 py-2 text-left font-normal">Número</th>
                   <th className="px-3 py-2 text-left font-normal">Status</th>
                   <th className="px-3 py-2 text-right font-normal">PDF</th>
-                  <th className="px-3 py-2 text-right font-normal">Acoes</th>
+                  <th className="px-3 py-2 text-right font-normal">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -455,7 +455,7 @@ function AssinadasPage() {
         <>
           <Card className="bg-muted/30 p-6">
             <p className="text-sm text-muted-foreground">Primeiro passo</p>
-            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mes</p>
+            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mês</p>
           </Card>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -479,17 +479,17 @@ function AssinadasPage() {
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{reviewMode === "devolver" ? "Devolver requisicao" : "Excluir requisicao"}</DialogTitle>
+            <DialogTitle>{reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}</DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
-                ? "Escolha se o erro esta na requisicao ou na saida para enviar o fluxo de volta ao ponto correto."
-                : "A requisicao saira da fila, mas o historico e o motivo ficam registrados no banco."}
+                ? "Escolha se o erro está na requisição ou na saída para enviar o fluxo de volta ao ponto correto."
+                : "A requisição sairá da fila, mas o histórico e o motivo ficam registrados no banco."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Onde esta o erro?</p>
+              <p className="text-sm text-muted-foreground">Onde está o erro?</p>
               <RadioGroup
                 value={reviewTarget}
                 onValueChange={(value) => setReviewTarget(value as ReviewTarget)}
@@ -498,18 +498,18 @@ function AssinadasPage() {
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="requisicao" id="review-target-requisicao" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-requisicao">Erro na requisicao</Label>
+                    <Label htmlFor="review-target-requisicao">Erro na requisição</Label>
                     <span className="block text-xs text-muted-foreground">
-                      O usuario recebe a mesma requisicao com os itens para corrigir e reenviar.
+                      O usuário recebe a mesma requisição com os itens para corrigir e reenviar.
                     </span>
                   </span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="saida" id="review-target-saida" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-saida">Erro na saida</Label>
+                    <Label htmlFor="review-target-saida">Erro na saída</Label>
                     <span className="block text-xs text-muted-foreground">
-                      A saida volta para pendente e a requisicao assinada continua preservada.
+                      A saída volta para pendente e a requisição assinada continua preservada.
                     </span>
                   </span>
                 </label>
@@ -533,7 +533,7 @@ function AssinadasPage() {
             </Button>
             <Button type="button" onClick={() => void submitReview()} disabled={reviewSaving}>
               {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {reviewMode === "devolver" ? "Confirmar devolucao" : "Excluir"}
+              {reviewMode === "devolver" ? "Confirmar devolução" : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>

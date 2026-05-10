@@ -42,10 +42,10 @@ function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
 }
 
 function getStatusLabel(status: string) {
-  if (status === "concluido") return "Concluida";
-  if (status === "requisicao_assinada") return "Requisicao assinada";
-  if (status === "recebido") return "Requisicao assinada";
-  if (status === "aguardando_assinatura_saida") return "Aguardando saida";
+  if (status === "concluido") return "Concluída";
+  if (status === "requisicao_assinada") return "Requisição assinada";
+  if (status === "recebido") return "Requisição assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saída";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
   return status || "-";
 }
@@ -93,7 +93,7 @@ function MeusAssinadosPage() {
           setRequests(((data ?? []) as Requisicao[]).filter(hasOutputDocument));
         }
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
       } finally {
         if (active) setLoading(false);
       }
@@ -117,13 +117,13 @@ function MeusAssinadosPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuario / Assinados</p>
+        <p className="text-sm text-muted-foreground">Usuário / Assinados</p>
         <h2 className="text-2xl text-foreground">Meus assinados</h2>
       </div>
 
       <Card className="p-4">
         <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-          Mes
+          Mês
           <input
             type="month"
             value={selectedMonth}
@@ -141,7 +141,7 @@ function MeusAssinadosPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : filteredRequests.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisicao encontrada neste mes.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma requisição encontrada neste mês.</Card>
       ) : (
         <Card className="p-4">
           <div className="rounded-md border overflow-x-auto">
@@ -150,7 +150,7 @@ function MeusAssinadosPage() {
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Data</th>
                   <th className="px-3 py-2 text-left font-normal">Local</th>
-                  <th className="px-3 py-2 text-left font-normal">Numero</th>
+                  <th className="px-3 py-2 text-left font-normal">Número</th>
                   <th className="px-3 py-2 text-left font-normal">Status</th>
                   <th className="px-3 py-2 text-right font-normal">PDF</th>
                 </tr>

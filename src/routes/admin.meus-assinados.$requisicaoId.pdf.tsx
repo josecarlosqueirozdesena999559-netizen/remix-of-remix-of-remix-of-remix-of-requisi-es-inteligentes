@@ -73,7 +73,7 @@ function MeuAssinadoPdfPage() {
       }
 
       if (!requestResult.data) {
-        setError("Requisicao nao encontrada.");
+        setError("Requisição não encontrada.");
         setLoading(false);
         return;
       }

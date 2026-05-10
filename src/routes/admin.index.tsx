@@ -113,19 +113,19 @@ function AdminHome() {
     };
   }, []);
 
-  const notificationTitle = isAdmin ? "Solicitacoes Pendentes" : "Assinaturas";
+  const notificationTitle = isAdmin ? "Solicitações Pendentes" : "Assinaturas";
   const notificationMessage = isAdmin
     ? pendingCount > 0
-      ? `Voce tem ${pendingCount} ${pendingCount === 1 ? "requisicao pendente" : "requisicoes pendentes"}.`
-      : "Voce nao tem requisicoes pendentes no momento."
+      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "requisição pendente" : "requisições pendentes"}.`
+      : "Você não tem requisições pendentes no momento."
     : pendingCount > 0
-      ? `Voce tem ${pendingCount} ${pendingCount === 1 ? "assinatura pendente" : "assinaturas pendentes"}.`
-      : "Voce nao tem assinaturas pendentes no momento.";
+      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "assinatura pendente" : "assinaturas pendentes"}.`
+      : "Você não tem assinaturas pendentes no momento.";
 
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Inicio</p>
+        <p className="text-sm text-muted-foreground">Início</p>
         <h2 className="text-2xl text-foreground">Comunicados</h2>
       </div>
 
@@ -140,14 +140,14 @@ function AdminHome() {
           onClick={() => navigate({ to: isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas" })}
           className={`w-full rounded-md border-l-4 p-5 text-left shadow-sm transition-colors hover:brightness-[0.98] ${
             pendingCount > 0
-              ? "border-sky-500 bg-sky-50 text-sky-950"
+              ? "border-amber-500 bg-amber-50 text-amber-950"
               : "border-emerald-500 bg-emerald-50 text-emerald-950"
           }`}
         >
           <div className="flex items-start gap-3">
             <span
               className={`rounded-md p-2 ${
-                pendingCount > 0 ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"
+                pendingCount > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
               }`}
             >
               {pendingCount > 0 ? (

@@ -58,10 +58,10 @@ function isPendingStatus(status: string) {
 }
 
 function getStatusLabel(status: string) {
-  if (status === "aguardando_assinatura") return "Faltando assinatura da requisicao";
-  if (status === "aguardando_assinatura_requisicao") return "Faltando assinatura da requisicao";
-  if (status === "aguardando_assinatura_saida") return "Faltando assinatura da saida";
-  if (status === "correcao_requisicao") return "Correcao da requisicao";
+  if (status === "aguardando_assinatura") return "Faltando assinatura da requisição";
+  if (status === "aguardando_assinatura_requisicao") return "Faltando assinatura da requisição";
+  if (status === "aguardando_assinatura_saida") return "Faltando assinatura da saída";
+  if (status === "correcao_requisicao") return "Correção da requisição";
   return status || "-";
 }
 
@@ -144,7 +144,7 @@ function ControleAssinaturasPage() {
           const usuarioNome =
             request.solicitante?.trim() ||
             fallbackUser?.nome?.trim() ||
-            "Usuario sem nome";
+            "Usuário sem nome";
 
           if (!bySetor.has(localidade)) {
             bySetor.set(localidade, {
@@ -222,7 +222,7 @@ function ControleAssinaturasPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Inicio / Controle de assinaturas</p>
+        <p className="text-sm text-muted-foreground">Início / Controle de assinaturas</p>
         <h2 className="text-2xl text-foreground">Controle de assinaturas</h2>
       </div>
 
@@ -237,11 +237,11 @@ function ControleAssinaturasPage() {
             />
           </label>
           <label className="space-y-2 text-sm text-muted-foreground">
-            Usuario
+            Usuário
             <Input
               value={nomeFilter}
               onChange={(event) => setNomeFilter(event.target.value)}
-              placeholder="Filtrar por usuario"
+              placeholder="Filtrar por usuário"
             />
           </label>
         </div>
@@ -273,14 +273,14 @@ function ControleAssinaturasPage() {
           </div>
 
           {selectedSetorData.requests.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">Nenhuma requisicao pendente encontrada.</div>
+            <div className="p-4 text-sm text-muted-foreground">Nenhuma requisição pendente encontrada.</div>
           ) : (
             <div className="rounded-md overflow-x-auto border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 text-left font-normal">Numero</th>
-                    <th className="px-3 py-2 text-left font-normal">Usuario</th>
+                    <th className="px-3 py-2 text-left font-normal">Número</th>
+                    <th className="px-3 py-2 text-left font-normal">Usuário</th>
                     <th className="px-3 py-2 text-left font-normal">Data</th>
                     <th className="px-3 py-2 text-left font-normal">Status</th>
                     <th className="px-3 py-2 text-right font-normal">PDF</th>
@@ -322,7 +322,7 @@ function ControleAssinaturasPage() {
           )}
         </Card>
       ) : filteredSetores.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma pendencia encontrada no controle.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma pendência encontrada no controle.</Card>
       ) : (
         filteredSetores.map((setor) => (
           <Card key={setor.nome} className="p-4">
@@ -335,7 +335,7 @@ function ControleAssinaturasPage() {
                 <p className="text-sm text-muted-foreground">Setor</p>
                 <h3 className="text-lg text-foreground">{setor.nome}</h3>
                 <p className="text-sm text-muted-foreground">
-                  Clique para ver as requisicoes pendentes deste setor.
+                  Clique para ver as requisições pendentes deste setor.
                 </p>
               </div>
               <Badge variant="destructive">
