@@ -223,7 +223,7 @@ function buildNormalizedRequestSections(categories: string[]) {
       sections.push(
         {
           id: "generos-alimenticios",
-          label: "Alimenticio",
+          label: "Alimentício",
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "AlimentÃ­cio") || !isCleaningProduct(item),
@@ -356,7 +356,7 @@ function CriarRequisicaoPage() {
         }
 
         if (itemsResult.error || requestError) {
-          throw new Error(itemsResult.error?.message || requestError?.message || "Erro ao carregar requisicao.");
+          throw new Error(itemsResult.error?.message || requestError?.message || "Erro ao carregar requisição.");
         }
 
         const categories = getAllowedCategories(profile);
@@ -454,7 +454,7 @@ function CriarRequisicaoPage() {
     setError(null);
 
     if (!profile) {
-      setError("Perfil do usuario nao encontrado.");
+      setError("Perfil do usuário não encontrado.");
       setSaving(false);
       return;
     }
@@ -537,9 +537,9 @@ function CriarRequisicaoPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuario / Requisicao</p>
+        <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
         <h2 className="text-2xl text-foreground">
-          {editingRequestId ? "Corrigir requisicao" : "Criar requisicao"}
+          {editingRequestId ? "Corrigir requisição" : "Criar requisição"}
         </h2>
       </div>
 
@@ -552,13 +552,13 @@ function CriarRequisicaoPage() {
         <Card className="p-6 text-destructive">{error}</Card>
       ) : categories.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
-          Nenhum tipo de material liberado para este usuario.
+          Nenhum tipo de material liberado para este usuário.
         </Card>
       ) : (
         <>
           {returnReason && (
             <Card className="border-amber-200 bg-amber-50 p-4 text-amber-950">
-              <p className="text-sm font-medium">Motivo da devolucao</p>
+              <p className="text-sm font-medium">Motivo da devolução</p>
               <p className="mt-1 text-sm">{returnReason}</p>
             </Card>
           )}
@@ -656,7 +656,7 @@ function CriarRequisicaoPage() {
 
           <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {editingRequestId ? "Reenviar requisicao" : "Enviar requisicao"}
+            {editingRequestId ? "Reenviar requisição" : "Enviar requisição"}
           </Button>
         </>
       )}
