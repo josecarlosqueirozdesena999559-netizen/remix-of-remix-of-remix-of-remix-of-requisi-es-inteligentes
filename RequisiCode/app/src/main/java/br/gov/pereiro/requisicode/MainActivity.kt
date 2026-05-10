@@ -9,7 +9,6 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -73,21 +72,9 @@ class MainActivity : ComponentActivity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(20.dp(), 16.dp(), 20.dp(), 16.dp())
+            setPadding(20.dp(), 20.dp(), 20.dp(), 18.dp())
             background = rounded(PRIMARY, 0.dp())
         }
-        val logo = ImageView(this).apply {
-            setImageResource(R.drawable.requisicode_logo)
-            adjustViewBounds = true
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            contentDescription = "RequisiCode"
-        }
-        header.addView(
-            logo,
-            LinearLayout.LayoutParams(88.dp(), 88.dp()).apply {
-                bottomMargin = 8.dp()
-            },
-        )
         val title = TextView(this).apply {
             text = "RequisiCode"
             textSize = 21f
