@@ -23,6 +23,19 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function getNumbersFromResult(result: unknown): string[] {
+  if (Array.isArray(result)) return result.map(String);
+
+  if (result && typeof result === "object") {
+    const response = result as { numbers?: unknown; data?: unknown; result?: unknown };
+    if (Array.isArray(response.numbers)) return response.numbers.map(String);
+    if (response.data) return getNumbersFromResult(response.data);
+    if (response.result) return getNumbersFromResult(response.result);
+  }
+
+  return [];
+}
+
 function ConfiguracoesPage() {
   const navigate = useNavigate();
   const [emailAtual, setEmailAtual] = useState("");
@@ -75,7 +88,7 @@ function ConfiguracoesPage() {
               data: {},
               headers: { Authorization: `Bearer ${accessToken}` },
             });
-            setAdminNumbers(result.numbers.join("\n"));
+            setAdminNumbers(getNumbersFromResult(result).join("\n"));
           } catch (error) {
             setAdminNumbersError(getErrorMessage(error, "Erro ao carregar numeros."));
           }
@@ -179,7 +192,7 @@ function ConfiguracoesPage() {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
-      setAdminNumbers(result.numbers.join("\n"));
+      setAdminNumbers(getNumbersFromResult(result).join("\n"));
       setAdminNumbersMessage("Numeros autorizados salvos.");
     } catch (error) {
       setAdminNumbersError(getErrorMessage(error, "Erro ao salvar numeros."));
