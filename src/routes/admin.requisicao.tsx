@@ -100,6 +100,13 @@ function isExpedienteCategory(category: string) {
   return normalizeProductSearchValue(category) === "expediente";
 }
 
+function getProgramMatchKey(value: string | null | undefined) {
+  const normalized = normalizeProductSearchValue(value);
+  if (normalized.includes("odonto")) return "odontologico";
+
+  return normalized;
+}
+
 function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfile | null) {
   const linkedProgramRows = item.programa_produtos ?? [];
   if (linkedProgramRows.length === 0) return true;
@@ -111,13 +118,13 @@ function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfi
   if (linkedPrograms.length === 0) return false;
 
   const profilePrograms = [profile?.setor, profile?.unidade_nome]
-    .map((value) => normalizeProductSearchValue(value))
+    .map((value) => getProgramMatchKey(value))
     .filter(Boolean);
 
   if (profilePrograms.length === 0) return false;
 
   return linkedPrograms.some((programName) => {
-    const linkedProgram = normalizeProductSearchValue(programName);
+    const linkedProgram = getProgramMatchKey(programName);
 
     return profilePrograms.some(
       (profileProgram) =>
