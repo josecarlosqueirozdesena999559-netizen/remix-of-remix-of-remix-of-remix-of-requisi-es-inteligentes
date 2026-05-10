@@ -99,9 +99,8 @@ function Solicitacoes() {
         supabase
           .from("requisicoes")
           .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment")
-          .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
-          .order("updated_at", { ascending: false })
-          .limit(20),
+          .in("status", ["recebido", "requisicao_assinada"])
+          .order("updated_at", { ascending: false }),
         supabase
           .from("setores")
           .select("nome,programa")

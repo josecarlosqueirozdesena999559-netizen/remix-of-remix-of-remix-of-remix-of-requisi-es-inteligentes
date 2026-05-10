@@ -3,11 +3,6 @@ import { CheckCircle2, FileSignature, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  getAttachmentFile,
-  getOutputSignedAttachment,
-  getRequestSignedAttachment,
-} from "@/lib/attachments";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
@@ -42,33 +37,15 @@ function AdminHome() {
         }
 
         if (profile.is_admin) {
-          const { data, error } = await supabase
+          const { count, error } = await supabase
             .from("requisicoes")
-            .select("status,signed_attachment,admin_attachment")
-            .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
-            .order("updated_at", { ascending: false })
-            .limit(50);
+            .select("id", { count: "exact", head: true })
+            .in("status", ["recebido", "requisicao_assinada"]);
 
           if (error) throw new Error(error.message);
           if (!active) return;
 
-          const totalPendingRequests = (data ?? []).filter((request) => {
-            const hasRequestSigned = Boolean(
-              getRequestSignedAttachment(request.signed_attachment, request.status),
-            );
-            const hasOutputDocument = Boolean(
-              getOutputSignedAttachment(request.signed_attachment, request.status) ||
-                getAttachmentFile(request.admin_attachment),
-            );
-
-            return !hasOutputDocument && (
-              request.status === "recebido" ||
-              request.status === "requisicao_assinada" ||
-              hasRequestSigned
-            );
-          }).length;
-
-          setPendingCount(totalPendingRequests);
+          setPendingCount(count ?? 0);
           return;
         }
 
@@ -77,34 +54,21 @@ function AdminHome() {
           return;
         }
 
-        const { data, error } = await supabase
+        const { count, error } = await supabase
           .from("requisicoes")
-          .select("status")
+          .select("id", { count: "exact", head: true })
           .eq("solicitante_cpf", profile.cpf)
           .in("status", [
             "aguardando_assinatura",
             "aguardando_assinatura_requisicao",
             "aguardando_assinatura_saida",
             "correcao_requisicao",
-          ])
-          .order("updated_at", { ascending: false })
-          .limit(50);
+          ]);
 
         if (error) throw new Error(error.message);
         if (!active) return;
 
-        const signatureCounts = {
-          request: (data ?? []).filter((request) =>
-            request.status === "aguardando_assinatura" ||
-            request.status === "aguardando_assinatura_requisicao" ||
-            request.status === "correcao_requisicao",
-          ).length,
-          output: (data ?? []).filter(
-            (request) => request.status === "aguardando_assinatura_saida",
-          ).length,
-        };
-
-        setPendingCount(signatureCounts.request + signatureCounts.output);
+        setPendingCount(count ?? 0);
       } finally {
         if (active) setLoading(false);
       }
