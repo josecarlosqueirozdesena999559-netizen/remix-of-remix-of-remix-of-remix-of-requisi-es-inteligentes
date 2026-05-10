@@ -107,13 +107,25 @@ function getProgramMatchKey(value: string | null | undefined) {
   return normalized;
 }
 
+function getItemProgramKeys(item: ItemRow) {
+  return (item.programa_produtos ?? [])
+    .map((link) => getProgramMatchKey(link.programas?.nome))
+    .filter(Boolean);
+}
+
+function itemMatchesSection(item: ItemRow, section: RequestSection) {
+  if (productHasCategory(item.categoria, section.baseCategory)) return true;
+
+  if (getProgramMatchKey(section.baseCategory) !== "odontologico") return false;
+
+  return getItemProgramKeys(item).includes("odontologico");
+}
+
 function isItemAllowedForProfileProgram(item: ItemRow, profile: CurrentUserProfile | null) {
   const linkedProgramRows = item.programa_produtos ?? [];
   if (linkedProgramRows.length === 0) return true;
 
-  const linkedPrograms = linkedProgramRows
-    .map((link) => link.programas?.nome)
-    .filter(Boolean) as string[];
+  const linkedPrograms = getItemProgramKeys(item);
 
   if (linkedPrograms.length === 0) return false;
 
@@ -408,7 +420,7 @@ function CriarRequisicaoPage() {
 
     return sortProductsByMaterialGroup(
       items.filter((item) => {
-        if (!productHasCategory(item.categoria, selectedSection.baseCategory)) return false;
+        if (!itemMatchesSection(item, selectedSection)) return false;
         if (!isItemAllowedForProfileProgram(item, profile)) return false;
         if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
         if (!normalizedSearch) return true;
