@@ -53,11 +53,19 @@ type RequisicaoRow = {
   saida_codigo: string | null;
   categoria: string | null;
   data: string | null;
+  created_at: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
   status: string;
   signed_attachment: unknown;
   admin_attachment: unknown;
+};
+
+type RequestCodeSource = {
+  id: string;
+  saida_codigo: string | null;
+  data: string | null;
+  created_at: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,6 +119,45 @@ function textResponse(body: string, status = 200) {
 
 function valueOrDash(value: string | null | undefined) {
   return value?.trim() || "-";
+}
+
+function parseRequestDate(value?: string | null) {
+  const raw = String(value || "").trim();
+  const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brMatch) {
+    return new Date(Number(brMatch[3]), Number(brMatch[2]) - 1, Number(brMatch[1]));
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function formatRequestCodeDate(value?: string | null) {
+  const date = parseRequestDate(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+
+  return `${day}${month}${year}`;
+}
+
+function buildRequestCodes(requests: RequestCodeSource[]) {
+  const sorted = [...requests].sort((left, right) => {
+    const leftTime = new Date(left.created_at || left.data || "").getTime();
+    const rightTime = new Date(right.created_at || right.data || "").getTime();
+    return leftTime - rightTime || left.id.localeCompare(right.id);
+  });
+
+  return new Map(
+    sorted.map((request, index) => {
+      const sequence = String(index + 1).padStart(3, "0");
+      return [
+        request.id,
+        request.saida_codigo ||
+          `${formatRequestCodeDate(request.data || request.created_at)}${sequence}`,
+      ];
+    }),
+  );
 }
 
 function normalizePhoneNumber(value: string) {
@@ -446,7 +493,7 @@ async function decodeQrFromImage(bytes: Uint8Array) {
 async function getRequestByQrPayload(qrPayloadText: string) {
   const qrPayload = parseQrPayload(qrPayloadText);
   const rows = (await supabaseFetch(
-    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
+    `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
       qrPayload.requestId,
     )}&limit=1`,
   )) as RequisicaoRow[];
@@ -543,7 +590,7 @@ async function getRequestByManualCode(rawCode: string) {
   if (!code) throw new Error("Digite o código que aparece abaixo do QR Code.");
 
   const rowsByCode = (await supabaseFetch(
-    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&saida_codigo=eq.${encodeURIComponent(
+    `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&saida_codigo=eq.${encodeURIComponent(
       code,
     )}&limit=1`,
   )) as RequisicaoRow[];
@@ -552,11 +599,38 @@ async function getRequestByManualCode(rawCode: string) {
 
   if (!requisicao && isUuid(code)) {
     const rowsById = (await supabaseFetch(
-      `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
+      `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
         code,
       )}&limit=1`,
     )) as RequisicaoRow[];
     requisicao = rowsById[0];
+  }
+
+  if (!requisicao) {
+    const requests = (await supabaseFetch(
+      "requisicoes?select=id,saida_codigo,data,created_at&order=created_at.asc",
+    )) as RequestCodeSource[];
+    const matchingRequestId = [...buildRequestCodes(requests).entries()].find(
+      ([, requestCode]) => requestCode === code,
+    )?.[0];
+
+    if (matchingRequestId) {
+      const rowsByGeneratedCode = (await supabaseFetch(
+        `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
+          matchingRequestId,
+        )}&limit=1`,
+      )) as RequisicaoRow[];
+      requisicao = rowsByGeneratedCode[0];
+
+      if (requisicao && !requisicao.saida_codigo?.trim()) {
+        await supabaseFetch(`requisicoes?id=eq.${encodeURIComponent(requisicao.id)}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ saida_codigo: code }),
+        });
+        requisicao = { ...requisicao, saida_codigo: code };
+      }
+    }
   }
 
   if (!requisicao) {

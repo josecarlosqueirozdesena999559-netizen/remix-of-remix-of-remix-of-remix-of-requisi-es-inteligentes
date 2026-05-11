@@ -38,8 +38,8 @@ function Index() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="flex flex-col items-center gap-3 text-primary">
+      <div className="flex min-h-screen items-center justify-center bg-[#23324a] px-4">
+        <div className="flex flex-col items-center gap-3 text-white">
           <Loader2 className="h-10 w-10 animate-spin" />
           <p className="text-sm">Carregando...</p>
         </div>
@@ -48,29 +48,29 @@ function Index() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm rounded-md p-6 shadow-sm">
-        <h1 className="mb-5 text-center text-xl text-primary">Acesso ao Sistema</h1>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">E-mail</Label>
+    <div className="flex min-h-screen items-center justify-center bg-[#23324a] px-4 py-8">
+      <Card className="w-full max-w-sm rounded-md border-slate-200 bg-white p-6 shadow-xl shadow-slate-950/25">
+        <h1 className="mb-6 text-center text-xl font-semibold text-primary">Acesso ao Sistema</h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-slate-700">E-mail</Label>
             <Input
               id="email"
               type="email"
               placeholder="Informe seu e-mail"
-              className="h-9 rounded-md"
+              className="h-11 rounded-md border-slate-300 bg-slate-50 focus-visible:ring-primary"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="senha">Senha</Label>
+          <div className="space-y-2">
+            <Label htmlFor="senha" className="text-slate-700">Senha</Label>
             <Input
               id="senha"
               type="password"
               placeholder="Informe sua senha"
-              className="h-9 rounded-md"
+              className="h-11 rounded-md border-slate-300 bg-slate-50 focus-visible:ring-primary"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
@@ -79,7 +79,7 @@ function Index() {
           {error && (
             <p className="text-sm text-destructive text-center">{error}</p>
           )}
-          <Button type="submit" className="h-9 w-full rounded-md">Entrar</Button>
+          <Button type="submit" className="h-11 w-full rounded-md text-base">Entrar</Button>
         </form>
       </Card>
     </div>
