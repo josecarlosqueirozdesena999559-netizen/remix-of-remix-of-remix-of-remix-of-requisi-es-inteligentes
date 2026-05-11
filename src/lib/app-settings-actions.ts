@@ -2,6 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  buildWelcomeTemplateParameters,
+  WHATSAPP_TEMPLATE_LANGUAGE,
+  WHATSAPP_TEMPLATE_NAMES,
+} from "@/lib/whatsapp-templates";
+import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp.server";
 
 const WHATSAPP_ADMIN_NUMBERS_KEY = "WHATSAPP_ADMIN_NUMBERS";
 
@@ -23,6 +29,13 @@ function parseNumbers(value: string) {
     .map(normalizeWhatsAppPhoneNumber)
     .filter((item, index, items) => items.indexOf(item) === index);
 }
+
+type AdminWelcomeNotification = {
+  to: string;
+  ok: boolean;
+  messageId?: string;
+  error?: string;
+};
 
 async function requireAdmin(userId: string, email?: string | null) {
   const { data: profile, error } = await (supabaseAdmin as any)
@@ -49,21 +62,48 @@ async function requireAdmin(userId: string, email?: string | null) {
   throw new Error("Apenas administradores podem alterar esta configuracao.");
 }
 
+async function getSavedAdminNumbers() {
+  const { data, error } = await (supabaseAdmin as any)
+    .from("app_settings")
+    .select("value")
+    .eq("key", WHATSAPP_ADMIN_NUMBERS_KEY)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return parseNumbers(data?.value || "");
+}
+
+async function sendAdminWelcomeNotifications(
+  numbers: string[],
+): Promise<AdminWelcomeNotification[]> {
+  const results = await Promise.allSettled(
+    numbers.map((number) =>
+      sendWhatsAppTemplateMessage({
+        to: number,
+        templateName: WHATSAPP_TEMPLATE_NAMES.welcome,
+        languageCode: WHATSAPP_TEMPLATE_LANGUAGE,
+        bodyParameters: buildWelcomeTemplateParameters({
+          requesterName: "Administrador",
+        }),
+      }),
+    ),
+  );
+
+  return results.map((result, index) => ({
+    to: numbers[index],
+    ok: result.status === "fulfilled",
+    messageId: result.status === "fulfilled" ? result.value.messageId : undefined,
+    error: result.status === "rejected" ? String(result.reason?.message || result.reason) : undefined,
+  }));
+}
+
 export const getWhatsAppAdminNumbers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await requireAdmin((context as any).userId, (context as any).claims?.email);
 
-    const { data, error } = await (supabaseAdmin as any)
-      .from("app_settings")
-      .select("value")
-      .eq("key", WHATSAPP_ADMIN_NUMBERS_KEY)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-
     return {
-      numbers: parseNumbers(data?.value || ""),
+      numbers: await getSavedAdminNumbers(),
     };
   });
 
@@ -77,6 +117,8 @@ export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" })
         ? (data as any).numbers
         : "";
     const numbers = parseNumbers(rawNumbers);
+    const previousNumbers = await getSavedAdminNumbers();
+    const newNumbers = numbers.filter((number) => !previousNumbers.includes(number));
 
     const { error } = await (supabaseAdmin as any)
       .from("app_settings")
@@ -90,5 +132,7 @@ export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
 
-    return { numbers };
+    const welcomeNotifications = await sendAdminWelcomeNotifications(newNumbers);
+
+    return { numbers, welcomeNotifications };
   });

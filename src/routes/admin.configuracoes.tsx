@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getWhatsAppAdminNumbers,
+  saveWhatsAppAdminNumbers,
+} from "@/lib/app-settings-actions";
 import { getCurrentUserProfile } from "@/lib/user-profile";
-
-const WHATSAPP_ADMIN_NUMBERS_KEY = "WHATSAPP_ADMIN_NUMBERS";
 
 export const Route = createFileRoute("/admin/configuracoes")({
   component: ConfiguracoesPage,
@@ -19,54 +21,6 @@ export const Route = createFileRoute("/admin/configuracoes")({
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
-}
-
-function normalizeWhatsAppPhoneNumber(value: string) {
-  const digits = value.replace(/\D/g, "");
-
-  if (!digits) return "";
-  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) return digits;
-
-  throw new Error(`WhatsApp invalido: ${value}`);
-}
-
-function parseAdminNumbers(value: string) {
-  return value
-    .split(/[\n,;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(normalizeWhatsAppPhoneNumber)
-    .filter((item, index, items) => items.indexOf(item) === index);
-}
-
-async function loadWhatsAppAdminNumbers() {
-  const { data, error } = await (supabase as any)
-    .from("app_settings")
-    .select("value")
-    .eq("key", WHATSAPP_ADMIN_NUMBERS_KEY)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return parseAdminNumbers(data?.value || "");
-}
-
-async function saveWhatsAppAdminNumbersDirect(rawNumbers: string) {
-  const numbers = parseAdminNumbers(rawNumbers);
-  const { data, error } = await (supabase as any)
-    .from("app_settings")
-    .upsert(
-      {
-        key: WHATSAPP_ADMIN_NUMBERS_KEY,
-        value: numbers.join(","),
-      },
-      { onConflict: "key" },
-    )
-    .select("value")
-    .single();
-
-  if (error) throw new Error(error.message);
-  return parseAdminNumbers(data?.value || numbers.join(","));
 }
 
 function ConfiguracoesPage() {
@@ -111,9 +65,10 @@ function ConfiguracoesPage() {
 
         if (profile?.is_admin) {
           try {
-            setAdminNumbers((await loadWhatsAppAdminNumbers()).join("\n"));
+            const result = await getWhatsAppAdminNumbers();
+            setAdminNumbers(result.numbers.join("\n"));
           } catch (error) {
-            setAdminNumbersError(getErrorMessage(error, "Erro ao carregar numeros."));
+            setAdminNumbersError(getErrorMessage(error, "Erro ao carregar números."));
           }
         }
       } catch (error) {
@@ -204,10 +159,24 @@ function ConfiguracoesPage() {
     setSavingAdminNumbers(true);
 
     try {
-      setAdminNumbers((await saveWhatsAppAdminNumbersDirect(adminNumbers)).join("\n"));
-      setAdminNumbersMessage("Numeros autorizados salvos.");
+      const result = await saveWhatsAppAdminNumbers({ data: { numbers: adminNumbers } });
+      const failedWelcomes = result.welcomeNotifications.filter((item) => !item.ok);
+      const sentWelcomes = result.welcomeNotifications.length - failedWelcomes.length;
+
+      setAdminNumbers(result.numbers.join("\n"));
+      setAdminNumbersMessage(
+        sentWelcomes > 0
+          ? `Números autorizados salvos. Boas-vindas enviadas para ${sentWelcomes} novo(s) número(s).`
+          : "Números autorizados salvos.",
+      );
+
+      if (failedWelcomes.length) {
+        setAdminNumbersError(
+          `Números salvos, mas não foi possível enviar boas-vindas para ${failedWelcomes.length} número(s).`,
+        );
+      }
     } catch (error) {
-      setAdminNumbersError(getErrorMessage(error, "Erro ao salvar numeros."));
+      setAdminNumbersError(getErrorMessage(error, "Erro ao salvar números."));
     } finally {
       setSavingAdminNumbers(false);
     }
@@ -344,13 +313,13 @@ function ConfiguracoesPage() {
                   WhatsApp dos administradores
                 </CardTitle>
                 <CardDescription>
-                  Numeros autorizados a enviar foto do QR Code para confirmar retirada.
+                  Números autorizados a enviar foto do QR Code para confirmar retirada.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form className="space-y-4" onSubmit={handleAdminNumbersSubmit}>
                   <div className="space-y-2">
-                    <Label htmlFor="admin-whatsapp-numbers">Numeros autorizados</Label>
+                    <Label htmlFor="admin-whatsapp-numbers">Números autorizados</Label>
                     <Textarea
                       id="admin-whatsapp-numbers"
                       value={adminNumbers}
@@ -377,7 +346,7 @@ function ConfiguracoesPage() {
                     ) : (
                       <Save className="h-4 w-4" />
                     )}
-                    Salvar numeros
+                    Salvar números
                   </Button>
                 </form>
               </CardContent>

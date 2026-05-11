@@ -119,7 +119,7 @@ function normalizePhoneNumber(value: string) {
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
   if (digits.startsWith("55") && digits.length >= 12) return digits;
 
-  throw new Error("WhatsApp invalido.");
+  throw new Error("WhatsApp inválido.");
 }
 
 function getBrazilianPhoneVariants(phone: string) {
@@ -166,7 +166,7 @@ function parseQrPayload(value: string) {
     parsed.version !== 1 ||
     !parsed.requestId
   ) {
-    throw new Error("QR Code de requisicao invalido.");
+    throw new Error("QR Code de requisição inválido.");
   }
 
   return parsed;
@@ -177,7 +177,7 @@ async function supabaseFetch(path: string, init: RequestInit = {}) {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Supabase nao configurado.");
+    throw new Error("Supabase não configurado.");
   }
 
   const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
@@ -225,7 +225,7 @@ async function getSettings() {
     .filter(Boolean);
 
   if (!accessToken || !phoneNumberId) {
-    throw new Error("WhatsApp nao configurado.");
+    throw new Error("WhatsApp não configurado.");
   }
 
   return { accessToken, phoneNumberId, graphApiVersion, verifyToken, adminNumbers };
@@ -340,7 +340,7 @@ async function sendConfirmationButtonMessage(input: {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.error?.message || "Erro ao enviar botao de confirmacao.");
+    throw new Error(payload?.error?.message || "Erro ao enviar botão de confirmação.");
   }
 }
 
@@ -401,7 +401,7 @@ async function downloadMedia(mediaId: string) {
   const media = await mediaResponse.json().catch(() => null);
 
   if (!mediaResponse.ok || !media?.url) {
-    throw new Error(media?.error?.message || "Nao foi possivel baixar a imagem.");
+    throw new Error(media?.error?.message || "Não foi possível baixar a imagem.");
   }
 
   const fileResponse = await fetch(media.url, {
@@ -409,7 +409,7 @@ async function downloadMedia(mediaId: string) {
   });
 
   if (!fileResponse.ok) {
-    throw new Error("Nao foi possivel baixar a foto do QR Code.");
+    throw new Error("Não foi possível baixar a foto do QR Code.");
   }
 
   return new Uint8Array(await fileResponse.arrayBuffer());
@@ -440,12 +440,12 @@ async function getRequestByQrPayload(qrPayloadText: string) {
   )) as RequisicaoRow[];
 
   const requisicao = rows[0];
-  if (!requisicao) throw new Error("Requisicao nao encontrada.");
+  if (!requisicao) throw new Error("Requisição não encontrada.");
 
   const requestCode = requisicao.saida_codigo || requisicao.id;
   const qrRequestCode = normalizeComparisonValue(qrPayload.requestCode);
   if (qrRequestCode && qrRequestCode !== requestCode) {
-    throw new Error("QR Code nao confere com a requisicao encontrada.");
+    throw new Error("QR Code não confere com a requisição encontrada.");
   }
 
   assertRequestCanBeMarkedReady(requisicao);
@@ -505,30 +505,30 @@ function assertRequestCanBeMarkedReady(requisicao: RequisicaoRow) {
     requisicao.status === "aguardando_assinatura_requisicao"
   ) {
     throw new Error(
-      `Pedido ${requestCode} ainda esta aguardando assinatura do usuario. Depois que o usuario assinar, envie o COD novamente.`,
+      `Pedido ${requestCode} ainda está aguardando assinatura do usuário. Depois que o usuário assinar, envie o COD novamente.`,
     );
   }
 
   if (requisicao.status === "correcao_requisicao") {
     throw new Error(
-      `Pedido ${requestCode} esta em correcao. Finalize a correcao antes de confirmar retirada.`,
+      `Pedido ${requestCode} está em correção. Finalize a correção antes de confirmar retirada.`,
     );
   }
 
   if (requisicao.status === "pronto_retirada") {
-    throw new Error(`Pedido ${requestCode} ja esta marcado como pronto para retirada.`);
+    throw new Error(`Pedido ${requestCode} já está marcado como pronto para retirada.`);
   }
 
   if (!hasOutputAttachment(requisicao)) {
     throw new Error(
-      `Pedido ${requestCode} ainda nao tem documento de saida anexado. Anexe a saida antes de confirmar retirada.`,
+      `Pedido ${requestCode} ainda não tem documento de saída anexado. Anexe a saída antes de confirmar retirada.`,
     );
   }
 }
 
 async function getRequestByManualCode(rawCode: string) {
   const code = normalizeManualCode(rawCode);
-  if (!code) throw new Error("Digite o codigo que aparece abaixo do QR Code.");
+  if (!code) throw new Error("Digite o código que aparece abaixo do QR Code.");
 
   const rowsByCode = (await supabaseFetch(
     `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&saida_codigo=eq.${encodeURIComponent(
@@ -548,7 +548,7 @@ async function getRequestByManualCode(rawCode: string) {
   }
 
   if (!requisicao) {
-    throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
+    throw new Error("Código não encontrado. Confira o COD abaixo do QR Code e envie novamente.");
   }
 
   assertRequestCanBeMarkedReady(requisicao);
@@ -618,7 +618,7 @@ async function confirmPending(pending: PendingConfirmation) {
       requestDate: request.requestDate,
     });
   } else {
-    notificationSkippedReason = "Usuario sem WhatsApp cadastrado.";
+    notificationSkippedReason = "Usuário sem WhatsApp cadastrado.";
   }
 
   return { request, messageId, notificationSkippedReason };
@@ -628,10 +628,10 @@ function buildConfirmationMessage(pending: PendingConfirmation) {
   return [
     "Pedido encontrado. Confira antes de confirmar:",
     "",
-    `Usuario: ${pending.request.requester}`,
+    `Usuário: ${pending.request.requester}`,
     `CPF: ${pending.request.requesterCpf}`,
     `Tipo: ${pending.request.materialType}`,
-    `Numero: ${pending.request.requestCode}`,
+    `Número: ${pending.request.requestCode}`,
     `Data: ${pending.request.requestDate}`,
   ].join("\n");
 }
@@ -675,7 +675,7 @@ async function handleConfirmation(from: string) {
   if (!pendingRaw) {
     await sendTextMessage({
       to: from,
-      text: "Nenhum pedido aguardando confirmacao. Envie a foto do QR Code ou digite o COD abaixo do QR.",
+      text: "Nenhum pedido aguardando confirmação. Envie a foto do QR Code ou digite o COD abaixo do QR.",
     });
     return;
   }
@@ -686,7 +686,7 @@ async function handleConfirmation(from: string) {
     await deletePendingConfirmation(from);
     await sendTextMessage({
       to: from,
-      text: "Confirmacao expirada. Envie a foto do QR Code ou digite o COD novamente.",
+      text: "Confirmação expirada. Envie a foto do QR Code ou digite o COD novamente.",
     });
     return;
   }
@@ -698,7 +698,7 @@ async function handleConfirmation(from: string) {
     to: from,
     text: result.notificationSkippedReason
       ? `Pedido ${result.request.requestCode} confirmado. ${result.notificationSkippedReason}`
-      : `Pedido ${result.request.requestCode} confirmado. Responsavel avisado no WhatsApp.`,
+      : `Pedido ${result.request.requestCode} confirmado. Responsável avisado no WhatsApp.`,
   });
 }
 
@@ -730,7 +730,7 @@ Deno.serve(async (request) => {
     }
 
     if (request.method !== "POST") {
-      return jsonResponse({ ok: false, error: "Metodo nao permitido." }, 405);
+      return jsonResponse({ ok: false, error: "Método não permitido." }, 405);
     }
 
     const settings = await getSettings();
@@ -784,8 +784,8 @@ Deno.serve(async (request) => {
             to: from,
             text:
               error instanceof Error
-                ? `${error.message}\n\nSe a foto nao ler, digite o COD que aparece abaixo do QR Code.`
-                : "Nao foi possivel processar. Se a foto nao ler, digite o COD abaixo do QR Code.",
+                ? `${error.message}\n\nSe a foto não ler, digite o COD que aparece abaixo do QR Code.`
+                : "Não foi possível processar. Se a foto não ler, digite o COD abaixo do QR Code.",
           });
         }
       }),
