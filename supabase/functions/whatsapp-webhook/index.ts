@@ -122,6 +122,21 @@ function normalizePhoneNumber(value: string) {
   throw new Error("WhatsApp inválido.");
 }
 
+function parseAdminNumbers(value: string) {
+  const normalizedValue = value.trim();
+  const rawNumbers =
+    /[\n,;]/.test(normalizedValue) || !normalizedValue.includes("55")
+      ? normalizedValue
+          .split(/[\n,;]+/)
+          .map((number) => number.trim())
+          .filter(Boolean)
+      : normalizedValue.match(/55\d{10,11}(?=55|$)/g) ?? [];
+
+  return rawNumbers
+    .map((number) => normalizePhoneNumber(number))
+    .filter((number, index, numbers) => numbers.indexOf(number) === index);
+}
+
 function getBrazilianPhoneVariants(phone: string) {
   const digits = phone.replace(/\D/g, "");
   const variants = new Set<string>([digits]);
@@ -219,10 +234,7 @@ async function getSettings() {
   const verifyToken =
     settings.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN")?.trim() ||
     Deno.env.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN")?.trim();
-  const adminNumbers = (settings.get("WHATSAPP_ADMIN_NUMBERS") || "")
-    .split(",")
-    .map((number) => number.trim())
-    .filter(Boolean);
+  const adminNumbers = parseAdminNumbers(settings.get("WHATSAPP_ADMIN_NUMBERS") || "");
 
   if (!accessToken || !phoneNumberId) {
     throw new Error("WhatsApp não configurado.");

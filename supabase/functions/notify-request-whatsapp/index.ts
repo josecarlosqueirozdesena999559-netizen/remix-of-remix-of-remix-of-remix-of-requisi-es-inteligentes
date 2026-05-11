@@ -99,6 +99,21 @@ function normalizeWhatsAppPhoneNumber(value: string) {
   return digits;
 }
 
+function parseAdminNumbers(value: string) {
+  const normalizedValue = value.trim();
+  const rawNumbers =
+    /[\n,;]/.test(normalizedValue) || !normalizedValue.includes("55")
+      ? normalizedValue
+          .split(/[\n,;]+/)
+          .map((number) => number.trim())
+          .filter(Boolean)
+      : normalizedValue.match(/55\d{10,11}(?=55|$)/g) ?? [];
+
+  return rawNumbers
+    .map((number) => normalizeWhatsAppPhoneNumber(number))
+    .filter((number, index, numbers) => numbers.indexOf(number) === index);
+}
+
 function getNotificationType(value: unknown): NotificationType {
   if (
     value === "requestCreated" ||
@@ -168,10 +183,7 @@ async function getWhatsAppSettings() {
     settings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
     envGraphApiVersion ||
     DEFAULT_GRAPH_API_VERSION;
-  const adminNumbers = (settings.get("WHATSAPP_ADMIN_NUMBERS") || "")
-    .split(",")
-    .map((number) => number.trim())
-    .filter(Boolean);
+  const adminNumbers = parseAdminNumbers(settings.get("WHATSAPP_ADMIN_NUMBERS") || "");
 
   if (!accessToken || !phoneNumberId) {
     throw new Error("WhatsApp não configurado.");

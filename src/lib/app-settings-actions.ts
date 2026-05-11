@@ -21,11 +21,21 @@ function normalizeWhatsAppPhoneNumber(value: string) {
   throw new Error(`WhatsApp invalido: ${value}`);
 }
 
+function extractLegacyConcatenatedNumbers(value: string) {
+  return value.match(/55\d{10,11}(?=55|$)/g) ?? [];
+}
+
 function parseNumbers(value: string) {
-  return value
-    .split(/[\n,;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
+  const normalizedValue = value.trim();
+  const rawNumbers =
+    /[\n,;]/.test(normalizedValue) || !normalizedValue.includes("55")
+      ? normalizedValue
+          .split(/[\n,;]+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : extractLegacyConcatenatedNumbers(normalizedValue);
+
+  return rawNumbers
     .map(normalizeWhatsAppPhoneNumber)
     .filter((item, index, items) => items.indexOf(item) === index);
 }
