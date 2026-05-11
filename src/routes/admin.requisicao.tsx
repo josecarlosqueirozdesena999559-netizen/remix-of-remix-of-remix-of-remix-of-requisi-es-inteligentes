@@ -43,11 +43,18 @@ interface ItemRow {
 interface EditableRequestItem {
   item?: string | null;
   nome?: string | null;
+  description?: string | null;
+  unit?: string | null;
+  unidade?: string | null;
   stock?: string | number | null;
   qtdDisponivel?: string | number | null;
   need?: string | number | null;
   qtdNecessaria?: string | number | null;
   quantidade_solicitada?: string | number | null;
+  categoria?: string | null;
+  subcategoria?: string | null;
+  request_section?: string | null;
+  request_section_order?: number | null;
 }
 
 interface EditableRequest {
@@ -280,6 +287,16 @@ function getInitialSectionId(sections: RequestSection[], categoria: string | nul
   return firstMatch?.id || sections[0]?.id || "";
 }
 
+function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
+  return (
+    sections.find((section) => {
+      if (!productHasCategory(item.categoria, section.baseCategory)) return false;
+      if (section.matchesItem && !section.matchesItem(item)) return false;
+      return true;
+    }) || null
+  );
+}
+
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
@@ -458,21 +475,39 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    const selectedItems = visibleItems
-      .map((item) => ({
-        item: item.nome,
-        nome: item.nome,
-        description: item.nome,
-        unit: item.unidade,
-        unidade: item.unidade,
-        stock: stocks[item.id] || "-",
-        qtdDisponivel: stocks[item.id] || "-",
-        need: quantities[item.id],
-        qtdNecessaria: quantities[item.id],
-        quantidade_solicitada: quantities[item.id],
-        categoria: selectedSection?.baseCategory || item.categoria,
-      }))
-      .filter((item) => hasRequestedQuantity(item.need));
+    const selectedItems = items
+      .map((item) => {
+        const quantity = quantities[item.id];
+        if (!hasRequestedQuantity(quantity)) return null;
+
+        const section = getRequestSectionForItem(item, sections);
+        if (!section) return null;
+
+        return {
+          item: item.nome,
+          nome: item.nome,
+          description: item.nome,
+          unit: item.unidade,
+          unidade: item.unidade,
+          stock: stocks[item.id] || "-",
+          qtdDisponivel: stocks[item.id] || "-",
+          need: quantity,
+          qtdNecessaria: quantity,
+          quantidade_solicitada: quantity,
+          categoria: item.categoria,
+          subcategoria: item.subcategoria,
+          request_section: section.label,
+          request_section_order: section.order,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .sort((a, b) => {
+        const orderDiff = (a.request_section_order ?? 99) - (b.request_section_order ?? 99);
+        if (orderDiff !== 0) return orderDiff;
+        return String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
+          sensitivity: "base",
+        });
+      });
 
     if (selectedItems.length === 0) {
       setError("Informe a quantidade de pelo menos um item.");
@@ -480,8 +515,16 @@ function CriarRequisicaoPage() {
       return;
     }
 
+    const requestCategories = Array.from(
+      new Set(
+        selectedItems
+          .map((item) => item.request_section?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
     const payload = {
-      categoria: selectedSection?.baseCategory || null,
+      categoria: requestCategories.join("; ") || selectedSection?.baseCategory || null,
       setor: profile.unidade_nome || profile.setor,
       solicitante: profile.nome,
       solicitante_cpf: profile.cpf,
