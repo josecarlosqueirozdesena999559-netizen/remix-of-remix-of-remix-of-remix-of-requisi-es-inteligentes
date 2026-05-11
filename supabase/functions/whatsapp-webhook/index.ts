@@ -623,12 +623,19 @@ async function confirmPending(pending: PendingConfirmation) {
   let notificationSkippedReason: string | undefined;
 
   if (user?.whatsapp?.trim()) {
-    messageId = await sendReadyTemplate({
-      to: user.whatsapp,
-      requestCode: request.requestCode,
-      materialType: request.materialType,
-      requestDate: request.requestDate,
-    });
+    try {
+      messageId = await sendReadyTemplate({
+        to: user.whatsapp,
+        requestCode: request.requestCode,
+        materialType: request.materialType,
+        requestDate: request.requestDate,
+      });
+    } catch (error) {
+      notificationSkippedReason =
+        error instanceof Error
+          ? `Não foi possível avisar o usuário no WhatsApp: ${error.message}`
+          : "Não foi possível avisar o usuário no WhatsApp.";
+    }
   } else {
     notificationSkippedReason = "Usuário sem WhatsApp cadastrado.";
   }
