@@ -417,6 +417,7 @@ async function getRequestByQrPayload(qrPayloadText: string) {
     throw new Error("QR Code nao confere com a requisicao encontrada.");
   }
 
+  assertRequestCanBeMarkedReady(requisicao);
   return buildRequestLookupResult(requisicao, qrPayload);
 }
 
@@ -465,6 +466,29 @@ function isUuid(value: string) {
   );
 }
 
+function assertRequestCanBeMarkedReady(requisicao: RequisicaoRow) {
+  const requestCode = requisicao.saida_codigo || requisicao.id;
+
+  if (
+    requisicao.status === "aguardando_assinatura" ||
+    requisicao.status === "aguardando_assinatura_requisicao"
+  ) {
+    throw new Error(
+      `Pedido ${requestCode} ainda esta aguardando assinatura do usuario. Depois que o usuario assinar, envie o COD novamente.`,
+    );
+  }
+
+  if (requisicao.status === "correcao_requisicao") {
+    throw new Error(
+      `Pedido ${requestCode} esta em correcao. Finalize a correcao antes de confirmar retirada.`,
+    );
+  }
+
+  if (requisicao.status === "pronto_retirada") {
+    throw new Error(`Pedido ${requestCode} ja esta marcado como pronto para retirada.`);
+  }
+}
+
 async function getRequestByManualCode(rawCode: string) {
   const code = normalizeManualCode(rawCode);
   if (!code) throw new Error("Digite o codigo que aparece abaixo do QR Code.");
@@ -490,6 +514,7 @@ async function getRequestByManualCode(rawCode: string) {
     throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
   }
 
+  assertRequestCanBeMarkedReady(requisicao);
   return buildRequestLookupResult(requisicao);
 }
 
