@@ -23,6 +23,44 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+interface AdminWelcomeNotificationResult {
+  ok?: boolean;
+}
+
+interface WhatsAppAdminNumbersResult {
+  numbers?: unknown;
+  welcomeNotifications?: unknown;
+  data?: unknown;
+  result?: unknown;
+}
+
+function unwrapWhatsAppAdminNumbersResult(value: unknown): WhatsAppAdminNumbersResult {
+  if (!value || typeof value !== "object") return {};
+
+  const candidate = value as WhatsAppAdminNumbersResult;
+
+  if (Array.isArray(candidate.numbers) || Array.isArray(candidate.welcomeNotifications)) {
+    return candidate;
+  }
+
+  if (candidate.data) return unwrapWhatsAppAdminNumbersResult(candidate.data);
+  if (candidate.result) return unwrapWhatsAppAdminNumbersResult(candidate.result);
+
+  return candidate;
+}
+
+function getAdminNumbersFromResult(value: unknown) {
+  const result = unwrapWhatsAppAdminNumbersResult(value);
+  return Array.isArray(result.numbers) ? result.numbers.map(String) : [];
+}
+
+function getWelcomeNotificationsFromResult(value: unknown) {
+  const result = unwrapWhatsAppAdminNumbersResult(value);
+  return Array.isArray(result.welcomeNotifications)
+    ? (result.welcomeNotifications as AdminWelcomeNotificationResult[])
+    : [];
+}
+
 function ConfiguracoesPage() {
   const navigate = useNavigate();
   const [emailAtual, setEmailAtual] = useState("");
@@ -66,7 +104,7 @@ function ConfiguracoesPage() {
         if (profile?.is_admin) {
           try {
             const result = await getWhatsAppAdminNumbers();
-            setAdminNumbers(result.numbers.join("\n"));
+            setAdminNumbers(getAdminNumbersFromResult(result).join("\n"));
           } catch (error) {
             setAdminNumbersError(getErrorMessage(error, "Erro ao carregar números."));
           }
@@ -160,10 +198,12 @@ function ConfiguracoesPage() {
 
     try {
       const result = await saveWhatsAppAdminNumbers({ data: { numbers: adminNumbers } });
-      const failedWelcomes = result.welcomeNotifications.filter((item) => !item.ok);
-      const sentWelcomes = result.welcomeNotifications.length - failedWelcomes.length;
+      const numbers = getAdminNumbersFromResult(result);
+      const welcomeNotifications = getWelcomeNotificationsFromResult(result);
+      const failedWelcomes = welcomeNotifications.filter((item) => !item.ok);
+      const sentWelcomes = welcomeNotifications.length - failedWelcomes.length;
 
-      setAdminNumbers(result.numbers.join("\n"));
+      setAdminNumbers(numbers.join("\n"));
       setAdminNumbersMessage(
         sentWelcomes > 0
           ? `Números autorizados salvos. Boas-vindas enviadas para ${sentWelcomes} novo(s) número(s).`
