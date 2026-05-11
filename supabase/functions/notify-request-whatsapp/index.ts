@@ -400,9 +400,21 @@ async function notifyAdmins(input: {
   const numbers = [...new Set(config.adminNumbers)];
   if (!numbers.length) return [];
 
-  const text = buildAdminNotificationMessage(input);
   const results = await Promise.allSettled(
-    numbers.map((number) => sendTextMessage({ to: number, text })),
+    numbers.map((number) => {
+      if (input.notificationType === "requestSigned") {
+        const text = buildAdminNotificationMessage(input);
+        return sendTextMessage({ to: number, text });
+      }
+
+      return sendRequestTemplate({
+        to: number,
+        templateName: WHATSAPP_TEMPLATE_NAMES[input.notificationType],
+        requestCode: input.requestCode,
+        materialType: input.materialType,
+        requestDate: input.requestDate,
+      });
+    }),
   );
 
   return results.map((result, index) => ({
