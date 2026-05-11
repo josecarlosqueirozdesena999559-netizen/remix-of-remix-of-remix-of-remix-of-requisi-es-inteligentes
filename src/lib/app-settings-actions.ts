@@ -30,6 +30,10 @@ function parseNumbers(value: string) {
     .filter((item, index, items) => items.indexOf(item) === index);
 }
 
+function mergeAdminNumbers(previousNumbers: string[], newNumbers: string[]) {
+  return [...new Set([...previousNumbers, ...newNumbers])];
+}
+
 type AdminWelcomeNotification = {
   to: string;
   ok: boolean;
@@ -116,8 +120,9 @@ export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" })
       data && typeof data === "object" && typeof (data as any).numbers === "string"
         ? (data as any).numbers
         : "";
-    const numbers = parseNumbers(rawNumbers);
     const previousNumbers = await getSavedAdminNumbers();
+    const parsedNumbers = parseNumbers(rawNumbers);
+    const numbers = mergeAdminNumbers(previousNumbers, parsedNumbers);
     const newNumbers = numbers.filter((number) => !previousNumbers.includes(number));
 
     const { error } = await (supabaseAdmin as any)
