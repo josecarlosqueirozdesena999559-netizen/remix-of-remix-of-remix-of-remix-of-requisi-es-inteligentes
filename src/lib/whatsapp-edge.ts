@@ -1,6 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
-type RequestNotificationType = "requestCreated" | "outputAttached" | "readyForPickup";
+type RequestNotificationType =
+  | "requestCreated"
+  | "requestSigned"
+  | "outputAttached"
+  | "readyForPickup";
 
 export async function notifyRequestByWhatsApp(input: {
   requestId: string;
@@ -27,5 +31,11 @@ export async function notifyRequestByWhatsApp(input: {
     skipped?: boolean;
     reason?: string;
     messageId?: string;
+    adminNotifications?: Array<{
+      to: string;
+      ok: boolean;
+      messageId?: string;
+      error?: string;
+    }>;
   };
 }

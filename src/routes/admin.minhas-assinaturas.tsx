@@ -18,6 +18,7 @@ import {
 } from "@/lib/request-return-feedback";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { getCurrentUserProfile } from "@/lib/user-profile";
+import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/minhas-assinaturas")({
   component: MinhasAssinaturasPage,
@@ -264,6 +265,15 @@ function MinhasAssinaturasPage() {
       ]);
 
       setMessage(isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.");
+      try {
+        await notifyRequestByWhatsApp({
+          requestId: request.id,
+          notificationType: "requestSigned",
+        });
+      } catch (notificationError) {
+        console.error(notificationError);
+      }
+
       setRequests((current) => current.filter((item) => item.id !== request.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar PDF assinado.");

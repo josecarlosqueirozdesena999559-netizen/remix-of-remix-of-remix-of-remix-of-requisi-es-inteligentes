@@ -16,7 +16,8 @@ const WHATSAPP_TEMPLATE_NAMES = {
   readyForPickup: "pedido_pronto_retirada",
 } as const;
 
-type NotificationType = keyof typeof WHATSAPP_TEMPLATE_NAMES;
+type UserTemplateNotificationType = keyof typeof WHATSAPP_TEMPLATE_NAMES;
+type NotificationType = UserTemplateNotificationType | "requestSigned";
 
 type AppSetting = {
   key: string;
@@ -56,7 +57,8 @@ function getNotificationType(value: unknown): NotificationType {
   if (
     value === "requestCreated" ||
     value === "outputAttached" ||
-    value === "readyForPickup"
+    value === "readyForPickup" ||
+    value === "requestSigned"
   ) {
     return value;
   }
@@ -110,7 +112,7 @@ async function getWhatsAppSettings() {
   const envGraphApiVersion = Deno.env.get("WHATSAPP_GRAPH_API_VERSION")?.trim();
 
   const rows = (await supabaseFetch(
-    "app_settings?select=key,value&key=in.(WHATSAPP_ACCESS_TOKEN,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_GRAPH_API_VERSION)",
+    "app_settings?select=key,value&key=in.(WHATSAPP_ACCESS_TOKEN,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_GRAPH_API_VERSION,WHATSAPP_ADMIN_NUMBERS)",
   )) as AppSetting[];
 
   const settings = new Map(rows.map((row) => [row.key, row.value]));
@@ -120,17 +122,21 @@ async function getWhatsAppSettings() {
     settings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
     envGraphApiVersion ||
     DEFAULT_GRAPH_API_VERSION;
+  const adminNumbers = (settings.get("WHATSAPP_ADMIN_NUMBERS") || "")
+    .split(",")
+    .map((number) => number.trim())
+    .filter(Boolean);
 
   if (!accessToken || !phoneNumberId) {
     throw new Error("WhatsApp nao configurado.");
   }
 
-  return { accessToken, phoneNumberId, graphApiVersion };
+  return { accessToken, phoneNumberId, graphApiVersion, adminNumbers };
 }
 
 async function getRequestNotificationData(requestId: string) {
   const requests = (await supabaseFetch(
-    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf&id=eq.${encodeURIComponent(
+    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&id=eq.${encodeURIComponent(
       requestId,
     )}&limit=1`,
   )) as Array<{
@@ -140,6 +146,7 @@ async function getRequestNotificationData(requestId: string) {
     data: string | null;
     solicitante: string | null;
     solicitante_cpf: string | null;
+    status: string | null;
   }>;
 
   const requisicao = requests[0];
@@ -174,7 +181,48 @@ async function getRequestNotificationData(requestId: string) {
     materialType: requisicao.categoria,
     requestDate: requisicao.data,
     requesterName: user?.nome || requisicao.solicitante,
+    status: requisicao.status,
   };
+}
+
+async function sendTextMessage(input: { to: string; text: string }) {
+  const config = await getWhatsAppSettings();
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizeWhatsAppPhoneNumber(input.to),
+        type: "text",
+        text: {
+          preview_url: false,
+          body: input.text,
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = payload?.error;
+    throw new Error(
+      [
+        error?.message || `Erro ${response.status} ao enviar WhatsApp.`,
+        error?.code ? `code=${error.code}` : "",
+        error?.error_subcode ? `subcode=${error.error_subcode}` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
+  return payload?.messages?.[0]?.id as string | undefined;
 }
 
 async function sendRequestTemplate(input: {
@@ -233,6 +281,59 @@ async function sendRequestTemplate(input: {
   return payload?.messages?.[0]?.id as string | undefined;
 }
 
+function getAdminNotificationTitle(notificationType: NotificationType, status?: string | null) {
+  if (notificationType === "requestCreated") return "Nova requisicao gerada";
+  if (notificationType === "requestSigned") {
+    return status === "concluido" ? "Saida assinada pelo usuario" : "Requisicao assinada pelo usuario";
+  }
+  if (notificationType === "outputAttached") return "Saida anexada pelo admin";
+  if (notificationType === "readyForPickup") return "Pedido liberado para retirada";
+  return "Atualizacao de requisicao";
+}
+
+function buildAdminNotificationMessage(input: {
+  notificationType: NotificationType;
+  requestCode: string;
+  materialType: string | null;
+  requestDate: string | null;
+  requesterName: string | null | undefined;
+  status?: string | null;
+}) {
+  return [
+    getAdminNotificationTitle(input.notificationType, input.status),
+    "",
+    `Usuario: ${valueOrDash(input.requesterName)}`,
+    `Tipo: ${valueOrDash(input.materialType)}`,
+    `Numero: ${valueOrDash(input.requestCode)}`,
+    `Data: ${valueOrDash(input.requestDate)}`,
+  ].join("\n");
+}
+
+async function notifyAdmins(input: {
+  notificationType: NotificationType;
+  requestCode: string;
+  materialType: string | null;
+  requestDate: string | null;
+  requesterName: string | null | undefined;
+  status?: string | null;
+}) {
+  const config = await getWhatsAppSettings();
+  const numbers = [...new Set(config.adminNumbers)];
+  if (!numbers.length) return [];
+
+  const text = buildAdminNotificationMessage(input);
+  const results = await Promise.allSettled(
+    numbers.map((number) => sendTextMessage({ to: number, text })),
+  );
+
+  return results.map((result, index) => ({
+    to: numbers[index],
+    ok: result.status === "fulfilled",
+    messageId: result.status === "fulfilled" ? result.value : undefined,
+    error: result.status === "rejected" ? String(result.reason?.message || result.reason) : undefined,
+  }));
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") {
@@ -253,26 +354,48 @@ Deno.serve(async (request) => {
     const notificationType = getNotificationType(body.notificationType);
     const notificationData = await getRequestNotificationData(requestId);
 
-    if (!notificationData.whatsapp) {
-      return jsonResponse({
-        ok: true,
-        skipped: true,
-        reason: "Usuario sem WhatsApp cadastrado.",
-      });
+    let skipped = false;
+    let reason = "";
+    let messageId: string | undefined;
+
+    if (notificationType !== "requestSigned") {
+      if (!notificationData.whatsapp) {
+        skipped = true;
+        reason = "Usuario sem WhatsApp cadastrado.";
+      } else {
+        try {
+          messageId = await sendRequestTemplate({
+            to: notificationData.whatsapp,
+            templateName: WHATSAPP_TEMPLATE_NAMES[notificationType],
+            requestCode: notificationData.requestCode,
+            materialType: notificationData.materialType,
+            requestDate: notificationData.requestDate,
+          });
+        } catch (templateError) {
+          skipped = true;
+          reason =
+            templateError instanceof Error
+              ? templateError.message
+              : "Nao foi possivel notificar o usuario.";
+        }
+      }
     }
 
-    const messageId = await sendRequestTemplate({
-      to: notificationData.whatsapp,
-      templateName: WHATSAPP_TEMPLATE_NAMES[notificationType],
+    const adminNotifications = await notifyAdmins({
+      notificationType,
       requestCode: notificationData.requestCode,
       materialType: notificationData.materialType,
       requestDate: notificationData.requestDate,
+      requesterName: notificationData.requesterName,
+      status: notificationData.status,
     });
 
     return jsonResponse({
       ok: true,
-      skipped: false,
+      skipped,
+      reason,
       messageId,
+      adminNotifications,
       requesterName: valueOrDash(notificationData.requesterName),
     });
   } catch (error) {
