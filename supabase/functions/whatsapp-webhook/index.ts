@@ -56,7 +56,38 @@ type RequisicaoRow = {
   solicitante: string | null;
   solicitante_cpf: string | null;
   status: string;
+  signed_attachment: unknown;
+  admin_attachment: unknown;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function hasAttachmentFile(value: unknown) {
+  if (!isRecord(value)) return false;
+
+  return Boolean(
+    typeof value.storagePath === "string" ||
+      typeof value.fileName === "string" ||
+      typeof value.url === "string" ||
+      typeof value.publicUrl === "string" ||
+      typeof value.signedUrl === "string",
+  );
+}
+
+function hasOutputAttachment(requisicao: RequisicaoRow) {
+  if (hasAttachmentFile(requisicao.admin_attachment)) return true;
+
+  if (isRecord(requisicao.signed_attachment)) {
+    if (hasAttachmentFile(requisicao.signed_attachment.output)) return true;
+    if (!("request" in requisicao.signed_attachment) && requisicao.status === "concluido") {
+      return hasAttachmentFile(requisicao.signed_attachment);
+    }
+  }
+
+  return false;
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -403,7 +434,7 @@ async function decodeQrFromImage(bytes: Uint8Array) {
 async function getRequestByQrPayload(qrPayloadText: string) {
   const qrPayload = parseQrPayload(qrPayloadText);
   const rows = (await supabaseFetch(
-    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&id=eq.${encodeURIComponent(
+    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
       qrPayload.requestId,
     )}&limit=1`,
   )) as RequisicaoRow[];
@@ -487,6 +518,12 @@ function assertRequestCanBeMarkedReady(requisicao: RequisicaoRow) {
   if (requisicao.status === "pronto_retirada") {
     throw new Error(`Pedido ${requestCode} ja esta marcado como pronto para retirada.`);
   }
+
+  if (!hasOutputAttachment(requisicao)) {
+    throw new Error(
+      `Pedido ${requestCode} ainda nao tem documento de saida anexado. Anexe a saida antes de confirmar retirada.`,
+    );
+  }
 }
 
 async function getRequestByManualCode(rawCode: string) {
@@ -494,7 +531,7 @@ async function getRequestByManualCode(rawCode: string) {
   if (!code) throw new Error("Digite o codigo que aparece abaixo do QR Code.");
 
   const rowsByCode = (await supabaseFetch(
-    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&saida_codigo=eq.${encodeURIComponent(
+    `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&saida_codigo=eq.${encodeURIComponent(
       code,
     )}&limit=1`,
   )) as RequisicaoRow[];
@@ -503,7 +540,7 @@ async function getRequestByManualCode(rawCode: string) {
 
   if (!requisicao && isUuid(code)) {
     const rowsById = (await supabaseFetch(
-      `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status&id=eq.${encodeURIComponent(
+      `requisicoes?select=id,saida_codigo,categoria,data,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
         code,
       )}&limit=1`,
     )) as RequisicaoRow[];
@@ -523,10 +560,18 @@ async function findRequesterWhatsApp(input: {
   solicitante: string | null;
 }) {
   if (input.solicitanteCpf) {
+    const cpfDigits = input.solicitanteCpf.replace(/\D/g, "");
     const users = (await supabaseFetch(
       `usuarios?select=nome,whatsapp&cpf=eq.${encodeURIComponent(input.solicitanteCpf)}&limit=1`,
     )) as Array<{ nome: string | null; whatsapp: string | null }>;
     if (users[0]) return users[0];
+
+    if (cpfDigits && cpfDigits !== input.solicitanteCpf) {
+      const usersByDigits = (await supabaseFetch(
+        `usuarios?select=nome,whatsapp&cpf=eq.${encodeURIComponent(cpfDigits)}&limit=1`,
+      )) as Array<{ nome: string | null; whatsapp: string | null }>;
+      if (usersByDigits[0]) return usersByDigits[0];
+    }
   }
 
   if (input.solicitante) {
@@ -534,6 +579,13 @@ async function findRequesterWhatsApp(input: {
       `usuarios?select=nome,whatsapp&nome=eq.${encodeURIComponent(input.solicitante)}&limit=1`,
     )) as Array<{ nome: string | null; whatsapp: string | null }>;
     if (users[0]) return users[0];
+
+    const usersByName = (await supabaseFetch(
+      `usuarios?select=nome,whatsapp&nome=ilike.${encodeURIComponent(
+        `%${input.solicitante.trim()}%`,
+      )}&limit=1`,
+    )) as Array<{ nome: string | null; whatsapp: string | null }>;
+    if (usersByName[0]) return usersByName[0];
   }
 
   return undefined;
@@ -630,7 +682,7 @@ async function handleConfirmation(from: string) {
 
   const pending = JSON.parse(pendingRaw) as PendingConfirmation;
   const ageMs = Date.now() - Date.parse(pending.createdAt);
-  if (!Number.isFinite(ageMs) || ageMs > 15 * 60 * 1000) {
+  if (!Number.isFinite(ageMs) || ageMs > 24 * 60 * 60 * 1000) {
     await deletePendingConfirmation(from);
     await sendTextMessage({
       to: from,
