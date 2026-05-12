@@ -9,5 +9,8 @@ verify_jwt = false
 [functions.notify-request-whatsapp]
 verify_jwt = false
 
+[functions.daily-admin-welcome-whatsapp]
+verify_jwt = false
+
 [functions.whatsapp-webhook]
 verify_jwt = false
