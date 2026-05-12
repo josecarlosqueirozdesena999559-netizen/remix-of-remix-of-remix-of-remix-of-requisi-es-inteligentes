@@ -97,6 +97,16 @@ function hasOutputAttachment(requisicao: RequisicaoRow) {
   return false;
 }
 
+function shouldUseAdminPendingOutputCode(requisicao: RequisicaoRow) {
+  return (
+    !hasOutputAttachment(requisicao) &&
+    (requisicao.status === "recebido" ||
+      requisicao.status === "requisicao_assinada" ||
+      requisicao.status === "concluido" ||
+      requisicao.status === "aguardando_assinatura_saida")
+  );
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -641,6 +651,36 @@ async function getRequestByManualCode(rawCode: string) {
   return buildRequestLookupResult(requisicao);
 }
 
+async function getRequestByAdminPendingOutputCode(rawCode: string) {
+  const code = normalizeManualCode(rawCode);
+  if (!code) throw new Error("Digite o codigo que aparece abaixo do QR Code.");
+
+  const pendingOutputRequests = (await supabaseFetch(
+    "requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&order=created_at.asc",
+  )) as RequisicaoRow[];
+  const matchingPendingOutputRequestId = [...buildRequestCodes(
+    pendingOutputRequests.filter(shouldUseAdminPendingOutputCode),
+  ).entries()].find(([, requestCode]) => requestCode === code)?.[0];
+
+  if (!matchingPendingOutputRequestId) {
+    throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
+  }
+
+  const rowsByPendingOutputCode = (await supabaseFetch(
+    `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
+      matchingPendingOutputRequestId,
+    )}&limit=1`,
+  )) as RequisicaoRow[];
+  const requisicao = rowsByPendingOutputCode[0];
+
+  if (!requisicao) {
+    throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
+  }
+
+  assertRequestCanBeMarkedReady(requisicao);
+  return buildRequestLookupResult(requisicao);
+}
+
 async function findRequesterWhatsApp(input: {
   solicitanteCpf: string | null;
   solicitante: string | null;
@@ -729,9 +769,39 @@ function buildConfirmationMessage(pending: PendingConfirmation) {
   ].join("\n");
 }
 
+function buildConfirmationInstructionMessage(pending: PendingConfirmation) {
+  return [
+    `Se o botão "Confirmar" não aparecer, responda CONFIRMAR para liberar o pedido ${pending.request.requestCode}.`,
+    "Depois da confirmação, eu aviso aqui se o usuário foi notificado no WhatsApp ou se houve algum impedimento.",
+  ].join("\n");
+}
+
+function buildConfirmationFallbackMessage(pending: PendingConfirmation) {
+  return [buildConfirmationMessage(pending), "", buildConfirmationInstructionMessage(pending)].join(
+    "\n",
+  );
+}
+
 async function savePendingAndAskConfirmation(from: string, pending: PendingConfirmation) {
   await upsertPendingConfirmation(from, pending);
-  await sendConfirmationButtonMessage({ to: from, pending });
+  let buttonSent = false;
+
+  try {
+    await sendConfirmationButtonMessage({ to: from, pending });
+    buttonSent = true;
+  } catch (_error) {
+    await sendTextMessage({
+      to: from,
+      text: buildConfirmationFallbackMessage(pending),
+    });
+  }
+
+  if (buttonSent) {
+    await sendTextMessage({
+      to: from,
+      text: buildConfirmationInstructionMessage(pending),
+    });
+  }
 }
 
 async function handleImageMessage(from: string, mediaId: string) {
@@ -751,7 +821,22 @@ async function handleTextMessage(from: string, text: string) {
   const normalized = text.trim().toLowerCase();
 
   if (!["confirmar", "confirma", "sim"].includes(normalized)) {
-    const { requisicao, request } = await getRequestByManualCode(text);
+    let lookupResult: Awaited<ReturnType<typeof getRequestByManualCode>>;
+
+    try {
+      lookupResult = await getRequestByManualCode(text);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes("COD abaixo do QR Code")
+      ) {
+        throw error;
+      }
+
+      lookupResult = await getRequestByAdminPendingOutputCode(text);
+    }
+
+    const { requisicao, request } = lookupResult;
     await savePendingAndAskConfirmation(from, {
       qrPayload: buildQrPayloadTextFromRequest(requisicao),
       createdAt: new Date().toISOString(),
