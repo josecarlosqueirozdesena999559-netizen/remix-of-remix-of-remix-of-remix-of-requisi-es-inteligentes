@@ -38,8 +38,8 @@ function Index() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#23324a] px-4">
-        <div className="flex flex-col items-center gap-3 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-slate-200 px-4">
+        <div className="flex flex-col items-center gap-3 text-primary">
           <Loader2 className="h-10 w-10 animate-spin" />
           <p className="text-sm">Carregando...</p>
         </div>
@@ -48,8 +48,8 @@ function Index() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#23324a] px-4 py-8">
-      <Card className="w-full max-w-sm rounded-md border-slate-200 bg-white p-6 shadow-xl shadow-slate-950/25">
+    <div className="flex min-h-screen items-center justify-center bg-slate-200 px-4 py-8">
+      <Card className="w-full max-w-sm rounded-md border-slate-300 bg-white p-6 shadow-lg shadow-slate-400/30">
         <h1 className="mb-6 text-center text-xl font-semibold text-primary">Acesso ao Sistema</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
