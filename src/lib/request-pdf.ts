@@ -1,13 +1,12 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { createRequestQrDataUrl } from "@/lib/request-qr";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
 const PDF_PAGE_BOTTOM_MARGIN = 16;
-const PDF_SIGNATURE_SECTION_HEIGHT = 74;
-const PDF_SIGNATURE_SECTION_GAP = 6;
+const PDF_SIGNATURE_SECTION_HEIGHT = 82;
+const PDF_SIGNATURE_SECTION_GAP = 10;
 const PDF_SIGNATURE_PAGE_START_Y = 100;
 
 const WAREHOUSE_RESPONSIBLE_NAME = "JOSE CARLOS QUEIROZ DE SENA";
@@ -28,6 +27,9 @@ export interface RequestPdfItem {
   need?: string | number | null;
   qtdNecessaria?: string | number | null;
   quantidade_solicitada?: string | number | null;
+  categoria?: string | null;
+  subcategoria?: string | null;
+  request_section?: string | null;
 }
 
 export interface RequestPdfData {
@@ -123,18 +125,37 @@ function getActiveRequestItems(items?: RequestPdfItem[] | null) {
   });
 }
 
+function getRequestItemSectionLabel(item: RequestPdfItem) {
+  return String(item.request_section || item.subcategoria || item.categoria || "Sem categoria").trim();
+}
+
 function getRequestItemsForPdf(request: RequestPdfData) {
-  return getActiveRequestItems(request.items).map((rawItem, index) => {
+  const rows: string[][] = [];
+  let itemIndex = 1;
+  let currentSection = "";
+
+  getActiveRequestItems(request.items).forEach((rawItem) => {
+    const sectionLabel = getRequestItemSectionLabel(rawItem) || "Sem categoria";
     const item = normalizeRequestItem(rawItem);
-    return [
-      toPdfAscii(index + 1),
+
+    if (sectionLabel !== currentSection) {
+      currentSection = sectionLabel;
+      rows.push(["", `Categoria: ${toPdfAscii(sectionLabel)}`, "", "", "", ""]);
+    }
+
+    rows.push([
+      toPdfAscii(itemIndex),
       toPdfAscii(getRequestItemPdfDescription(item)),
       toPdfAscii(item.unit || "-"),
       toPdfAscii(item.stock ?? item.qtdDisponivel ?? "-"),
       toPdfAscii(getRequestedQuantity(item) ?? "-"),
       " ",
-    ];
+    ]);
+
+    itemIndex += 1;
   });
+
+  return rows;
 }
 
 async function loadPdfLogoDataUrl() {
@@ -236,7 +257,7 @@ function drawRequestPdfHeader(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
-  doc.text(toPdfAscii(`Categoria: ${String(request.categoria || "-")}`), PDF_MARGIN, 72);
+  doc.text(toPdfAscii(`Categorias: ${String(request.categoria || "-")}`), PDF_MARGIN, 72);
   doc.text(toPdfAscii(`Programa: ${programa}`), PDF_MARGIN, 79);
 
   const cpf = toPdfAscii(request.requesterDisplayCpf || request.solicitante_cpf || "-");
@@ -249,6 +270,7 @@ function drawSignatureBlock(
   doc: jsPDF,
   centerX: number,
   topY: number,
+  title: string,
   name: string,
   cpf: string,
   roleLabel: string,
@@ -257,6 +279,11 @@ function drawSignatureBlock(
   const boxWidth = 76;
   const boxHeight = 18;
   const boxX = centerX - boxWidth / 2;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfAscii(title), centerX, topY - 6, { align: "center" });
 
   if (showGovLabel) {
     doc.setDrawColor(190, 198, 210);
@@ -276,12 +303,12 @@ function drawSignatureBlock(
 
   doc.setDrawColor(120, 120, 120);
   doc.setLineWidth(0.35);
-  doc.line(centerX - 40, topY + 30, centerX + 40, topY + 30);
+  doc.line(centerX - 34, topY + 30, centerX + 34, topY + 30);
 
   doc.setTextColor(20, 24, 28);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 80 });
+  doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 68 });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.9);
@@ -289,45 +316,12 @@ function drawSignatureBlock(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
-  doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 84 });
-}
-
-function drawRequestQrCode(
-  doc: jsPDF,
-  qrDataUrl: string,
-  requestCode: string,
-  centerX: number,
-  topY: number,
-) {
-  const size = 18;
-
-  doc.setDrawColor(190, 198, 210);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(centerX - size / 2 - 2, topY - 2, size + 4, size + 18, 1.5, 1.5);
-  doc.addImage(qrDataUrl, "PNG", centerX - size / 2, topY, size, size);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.8);
-  doc.setTextColor(71, 85, 105);
-  doc.text(toPdfAscii("QR CONFERENCIA"), centerX, topY + size + 5, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.2);
-  doc.text(toPdfAscii("Almoxarifado"), centerX, topY + size + 9, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.2);
-  doc.text(toPdfAscii(`COD: ${requestCode}`), centerX, topY + size + 14, {
-    align: "center",
-    maxWidth: size + 2,
-  });
-  doc.setTextColor(20, 24, 28);
+  doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 72 });
 }
 
 export async function createRequestPdfBlob(request: RequestPdfData) {
   const doc = new jsPDF() as JsPdfWithAutoTable;
   const logoDataUrl = await loadPdfLogoDataUrl();
-  const qrDataUrl = await createRequestQrDataUrl(request);
   const bodyRows = getRequestItemsForPdf(request);
 
   doc.setProperties({
@@ -383,6 +377,19 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
       cellPadding: 1.8,
       font: "helvetica",
     },
+    didParseCell: (hookData) => {
+      if (hookData.section !== "body") return;
+      const row = hookData.row.raw as string[] | undefined;
+      if (!row || row[0] !== "" || !String(row[1] || "").startsWith("Categoria:")) return;
+
+      hookData.cell.styles.fillColor = [237, 242, 247];
+      hookData.cell.styles.textColor = [31, 41, 55];
+      hookData.cell.styles.fontStyle = "bold";
+
+      if (hookData.column.index !== 1) {
+        hookData.cell.text = [""];
+      }
+    },
   });
 
   const finalY = doc.lastAutoTable?.finalY ?? PDF_TABLE_START_Y;
@@ -406,10 +413,19 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     ? PDF_SIGNATURE_PAGE_START_Y
     : finalY + PDF_SIGNATURE_SECTION_GAP;
   doc.setPage(finalTotalPages);
+  const leftSignatureX = PDF_MARGIN + 38;
+  const rightSignatureX = pageWidth - PDF_MARGIN - 38;
+  const dividerTopY = footerTopY - 10;
+
+  doc.setDrawColor(215, 219, 224);
+  doc.setLineWidth(0.3);
+  doc.line(pageWidth / 2, dividerTopY, pageWidth / 2, footerTopY + 52);
+
   drawSignatureBlock(
     doc,
-    pageWidth - PDF_MARGIN - 80,
+    rightSignatureX,
     footerTopY,
+    "Recebido por",
     WAREHOUSE_RESPONSIBLE_NAME,
     WAREHOUSE_RESPONSIBLE_CPF,
     WAREHOUSE_RESPONSIBLE_ROLE,
@@ -417,18 +433,12 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
   );
   drawSignatureBlock(
     doc,
-    PDF_MARGIN + 40,
+    leftSignatureX,
     footerTopY,
+    "Solicitado por",
     request.requesterDisplayName || request.solicitante || "-",
     request.requesterDisplayCpf || request.solicitante_cpf || "-",
     request.requesterDisplayRole || request.solicitante_funcao || "Solicitante do setor",
-  );
-  drawRequestQrCode(
-    doc,
-    qrDataUrl,
-    getRequestCode(request),
-    pageWidth - PDF_MARGIN - 18,
-    footerTopY + 8,
   );
 
   return doc.output("blob");

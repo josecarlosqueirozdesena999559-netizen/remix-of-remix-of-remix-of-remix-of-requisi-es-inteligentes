@@ -133,8 +133,7 @@ function MinhasAssinaturasPage() {
           .select(`${baseSelect},return_reason,return_target`)
           .eq("solicitante_cpf", profile.cpf)
           .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
-          .order("updated_at", { ascending: false })
-          .limit(20),
+          .order("updated_at", { ascending: false }),
       ]);
 
       let { data, error } = requestsResult;
@@ -151,8 +150,7 @@ function MinhasAssinaturasPage() {
           .select(baseSelect)
           .eq("solicitante_cpf", profile.cpf)
           .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
-          .order("updated_at", { ascending: false })
-          .limit(20);
+          .order("updated_at", { ascending: false });
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,

@@ -94,8 +94,7 @@ function ControleAssinaturasPage() {
             .from("requisicoes")
             .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status")
             .in("status", [...pendingStatuses])
-            .order("updated_at", { ascending: false })
-            .limit(20),
+            .order("updated_at", { ascending: false }),
           supabase
             .from("setores")
             .select("nome,programa")
