@@ -248,7 +248,7 @@ function AdminLayout() {
                 className={itemCls}
                 activeProps={{ className: `${itemCls} ${activeCls}` }}
               >
-                Assinados
+                Documentos Assinados
               </Link>
             </>
           )}

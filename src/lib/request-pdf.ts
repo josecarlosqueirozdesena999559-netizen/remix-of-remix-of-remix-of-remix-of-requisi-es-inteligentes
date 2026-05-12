@@ -125,37 +125,19 @@ function getActiveRequestItems(items?: RequestPdfItem[] | null) {
   });
 }
 
-function getRequestItemSectionLabel(item: RequestPdfItem) {
-  return String(item.request_section || item.subcategoria || item.categoria || "Sem categoria").trim();
-}
-
 function getRequestItemsForPdf(request: RequestPdfData) {
-  const rows: string[][] = [];
-  let itemIndex = 1;
-  let currentSection = "";
-
-  getActiveRequestItems(request.items).forEach((rawItem) => {
-    const sectionLabel = getRequestItemSectionLabel(rawItem) || "Sem categoria";
+  return getActiveRequestItems(request.items).map((rawItem, index) => {
     const item = normalizeRequestItem(rawItem);
 
-    if (sectionLabel !== currentSection) {
-      currentSection = sectionLabel;
-      rows.push(["", `Categoria: ${toPdfAscii(sectionLabel)}`, "", "", "", ""]);
-    }
-
-    rows.push([
-      toPdfAscii(itemIndex),
+    return [
+      toPdfAscii(index + 1),
       toPdfAscii(getRequestItemPdfDescription(item)),
       toPdfAscii(item.unit || "-"),
       toPdfAscii(item.stock ?? item.qtdDisponivel ?? "-"),
       toPdfAscii(getRequestedQuantity(item) ?? "-"),
       " ",
-    ]);
-
-    itemIndex += 1;
+    ];
   });
-
-  return rows;
 }
 
 async function loadPdfLogoDataUrl() {
@@ -377,19 +359,6 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
       cellPadding: 1.8,
       font: "helvetica",
     },
-    didParseCell: (hookData) => {
-      if (hookData.section !== "body") return;
-      const row = hookData.row.raw as string[] | undefined;
-      if (!row || row[0] !== "" || !String(row[1] || "").startsWith("Categoria:")) return;
-
-      hookData.cell.styles.fillColor = [237, 242, 247];
-      hookData.cell.styles.textColor = [31, 41, 55];
-      hookData.cell.styles.fontStyle = "bold";
-
-      if (hookData.column.index !== 1) {
-        hookData.cell.text = [""];
-      }
-    },
   });
 
   const finalY = doc.lastAutoTable?.finalY ?? PDF_TABLE_START_Y;
@@ -415,11 +384,12 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
   doc.setPage(finalTotalPages);
   const leftSignatureX = PDF_MARGIN + 38;
   const rightSignatureX = pageWidth - PDF_MARGIN - 38;
-  const dividerTopY = footerTopY - 10;
+  const dividerTopY = footerTopY - 8;
 
-  doc.setDrawColor(215, 219, 224);
-  doc.setLineWidth(0.3);
-  doc.line(pageWidth / 2, dividerTopY, pageWidth / 2, footerTopY + 52);
+  doc.setDrawColor(190, 198, 210);
+  doc.setLineWidth(0.45);
+  doc.line(PDF_MARGIN, dividerTopY, pageWidth - PDF_MARGIN, dividerTopY);
+  doc.line(pageWidth / 2, dividerTopY + 4, pageWidth / 2, footerTopY + 52);
 
   drawSignatureBlock(
     doc,

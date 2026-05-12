@@ -136,8 +136,8 @@ function MeusAssinadosPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuário / Assinados</p>
-        <h2 className="text-2xl text-foreground">Meus assinados</h2>
+        <p className="text-sm text-muted-foreground">Usuario / Documentos assinados</p>
+        <h2 className="text-2xl text-foreground">Documentos assinados</h2>
       </div>
 
       <Card className="p-4">
@@ -210,3 +210,4 @@ function MeusAssinadosPage() {
     </div>
   );
 }
+
