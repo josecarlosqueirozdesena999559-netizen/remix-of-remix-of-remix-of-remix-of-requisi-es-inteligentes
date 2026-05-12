@@ -61,13 +61,6 @@ type RequisicaoRow = {
   admin_attachment: unknown;
 };
 
-type RequestCodeSource = {
-  id: string;
-  saida_codigo: string | null;
-  data: string | null;
-  created_at: string | null;
-};
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
@@ -129,45 +122,6 @@ function textResponse(body: string, status = 200) {
 
 function valueOrDash(value: string | null | undefined) {
   return value?.trim() || "-";
-}
-
-function parseRequestDate(value?: string | null) {
-  const raw = String(value || "").trim();
-  const brMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (brMatch) {
-    return new Date(Number(brMatch[3]), Number(brMatch[2]) - 1, Number(brMatch[1]));
-  }
-
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-}
-
-function formatRequestCodeDate(value?: string | null) {
-  const date = parseRequestDate(value);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = String(date.getFullYear()).slice(-2);
-
-  return `${day}${month}${year}`;
-}
-
-function buildRequestCodes(requests: RequestCodeSource[]) {
-  const sorted = [...requests].sort((left, right) => {
-    const leftTime = new Date(left.created_at || left.data || "").getTime();
-    const rightTime = new Date(right.created_at || right.data || "").getTime();
-    return leftTime - rightTime || left.id.localeCompare(right.id);
-  });
-
-  return new Map(
-    sorted.map((request, index) => {
-      const sequence = String(index + 1).padStart(3, "0");
-      return [
-        request.id,
-        request.saida_codigo ||
-          `${formatRequestCodeDate(request.data || request.created_at)}${sequence}`,
-      ];
-    }),
-  );
 }
 
 function normalizePhoneNumber(value: string) {
@@ -553,11 +507,13 @@ function buildQrPayloadTextFromRequest(requisicao: RequisicaoRow) {
 }
 
 function normalizeManualCode(value: string) {
-  return value
+  const code = value
     .trim()
     .replace(/^c[oó]digo\s*[:#-]?\s*/i, "")
     .replace(/^cod\s*[:#-]?\s*/i, "")
     .trim();
+
+  return /^\d{1,5}$/.test(code) ? code.padStart(5, "0") : code;
 }
 
 function isUuid(value: string) {
@@ -617,33 +573,6 @@ async function getRequestByManualCode(rawCode: string) {
   }
 
   if (!requisicao) {
-    const requests = (await supabaseFetch(
-      "requisicoes?select=id,saida_codigo,data,created_at&order=created_at.asc",
-    )) as RequestCodeSource[];
-    const matchingRequestId = [...buildRequestCodes(requests).entries()].find(
-      ([, requestCode]) => requestCode === code,
-    )?.[0];
-
-    if (matchingRequestId) {
-      const rowsByGeneratedCode = (await supabaseFetch(
-        `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
-          matchingRequestId,
-        )}&limit=1`,
-      )) as RequisicaoRow[];
-      requisicao = rowsByGeneratedCode[0];
-
-      if (requisicao && !requisicao.saida_codigo?.trim()) {
-        await supabaseFetch(`requisicoes?id=eq.${encodeURIComponent(requisicao.id)}`, {
-          method: "PATCH",
-          headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({ saida_codigo: code }),
-        });
-        requisicao = { ...requisicao, saida_codigo: code };
-      }
-    }
-  }
-
-  if (!requisicao) {
     throw new Error("Código não encontrado. Confira o COD abaixo do QR Code e envie novamente.");
   }
 
@@ -655,25 +584,14 @@ async function getRequestByAdminPendingOutputCode(rawCode: string) {
   const code = normalizeManualCode(rawCode);
   if (!code) throw new Error("Digite o codigo que aparece abaixo do QR Code.");
 
-  const pendingOutputRequests = (await supabaseFetch(
-    "requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&order=created_at.asc",
-  )) as RequisicaoRow[];
-  const matchingPendingOutputRequestId = [...buildRequestCodes(
-    pendingOutputRequests.filter(shouldUseAdminPendingOutputCode),
-  ).entries()].find(([, requestCode]) => requestCode === code)?.[0];
-
-  if (!matchingPendingOutputRequestId) {
-    throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
-  }
-
   const rowsByPendingOutputCode = (await supabaseFetch(
-    `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&id=eq.${encodeURIComponent(
-      matchingPendingOutputRequestId,
+    `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,status,signed_attachment,admin_attachment&saida_codigo=eq.${encodeURIComponent(
+      code,
     )}&limit=1`,
   )) as RequisicaoRow[];
   const requisicao = rowsByPendingOutputCode[0];
 
-  if (!requisicao) {
+  if (!requisicao || !shouldUseAdminPendingOutputCode(requisicao)) {
     throw new Error("Codigo nao encontrado. Confira o COD abaixo do QR Code e envie novamente.");
   }
 
