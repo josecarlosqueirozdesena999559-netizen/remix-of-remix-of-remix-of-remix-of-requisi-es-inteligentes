@@ -6,8 +6,8 @@ const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
 const PDF_PAGE_BOTTOM_MARGIN = 16;
-const PDF_SIGNATURE_SECTION_HEIGHT = 94;
-const PDF_SIGNATURE_SECTION_GAP = 10;
+const PDF_SIGNATURE_SECTION_HEIGHT = 74;
+const PDF_SIGNATURE_SECTION_GAP = 6;
 const PDF_SIGNATURE_PAGE_START_Y = 100;
 
 const WAREHOUSE_RESPONSIBLE_NAME = "JOSE CARLOS QUEIROZ DE SENA";
@@ -299,7 +299,7 @@ function drawRequestQrCode(
   centerX: number,
   topY: number,
 ) {
-  const size = 22;
+  const size = 18;
 
   doc.setDrawColor(190, 198, 210);
   doc.setLineWidth(0.3);
@@ -408,7 +408,7 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
   doc.setPage(finalTotalPages);
   drawSignatureBlock(
     doc,
-    pageWidth - PDF_MARGIN - 40,
+    pageWidth - PDF_MARGIN - 80,
     footerTopY,
     WAREHOUSE_RESPONSIBLE_NAME,
     WAREHOUSE_RESPONSIBLE_CPF,
@@ -427,8 +427,8 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     doc,
     qrDataUrl,
     getRequestCode(request),
-    pageWidth - PDF_MARGIN - 16,
-    footerTopY + 58,
+    pageWidth - PDF_MARGIN - 18,
+    footerTopY + 8,
   );
 
   return doc.output("blob");
