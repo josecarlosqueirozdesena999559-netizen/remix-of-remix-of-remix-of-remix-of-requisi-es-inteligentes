@@ -21,6 +21,7 @@ import {
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   removeAttachmentFile,
+  removeAttachmentFileSafely,
   type AttachmentFile,
 } from "@/lib/attachments";
 import {
@@ -237,12 +238,6 @@ function AssinadasPage() {
 
       if (reviewMode === "devolver") {
         if (reviewTarget === "requisicao") {
-          await Promise.all([
-            removeAttachmentFile(requestAttachment),
-            removeAttachmentFile(outputAttachment),
-            removeAttachmentFile(adminAttachment),
-          ]);
-
           const payload = {
             status: "correcao_requisicao",
             signed_attachment: null,
@@ -268,13 +263,14 @@ function AssinadasPage() {
 
           if (updateError) throw new Error(updateError.message);
 
-          setMessage("Requisição devolvida para correção do usuário.");
-        } else {
           await Promise.all([
-            removeAttachmentFile(outputAttachment),
-            removeAttachmentFile(adminAttachment),
+            removeAttachmentFileSafely(requestAttachment, "request attachment"),
+            removeAttachmentFileSafely(outputAttachment, "output attachment"),
+            removeAttachmentFileSafely(adminAttachment, "admin attachment"),
           ]);
 
+          setMessage("Requisição devolvida para correção do usuário.");
+        } else {
           const payload = {
             status: "recebido",
             signed_attachment: buildSignedAttachmentPayload(reviewingRequest.signed_attachment, {
@@ -301,6 +297,11 @@ function AssinadasPage() {
           }
 
           if (updateError) throw new Error(updateError.message);
+
+          await Promise.all([
+            removeAttachmentFileSafely(outputAttachment, "output attachment"),
+            removeAttachmentFileSafely(adminAttachment, "admin attachment"),
+          ]);
 
           setMessage("Saída devolvida para ajuste do admin.");
         }

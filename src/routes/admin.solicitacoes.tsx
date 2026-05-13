@@ -18,6 +18,7 @@ import {
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   removeAttachmentFile,
+  removeAttachmentFileSafely,
   type AttachmentFile,
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
@@ -336,12 +337,6 @@ function Solicitacoes() {
       const outputAttachment = getOutputSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
       const adminAttachment = getAttachmentFile(reviewingRequest.admin_attachment) as AttachmentFile | null;
 
-      await Promise.all([
-        removeAttachmentFile(requestAttachment),
-        removeAttachmentFile(outputAttachment),
-        removeAttachmentFile(adminAttachment),
-      ]);
-
       const payload = {
         status: reviewMode === "devolver" ? "correcao_requisicao" : "excluida_admin",
         signed_attachment: null,
@@ -366,6 +361,12 @@ function Solicitacoes() {
       }
 
       if (updateError) throw new Error(updateError.message);
+
+      await Promise.all([
+        removeAttachmentFileSafely(requestAttachment, "request attachment"),
+        removeAttachmentFileSafely(outputAttachment, "output attachment"),
+        removeAttachmentFileSafely(adminAttachment, "admin attachment"),
+      ]);
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
       setUploadMessage(

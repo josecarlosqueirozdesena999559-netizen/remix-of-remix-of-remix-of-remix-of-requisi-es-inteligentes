@@ -3,7 +3,11 @@ import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
+import {
+  getRequestSignedAttachment,
+  resolveAttachmentUrl,
+  type AttachmentFile,
+} from "@/lib/attachments";
 import { formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
 import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
 import { resolveRequestForPdf, type RequisicaoPdfRow } from "@/lib/request-resolver";
@@ -15,6 +19,7 @@ export const Route = createFileRoute("/admin/minhas-assinaturas/$requisicaoId/pd
 
 interface Requisicao extends RequisicaoPdfRow {
   admin_attachment: unknown;
+  signed_attachment: unknown;
 }
 
 interface PdfState {
@@ -39,87 +44,96 @@ function MinhaAssinaturaPdfPage() {
       setError(null);
 
       try {
-      const requestResult = await supabase
-        .from("requisicoes")
-        .select(
-          "id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment",
-        )
-        .eq("id", requisicaoId)
-        .maybeSingle();
+        const requestResult = await supabase
+          .from("requisicoes")
+          .select(
+            "id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment,signed_attachment",
+          )
+          .eq("id", requisicaoId)
+          .maybeSingle();
 
-      if (!active) return;
+        if (!active) return;
 
-      if (requestResult.error) {
-        setError(requestResult.error.message || "Erro ao carregar PDF.");
-        setLoading(false);
-        return;
-      }
-
-      if (!requestResult.data) {
-        setError("Requisição não encontrada.");
-        setLoading(false);
-        return;
-      }
-
-      const request = requestResult.data as Requisicao;
-
-      if (request.status === "aguardando_assinatura_saida") {
-        const url = await resolveAttachmentUrl(request.admin_attachment as AttachmentFile | null);
-
-        if (!url) {
-          setError("Documento de saída ainda não foi anexado pelo admin.");
+        if (requestResult.error) {
+          setError(requestResult.error.message || "Erro ao carregar PDF.");
           setLoading(false);
+          return;
+        }
+
+        if (!requestResult.data) {
+          setError("Requisição não encontrada.");
+          setLoading(false);
+          return;
+        }
+
+        const request = requestResult.data as Requisicao;
+
+        if (request.status === "aguardando_assinatura_saida") {
+          const outputUrl = await resolveAttachmentUrl(request.admin_attachment as AttachmentFile | null);
+
+          if (outputUrl) {
+            setPdf({
+              title: "Documento de saída",
+              fileName: `Saída-${request.saida_codigo || request.id}.pdf`,
+              url: outputUrl,
+            });
+            setLoading(false);
+            return;
+          }
+
+          const requestSignedUrl = await resolveAttachmentUrl(
+            getRequestSignedAttachment(request.signed_attachment, request.status),
+          );
+
+          if (requestSignedUrl) {
+            setPdf({
+              title: `Requisição ${request.saida_codigo || request.id}`,
+              fileName: getRequestFileName(request.saida_codigo || request.id),
+              url: requestSignedUrl,
+            });
+            setLoading(false);
+            return;
+          }
+        }
+
+        const code =
+          request.saida_codigo || `${formatRequestCodeDate(request.data || request.created_at)}001`;
+
+        if (!request.saida_codigo) {
+          const { error: updateError } = await supabase
+            .from("requisicoes")
+            .update({ saida_codigo: code })
+            .eq("id", request.id);
+
+          if (updateError) {
+            setError(updateError.message);
+            setLoading(false);
+            return;
+          }
+        }
+
+        const blob = await createRequestPdfBlob(
+          await resolveRequestForPdf(
+            {
+              ...request,
+              items: request.items as RequestPdfItem[] | null,
+            },
+            code,
+          ),
+        );
+        createdUrl = URL.createObjectURL(blob);
+
+        if (!active) {
+          URL.revokeObjectURL(createdUrl);
           return;
         }
 
         setPdf({
-          title: "Documento de saída",
-          fileName: `Saída-${request.saida_codigo || request.id}.pdf`,
-          url,
+          title: `Requisição ${code}`,
+          fileName: getRequestFileName(code),
+          url: createdUrl,
         });
         setLoading(false);
-        return;
-      }
-
-      const code =
-        request.saida_codigo ||
-        `${formatRequestCodeDate(request.data || request.created_at)}001`;
-
-      if (!request.saida_codigo) {
-        const { error } = await supabase
-          .from("requisicoes")
-          .update({ saida_codigo: code })
-          .eq("id", request.id);
-
-        if (error) {
-          setError(error.message);
-          setLoading(false);
-          return;
-        }
-      }
-
-      const blob = await createRequestPdfBlob(
-        await resolveRequestForPdf(
-          {
-            ...request,
-            items: request.items as RequestPdfItem[] | null,
-          },
-          code,
-        ),
-      );
-      createdUrl = URL.createObjectURL(blob);
-
-      if (!active) {
-        URL.revokeObjectURL(createdUrl);
-        return;
-      }
-
-      setPdf({
-        title: `Requisição ${code}`,
-        fileName: getRequestFileName(code),
-        url: createdUrl,
-      });
-      setLoading(false);
       } catch (err) {
         if (!active) return;
 

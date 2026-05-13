@@ -30,6 +30,7 @@ function AdminLayout() {
   const [whatsapp, setWhatsapp] = useState("");
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
+  const [whatsappNotice, setWhatsappNotice] = useState<string | null>(null);
   const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
 
   useEffect(() => {
@@ -97,6 +98,7 @@ function AdminLayout() {
 
     setSavingWhatsApp(true);
     setWhatsappError(null);
+    setWhatsappNotice(null);
 
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -127,7 +129,11 @@ function AdminLayout() {
       setWhatsappConfirmed(true);
       setProfile((current) => (current ? { ...current, whatsapp: savedWhatsApp } : current));
       setWhatsapp(savedWhatsApp);
-      if (result.welcomeError) console.error(result.welcomeError);
+      setWhatsappNotice(
+        result.welcomeError
+          ? "WhatsApp salvo, mas a mensagem de boas-vindas nao foi entregue agora."
+          : "WhatsApp salvo com sucesso.",
+      );
     } catch (err) {
       setWhatsappError(
         err instanceof Error ? err.message : "Erro ao salvar WhatsApp. Tente novamente.",
@@ -244,6 +250,13 @@ function AdminLayout() {
                 Minhas Assinaturas
               </Link>
               <Link
+                to="/admin/minhas-requisicoes"
+                className={itemCls}
+                activeProps={{ className: `${itemCls} ${activeCls}` }}
+              >
+                Minhas Requisições
+              </Link>
+              <Link
                 to="/admin/meus-assinados"
                 className={itemCls}
                 activeProps={{ className: `${itemCls} ${activeCls}` }}
@@ -300,6 +313,7 @@ function AdminLayout() {
             </div>
 
             {whatsappError && <p className="text-sm text-destructive">{whatsappError}</p>}
+            {whatsappNotice && <p className="text-sm text-muted-foreground">{whatsappNotice}</p>}
 
             <Button type="submit" className="w-full gap-2" disabled={savingWhatsApp}>
               {savingWhatsApp ? (

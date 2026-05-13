@@ -119,6 +119,11 @@ export async function resolveAttachmentUrl(attachment: AttachmentFile | null | u
     .createSignedUrl(attachment.storagePath, 60 * 60);
 
   if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("object not found")) {
+      return "";
+    }
+
     throw new Error(error.message);
   }
 
@@ -134,5 +139,16 @@ export async function removeAttachmentFile(attachment: AttachmentFile | null | u
 
   if (error) {
     throw new Error(error.message);
+  }
+}
+
+export async function removeAttachmentFileSafely(
+  attachment: AttachmentFile | null | undefined,
+  context = "attachment",
+) {
+  try {
+    await removeAttachmentFile(attachment);
+  } catch (error) {
+    console.warn(`Could not remove ${context}.`, error);
   }
 }
