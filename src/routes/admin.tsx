@@ -145,8 +145,8 @@ function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="w-64 bg-sidebar text-sidebar-foreground p-4 flex flex-col">
-        <div className="px-3 py-4 text-xl mb-4 border-b border-sidebar-border">
+      <aside className="w-64 bg-sidebar p-4 text-sidebar-foreground flex flex-col">
+        <div className="mb-4 border-b border-sidebar-border px-3 py-4 text-xl">
           Almoxarifado
         </div>
         <nav className="flex-1 space-y-1">
@@ -182,11 +182,18 @@ function AdminLayout() {
               >
                 Controle de Assinaturas
               </Link>
+              <Link
+                to="/admin/controle-entradas"
+                className={itemCls}
+                activeProps={{ className: `${itemCls} ${activeCls}` }}
+              >
+                Controle de Entradas
+              </Link>
 
               <button
                 type="button"
                 onClick={() => setOpenCadastros((value) => !value)}
-                className={`${itemCls} w-full text-left flex items-center justify-between`}
+                className={`${itemCls} flex w-full items-center justify-between text-left`}
               >
                 <span>Cadastros</span>
                 <ChevronDown
@@ -280,7 +287,7 @@ function AdminLayout() {
               await supabase.auth.signOut();
               navigate({ to: "/" });
             }}
-            className={`${itemCls} w-full text-left mt-4`}
+            className={`${itemCls} mt-4 w-full text-left`}
           >
             Sair
           </button>

@@ -155,41 +155,43 @@ function MinhasRequisicoesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRequests.map((request) => (
-                  <tr key={request.id} className="border-t">
-                    <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
-                    <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
-                    <td className="px-3 py-2 text-foreground">{request.saida_codigo || "-"}</td>
-                    <td className="px-3 py-2">
-                      <div className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800">
-                        <Clock3 className="h-3.5 w-3.5" />
-                        Com o admin
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Aguardando atendimento e anexo da saida.
-                      </p>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          onClick={() =>
-                            navigate({
-                              to: "/admin/minhas-assinaturas/$requisicaoId/pdf",
-                              params: { requisicaoId: request.id },
-                            })
-                          }
-                        >
-                          <Eye className="h-4 w-4" />
-                          Ver/Baixar
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredRequests.map((request) => {
+                  return (
+                    <tr key={request.id} className="border-t">
+                      <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
+                      <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
+                      <td className="px-3 py-2 text-foreground">{request.saida_codigo || "-"}</td>
+                      <td className="px-3 py-2">
+                        <div className="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800">
+                          <Clock3 className="h-3.5 w-3.5" />
+                          Com o admin
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Aguardando atendimento e anexo da saida.
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() =>
+                              navigate({
+                                to: "/admin/minhas-assinaturas/$requisicaoId/pdf",
+                                params: { requisicaoId: request.id },
+                              })
+                            }
+                          >
+                            <Eye className="h-4 w-4" />
+                            Ver/Baixar
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

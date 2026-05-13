@@ -12,6 +12,7 @@ import {
   normalizeWhatsAppPhoneNumber,
   sendWhatsAppTemplateMessage,
 } from "@/lib/whatsapp.server";
+import { buildGlobalRequestCodes, formatRequestCodeDate } from "@/lib/request-code";
 
 type SaveUserWhatsAppInput = {
   profileId: string;
@@ -60,12 +61,33 @@ function validateRequestNotificationInput(input: unknown): RequestNotificationIn
 async function getRequestNotificationData(requestId: string) {
   const { data: request, error: requestError } = await (supabaseAdmin as any)
     .from("requisicoes")
-    .select("id,saida_codigo,categoria,data,solicitante,solicitante_cpf")
+    .select("id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf")
     .eq("id", requestId)
     .maybeSingle();
 
   if (requestError) throw new Error(requestError.message);
   if (!request) throw new Error("Requisição não encontrada.");
+
+  let requestCode = request.saida_codigo?.trim();
+  if (!requestCode) {
+    const { data: requests, error: requestsError } = await (supabaseAdmin as any)
+      .from("requisicoes")
+      .select("id,saida_codigo,data,created_at")
+      .order("created_at", { ascending: true });
+
+    if (requestsError) throw new Error(requestsError.message);
+
+    requestCode =
+      buildGlobalRequestCodes(requests ?? []).get(request.id) ||
+      `${formatRequestCodeDate(request.data || request.created_at)}001`;
+
+    const { error: updateError } = await (supabaseAdmin as any)
+      .from("requisicoes")
+      .update({ saida_codigo: requestCode })
+      .eq("id", request.id);
+
+    if (updateError) throw new Error(updateError.message);
+  }
 
   let profile: { whatsapp: string | null; nome: string | null } | null = null;
 
@@ -95,7 +117,7 @@ async function getRequestNotificationData(requestId: string) {
 
   return {
     whatsapp,
-    requestCode: request.saida_codigo || request.id,
+    requestCode,
     materialType: request.categoria,
     requestDate: request.data,
     requesterName: profile?.nome || request.solicitante,

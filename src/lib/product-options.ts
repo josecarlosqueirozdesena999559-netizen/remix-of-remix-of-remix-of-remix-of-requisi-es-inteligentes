@@ -65,8 +65,52 @@ export function normalizeProductSearchValue(value: string | null | undefined) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
     .toLowerCase()
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+const PRODUCT_SEARCH_ALIASES: Record<string, string[]> = {
+  cx: ["caixa"],
+  und: ["unidade"],
+  un: ["unidade"],
+  pct: ["pacote"],
+  pcte: ["pacote"],
+  fr: ["frasco"],
+  lt: ["litro"],
+  comp: ["comprimido"],
+};
+
+export function tokenizeProductSearchValue(value: string | null | undefined) {
+  const tokens = normalizeProductSearchValue(value).split(" ").filter(Boolean);
+  return tokens.flatMap((token) => [token, ...(PRODUCT_SEARCH_ALIASES[token] ?? [])]);
+}
+
+export function productMatchesSearch(
+  values: Array<string | null | undefined>,
+  search: string | null | undefined,
+) {
+  const searchTokens = tokenizeProductSearchValue(search);
+  if (!searchTokens.length) return true;
+
+  const searchableTokens = values.flatMap(tokenizeProductSearchValue);
+  const searchableText = ` ${searchableTokens.join(" ")} `;
+
+  return searchTokens.every((token) => {
+    const singularToken = token.length > 3 && token.endsWith("s") ? token.slice(0, -1) : token;
+    return (
+      searchableTokens.some(
+        (value) =>
+          value === token ||
+          value === singularToken ||
+          value.includes(token) ||
+          value.includes(singularToken),
+      ) ||
+      searchableText.includes(` ${token} `) ||
+      searchableText.includes(` ${singularToken} `)
+    );
+  });
 }
 
 function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
