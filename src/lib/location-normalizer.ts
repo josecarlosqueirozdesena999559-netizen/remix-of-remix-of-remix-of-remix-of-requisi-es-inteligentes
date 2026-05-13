@@ -1,7 +1,15 @@
+import { formatProgramName } from "@/lib/program-options";
+
 export interface LocationOption {
   nome: string;
   programa?: string | null;
 }
+
+const LOCATION_LABELS: Record<string, string> = {
+  "farmacia municipal": "FARMÁCIA MUNICIPAL",
+  "ubs joao ribeiro": "UBS - JOÃO RIBEIRO",
+  "ubs mae otavia": "UBS - MÃE OTÁVIA",
+};
 
 export function normalizeLocationKey(value?: string | null) {
   return String(value || "")
@@ -11,6 +19,13 @@ export function normalizeLocationKey(value?: string | null) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function formatLocationName(value: string | null | undefined) {
+  const key = normalizeLocationKey(value);
+  if (!key) return "";
+
+  return LOCATION_LABELS[key] || formatProgramName(value) || String(value || "").trim();
 }
 
 export function resolveCanonicalLocationOption(
@@ -49,7 +64,8 @@ export function resolveCanonicalLocationName(
   value: string | null | undefined,
   options: LocationOption[],
 ) {
-  return resolveCanonicalLocationOption(value, options)?.nome?.trim() || String(value || "").trim();
+  const canonical = resolveCanonicalLocationOption(value, options)?.nome?.trim();
+  return formatLocationName(canonical || value);
 }
 
 export function resolveCanonicalLocationNameFromCandidates(
@@ -63,7 +79,7 @@ export function resolveCanonicalLocationNameFromCandidates(
 
     const canonical = resolveCanonicalLocationName(trimmed, options);
     if (canonical) return canonical;
-    return trimmed;
+    return formatLocationName(trimmed) || trimmed;
   }
 
   return fallback;
