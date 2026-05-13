@@ -219,7 +219,7 @@ function buildRequestSections(categories: string[]) {
   const sections: RequestSection[] = [];
 
   categories.forEach((category) => {
-    if (category === "GÃªneros alimentÃ­cios/limpeza") {
+    if (category === "Gêneros alimentícios/limpeza") {
       sections.push(
         {
           id: "generos-alimenticios",
@@ -286,7 +286,7 @@ function buildNormalizedRequestSections(categories: string[]) {
           label: "Alimentício",
           baseCategory: category,
           matchesItem: (item) =>
-            productHasSubcategory(item.subcategoria, "AlimentÃ­cio") || !isCleaningProduct(item),
+            productHasSubcategory(item.subcategoria, "Alimentício") || !isCleaningProduct(item),
           order: 0,
         },
         {

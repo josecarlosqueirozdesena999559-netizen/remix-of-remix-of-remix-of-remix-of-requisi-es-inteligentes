@@ -182,13 +182,6 @@ function AdminLayout() {
               >
                 Controle de Assinaturas
               </Link>
-              <Link
-                to="/admin/controle-entradas"
-                className={itemCls}
-                activeProps={{ className: `${itemCls} ${activeCls}` }}
-              >
-                Controle de Entradas
-              </Link>
 
               <button
                 type="button"

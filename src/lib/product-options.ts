@@ -24,16 +24,33 @@ const CATEGORY_ALIASES: Record<string, ProductCategory> = {
   "Gêneros alimenticio/limpeza": "Gêneros alimentícios/limpeza",
   "Generos alimentícios/limpeza": "Gêneros alimentícios/limpeza",
   "Gêneros alimentícios/limpeza": "Gêneros alimentícios/limpeza",
+  "GÃªneros alimentÃ­cios/limpeza": "Gêneros alimentícios/limpeza",
+  "GÃªneros alimenticio/limpeza": "Gêneros alimentícios/limpeza",
+  "Generos alimentÃ­cios/limpeza": "Gêneros alimentícios/limpeza",
   Odontologico: "Odontológico",
   Odontológico: "Odontológico",
+  "OdontolÃ³gico": "Odontológico",
   Ambulatorial: "Ambulatorial",
   SESB: "SESB",
   Expediente: "Expediente",
 };
 
+const NORMALIZED_CATEGORY_ALIASES = new Map<string, ProductCategory>(
+  Object.entries(CATEGORY_ALIASES).map(([alias, category]) => [
+    normalizeProductSearchValue(alias),
+    category,
+  ]),
+);
+
 export function normalizeProductCategory(value: string | null | undefined) {
   const cleanValue = String(value || "").trim();
-  return CATEGORY_ALIASES[cleanValue] ?? cleanValue;
+  if (!cleanValue) return "";
+
+  return (
+    CATEGORY_ALIASES[cleanValue] ??
+    NORMALIZED_CATEGORY_ALIASES.get(normalizeProductSearchValue(cleanValue)) ??
+    cleanValue
+  );
 }
 
 export function parseProductCategories(value: string | null | undefined) {
