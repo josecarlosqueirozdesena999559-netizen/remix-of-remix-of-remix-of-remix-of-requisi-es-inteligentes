@@ -1,12 +1,27 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { createRequestQrDataUrl } from "@/lib/request-qr";
 import { formatProgramName } from "@/lib/program-options";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
+const PDF_PAGE_BOTTOM_MARGIN = 16;
+const PDF_SIGNATURE_SECTION_HEIGHT = 94;
+const PDF_SIGNATURE_SECTION_GAP = 10;
+const PDF_SIGNATURE_PAGE_START_Y = 100;
+
+const WAREHOUSE_RESPONSIBLE_NAME = "JOSE CARLOS QUEIROZ DE SENA";
+const WAREHOUSE_RESPONSIBLE_CPF = "07465636396";
+const WAREHOUSE_RESPONSIBLE_ROLE = "Responsável pelo almoxarifado";
 
 let pdfLogoDataUrlPromise: Promise<string | null> | null = null;
+
+type JsPdfWithAutoTable = jsPDF & {
+  lastAutoTable?: {
+    finalY: number;
+  };
+};
 
 export interface RequestPdfItem {
   item?: string | null;
@@ -235,9 +250,89 @@ function drawRequestPdfHeader(
   }
 }
 
+function drawSignatureBlock(
+  doc: jsPDF,
+  centerX: number,
+  topY: number,
+  name: string,
+  cpf: string,
+  roleLabel: string,
+  showGovLabel = true,
+) {
+  const boxWidth = 76;
+  const boxHeight = 18;
+  const boxX = centerX - boxWidth / 2;
+
+  if (showGovLabel) {
+    doc.setDrawColor(190, 198, 210);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(boxX, topY, boxWidth, boxHeight, 1.5, 1.5);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.4);
+    doc.setTextColor(71, 85, 105);
+    doc.text(toPdfAscii("ASSINATURA GOV.BR"), centerX, topY + 6, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.4);
+    doc.setTextColor(107, 114, 128);
+    doc.text(toPdfAscii("Assine neste campo"), centerX, topY + 11.8, { align: "center" });
+  }
+
+  doc.setDrawColor(120, 120, 120);
+  doc.setLineWidth(0.35);
+  doc.line(centerX - 40, topY + 30, centerX + 40, topY + 30);
+
+  doc.setTextColor(20, 24, 28);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 80 });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.9);
+  doc.text(toPdfAscii(`CPF: ${String(cpf || "-")}`), centerX, topY + 43, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.8);
+  doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 84 });
+}
+
+function drawRequestQrCode(
+  doc: jsPDF,
+  qrDataUrl: string,
+  requestCode: string,
+  centerX: number,
+  topY: number,
+) {
+  const size = 22;
+
+  doc.setDrawColor(190, 198, 210);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(centerX - size / 2 - 2, topY - 2, size + 4, size + 18, 1.5, 1.5);
+  doc.addImage(qrDataUrl, "PNG", centerX - size / 2, topY, size, size);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(toPdfAscii("QR CONFERENCIA"), centerX, topY + size + 5, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.2);
+  doc.text(toPdfAscii("Almoxarifado"), centerX, topY + size + 9, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.2);
+  doc.text(toPdfAscii(`COD: ${requestCode}`), centerX, topY + size + 14, {
+    align: "center",
+    maxWidth: size + 2,
+  });
+  doc.setTextColor(20, 24, 28);
+}
+
 export async function createRequestPdfBlob(request: RequestPdfData) {
-  const doc = new jsPDF();
+  const doc = new jsPDF() as JsPdfWithAutoTable;
   const logoDataUrl = await loadPdfLogoDataUrl();
+  const qrDataUrl = await createRequestQrDataUrl(request);
   const bodyRows = getRequestItemsForPdf(request);
 
   doc.setProperties({
@@ -295,11 +390,46 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     },
   });
 
+  const finalY = doc.lastAutoTable?.finalY ?? PDF_TABLE_START_Y;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const signaturesNeedExtraPage =
+    finalY + PDF_SIGNATURE_SECTION_GAP + PDF_SIGNATURE_SECTION_HEIGHT >
+    pageHeight - PDF_PAGE_BOTTOM_MARGIN;
+
+  if (signaturesNeedExtraPage) {
+    doc.addPage();
+  }
+
   const finalTotalPages = doc.getNumberOfPages();
   for (let page = 1; page <= finalTotalPages; page += 1) {
     doc.setPage(page);
     drawRequestPdfHeader(doc, request, logoDataUrl, page, finalTotalPages);
   }
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const footerTopY = signaturesNeedExtraPage
+    ? PDF_SIGNATURE_PAGE_START_Y
+    : finalY + PDF_SIGNATURE_SECTION_GAP;
+
+  doc.setPage(finalTotalPages);
+  drawSignatureBlock(
+    doc,
+    PDF_MARGIN + 40,
+    footerTopY,
+    request.requesterDisplayName || request.solicitante || "-",
+    request.requesterDisplayCpf || request.solicitante_cpf || "-",
+    request.requesterDisplayRole || request.solicitante_funcao || "Solicitante do setor",
+  );
+  drawSignatureBlock(
+    doc,
+    pageWidth - PDF_MARGIN - 40,
+    footerTopY,
+    WAREHOUSE_RESPONSIBLE_NAME,
+    WAREHOUSE_RESPONSIBLE_CPF,
+    WAREHOUSE_RESPONSIBLE_ROLE,
+    false,
+  );
+  drawRequestQrCode(doc, qrDataUrl, getRequestCode(request), pageWidth - PDF_MARGIN - 16, footerTopY + 58);
 
   return doc.output("blob");
 }
