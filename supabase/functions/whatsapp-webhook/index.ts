@@ -61,6 +61,26 @@ type RequisicaoRow = {
   admin_attachment: unknown;
 };
 
+type RequestCodeSource = {
+  id: string;
+  saida_codigo: string | null;
+  data: string | null;
+  created_at: string | null;
+};
+
+type WhatsAppStatusAuditRow = {
+  message_id: string;
+  recipient_id: string | null;
+  status: string;
+  occurred_at: string | null;
+  conversation_id: string | null;
+  conversation_origin: string | null;
+  pricing_category: string | null;
+  pricing_model: string | null;
+  pricing_billable: boolean | null;
+  error_summary: string | null;
+  raw_payload: unknown;
+};
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
@@ -291,6 +311,95 @@ async function getPendingConfirmation(phone: string) {
 
 async function deletePendingConfirmation(phone: string) {
   await Promise.all(pendingKeys(phone).map((key) => deleteSetting(key)));
+}
+
+function parseStatusTimestamp(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const unixSeconds = Number(raw);
+  if (Number.isFinite(unixSeconds) && unixSeconds > 0) {
+    return new Date(unixSeconds * 1000).toISOString();
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function buildStatusErrorSummary(errors: unknown) {
+  if (!Array.isArray(errors) || !errors.length) return null;
+
+  return errors
+    .map((error) => {
+      if (!isRecord(error)) return String(error);
+
+      return [
+        typeof error.title === "string" ? error.title : "",
+        typeof error.message === "string" ? error.message : "",
+        typeof error.code === "number" || typeof error.code === "string"
+          ? `code=${error.code}`
+          : "",
+        typeof error.error_data?.details === "string" ? error.error_data.details : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+    })
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function extractStatuses(payload: any): WhatsAppStatusAuditRow[] {
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+
+  return entries.flatMap((entry: any) =>
+    (Array.isArray(entry?.changes) ? entry.changes : []).flatMap((change: any) =>
+      (Array.isArray(change?.value?.statuses) ? change.value.statuses : [])
+        .map((status: any) => {
+          const messageId = String(status?.id || "").trim();
+          const state = String(status?.status || "").trim();
+          if (!messageId || !state) return null;
+
+          return {
+            message_id: messageId,
+            recipient_id:
+              typeof status?.recipient_id === "string" ? status.recipient_id.trim() || null : null,
+            status: state,
+            occurred_at: parseStatusTimestamp(status?.timestamp),
+            conversation_id:
+              typeof status?.conversation?.id === "string"
+                ? status.conversation.id.trim() || null
+                : null,
+            conversation_origin:
+              typeof status?.conversation?.origin?.type === "string"
+                ? status.conversation.origin.type.trim() || null
+                : null,
+            pricing_category:
+              typeof status?.pricing?.category === "string"
+                ? status.pricing.category.trim() || null
+                : null,
+            pricing_model:
+              typeof status?.pricing?.pricing_model === "string"
+                ? status.pricing.pricing_model.trim() || null
+                : null,
+            pricing_billable:
+              typeof status?.pricing?.billable === "boolean" ? status.pricing.billable : null,
+            error_summary: buildStatusErrorSummary(status?.errors),
+            raw_payload: status,
+          } satisfies WhatsAppStatusAuditRow;
+        })
+        .filter(Boolean),
+    ),
+  );
+}
+
+async function insertStatusAuditRows(rows: WhatsAppStatusAuditRow[]) {
+  if (!rows.length) return;
+
+  await supabaseFetch("whatsapp_webhook_status_audit", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(rows),
+  });
 }
 
 async function sendTextMessage(input: { to: string; text: string }) {
@@ -831,6 +940,8 @@ Deno.serve(async (request) => {
 
     const settings = await getSettings();
     const payload = await request.json().catch(() => ({}));
+    const statuses = extractStatuses(payload);
+    await insertStatusAuditRows(statuses);
     const messages = extractMessages(payload);
 
     await Promise.all(

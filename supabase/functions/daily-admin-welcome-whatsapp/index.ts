@@ -16,6 +16,16 @@ type AppSetting = {
   value: string;
 };
 
+type AuditLogInput = {
+  runId: string;
+  targetNumber: string;
+  ok: boolean;
+  messageId?: string;
+  error?: string;
+  triggeredAt: string;
+  requestPayload: unknown;
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -95,6 +105,28 @@ async function getWhatsAppSettings() {
   return { accessToken, phoneNumberId, graphApiVersion, adminNumbers };
 }
 
+async function insertAuditLogs(entries: AuditLogInput[]) {
+  if (!entries.length) return;
+
+  await supabaseFetch("whatsapp_admin_welcome_audit", {
+    method: "POST",
+    headers: {
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(
+      entries.map((entry) => ({
+        run_id: entry.runId,
+        target_number: entry.targetNumber,
+        ok: entry.ok,
+        message_id: entry.messageId ?? null,
+        error: entry.error ?? null,
+        triggered_at: entry.triggeredAt,
+        request_payload: entry.requestPayload ?? null,
+      })),
+    ),
+  });
+}
+
 function isAuthorized(request: Request) {
   const cronSecret = Deno.env.get("CRON_SECRET")?.trim();
   if (cronSecret) return request.headers.get("x-cron-secret") === cronSecret;
@@ -168,7 +200,10 @@ Deno.serve(async (request) => {
       return jsonResponse({ ok: false, error: "Nao autorizado." }, 401);
     }
 
+    const requestPayload = await request.json().catch(() => ({}));
     const config = await getWhatsAppSettings();
+    const runId = crypto.randomUUID();
+    const triggeredAt = new Date().toISOString();
     const results = await Promise.allSettled(
       config.adminNumbers.map((number) =>
         sendWelcomeTemplate({
@@ -180,15 +215,30 @@ Deno.serve(async (request) => {
       ),
     );
 
+    const notifications = results.map((result, index) => ({
+      to: config.adminNumbers[index],
+      ok: result.status === "fulfilled",
+      messageId: result.status === "fulfilled" ? result.value : undefined,
+      error: result.status === "rejected" ? String(result.reason?.message || result.reason) : undefined,
+    }));
+
+    await insertAuditLogs(
+      notifications.map((notification) => ({
+        runId,
+        targetNumber: notification.to,
+        ok: notification.ok,
+        messageId: notification.messageId,
+        error: notification.error,
+        triggeredAt,
+        requestPayload,
+      })),
+    );
+
     return jsonResponse({
       ok: true,
-      sentAt: new Date().toISOString(),
-      notifications: results.map((result, index) => ({
-        to: config.adminNumbers[index],
-        ok: result.status === "fulfilled",
-        messageId: result.status === "fulfilled" ? result.value : undefined,
-        error: result.status === "rejected" ? String(result.reason?.message || result.reason) : undefined,
-      })),
+      runId,
+      sentAt: triggeredAt,
+      notifications,
     });
   } catch (error) {
     return jsonResponse(
