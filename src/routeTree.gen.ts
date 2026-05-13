@@ -14,8 +14,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminSolicitacoesRouteImport } from './routes/admin.solicitacoes'
 import { Route as AdminRequisicaoRouteImport } from './routes/admin.requisicao'
+import { Route as AdminMinhasRequisicoesRouteImport } from './routes/admin.minhas-requisicoes'
 import { Route as AdminMinhasAssinaturasRouteImport } from './routes/admin.minhas-assinaturas'
 import { Route as AdminMeusAssinadosRouteImport } from './routes/admin.meus-assinados'
+import { Route as AdminControleEntradasRouteImport } from './routes/admin.controle-entradas'
 import { Route as AdminControleAssinaturasRouteImport } from './routes/admin.controle-assinaturas'
 import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
 import { Route as AdminCompletarCadastroRouteImport } from './routes/admin.completar-cadastro'
@@ -56,6 +58,11 @@ const AdminRequisicaoRoute = AdminRequisicaoRouteImport.update({
   path: '/requisicao',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminMinhasRequisicoesRoute = AdminMinhasRequisicoesRouteImport.update({
+  id: '/minhas-requisicoes',
+  path: '/minhas-requisicoes',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminMinhasAssinaturasRoute = AdminMinhasAssinaturasRouteImport.update({
   id: '/minhas-assinaturas',
   path: '/minhas-assinaturas',
@@ -64,6 +71,11 @@ const AdminMinhasAssinaturasRoute = AdminMinhasAssinaturasRouteImport.update({
 const AdminMeusAssinadosRoute = AdminMeusAssinadosRouteImport.update({
   id: '/meus-assinados',
   path: '/meus-assinados',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminControleEntradasRoute = AdminControleEntradasRouteImport.update({
+  id: '/controle-entradas',
+  path: '/controle-entradas',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminControleAssinaturasRoute =
@@ -151,8 +163,10 @@ export interface FileRoutesByFullPath {
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
+  '/admin/controle-entradas': typeof AdminControleEntradasRoute
   '/admin/meus-assinados': typeof AdminMeusAssinadosRouteWithChildren
   '/admin/minhas-assinaturas': typeof AdminMinhasAssinaturasRouteWithChildren
+  '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/': typeof AdminIndexRoute
@@ -173,8 +187,10 @@ export interface FileRoutesByTo {
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
+  '/admin/controle-entradas': typeof AdminControleEntradasRoute
   '/admin/meus-assinados': typeof AdminMeusAssinadosRouteWithChildren
   '/admin/minhas-assinaturas': typeof AdminMinhasAssinaturasRouteWithChildren
+  '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin': typeof AdminIndexRoute
@@ -197,8 +213,10 @@ export interface FileRoutesById {
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
+  '/admin/controle-entradas': typeof AdminControleEntradasRoute
   '/admin/meus-assinados': typeof AdminMeusAssinadosRouteWithChildren
   '/admin/minhas-assinaturas': typeof AdminMinhasAssinaturasRouteWithChildren
+  '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/': typeof AdminIndexRoute
@@ -222,8 +240,10 @@ export interface FileRouteTypes {
     | '/admin/completar-cadastro'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
+    | '/admin/controle-entradas'
     | '/admin/meus-assinados'
     | '/admin/minhas-assinaturas'
+    | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
     | '/admin/solicitacoes'
     | '/admin/'
@@ -244,8 +264,10 @@ export interface FileRouteTypes {
     | '/admin/completar-cadastro'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
+    | '/admin/controle-entradas'
     | '/admin/meus-assinados'
     | '/admin/minhas-assinaturas'
+    | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
     | '/admin/solicitacoes'
     | '/admin'
@@ -267,8 +289,10 @@ export interface FileRouteTypes {
     | '/admin/completar-cadastro'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
+    | '/admin/controle-entradas'
     | '/admin/meus-assinados'
     | '/admin/minhas-assinaturas'
+    | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
     | '/admin/solicitacoes'
     | '/admin/'
@@ -326,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRequisicaoRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/minhas-requisicoes': {
+      id: '/admin/minhas-requisicoes'
+      path: '/minhas-requisicoes'
+      fullPath: '/admin/minhas-requisicoes'
+      preLoaderRoute: typeof AdminMinhasRequisicoesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/minhas-assinaturas': {
       id: '/admin/minhas-assinaturas'
       path: '/minhas-assinaturas'
@@ -338,6 +369,13 @@ declare module '@tanstack/react-router' {
       path: '/meus-assinados'
       fullPath: '/admin/meus-assinados'
       preLoaderRoute: typeof AdminMeusAssinadosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/controle-entradas': {
+      id: '/admin/controle-entradas'
+      path: '/controle-entradas'
+      fullPath: '/admin/controle-entradas'
+      preLoaderRoute: typeof AdminControleEntradasRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/controle-assinaturas': {
@@ -524,8 +562,10 @@ interface AdminRouteChildren {
   AdminCompletarCadastroRoute: typeof AdminCompletarCadastroRoute
   AdminConfiguracoesRoute: typeof AdminConfiguracoesRoute
   AdminControleAssinaturasRoute: typeof AdminControleAssinaturasRoute
+  AdminControleEntradasRoute: typeof AdminControleEntradasRoute
   AdminMeusAssinadosRoute: typeof AdminMeusAssinadosRouteWithChildren
   AdminMinhasAssinaturasRoute: typeof AdminMinhasAssinaturasRouteWithChildren
+  AdminMinhasRequisicoesRoute: typeof AdminMinhasRequisicoesRoute
   AdminRequisicaoRoute: typeof AdminRequisicaoRoute
   AdminSolicitacoesRoute: typeof AdminSolicitacoesRouteWithChildren
   AdminIndexRoute: typeof AdminIndexRoute
@@ -540,8 +580,10 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCompletarCadastroRoute: AdminCompletarCadastroRoute,
   AdminConfiguracoesRoute: AdminConfiguracoesRoute,
   AdminControleAssinaturasRoute: AdminControleAssinaturasRoute,
+  AdminControleEntradasRoute: AdminControleEntradasRoute,
   AdminMeusAssinadosRoute: AdminMeusAssinadosRouteWithChildren,
   AdminMinhasAssinaturasRoute: AdminMinhasAssinaturasRouteWithChildren,
+  AdminMinhasRequisicoesRoute: AdminMinhasRequisicoesRoute,
   AdminRequisicaoRoute: AdminRequisicaoRoute,
   AdminSolicitacoesRoute: AdminSolicitacoesRouteWithChildren,
   AdminIndexRoute: AdminIndexRoute,

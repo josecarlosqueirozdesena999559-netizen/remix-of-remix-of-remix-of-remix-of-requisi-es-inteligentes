@@ -6,10 +6,10 @@ import { formatProgramName } from "@/lib/program-options";
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
-const PDF_PAGE_BOTTOM_MARGIN = 16;
-const PDF_SIGNATURE_SECTION_HEIGHT = 94;
-const PDF_SIGNATURE_SECTION_GAP = 10;
-const PDF_SIGNATURE_PAGE_START_Y = 100;
+const PDF_PAGE_BOTTOM_MARGIN = 6;
+const PDF_SIGNATURE_SECTION_HEIGHT = 92;
+const PDF_SIGNATURE_SECTION_GAP = 8;
+const PDF_SIGNATURE_PAGE_START_Y = 24;
 
 const WAREHOUSE_RESPONSIBLE_NAME = "JOSE CARLOS QUEIROZ DE SENA";
 const WAREHOUSE_RESPONSIBLE_CPF = "07465636396";
@@ -401,8 +401,10 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
   }
 
   const finalTotalPages = doc.getNumberOfPages();
+  const pagesWithDocumentHeader = signaturesNeedExtraPage ? finalTotalPages - 1 : finalTotalPages;
   for (let page = 1; page <= finalTotalPages; page += 1) {
     doc.setPage(page);
+    if (page > pagesWithDocumentHeader) continue;
     drawRequestPdfHeader(doc, request, logoDataUrl, page, finalTotalPages);
   }
 
@@ -429,7 +431,7 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     WAREHOUSE_RESPONSIBLE_ROLE,
     false,
   );
-  drawRequestQrCode(doc, qrDataUrl, getRequestCode(request), pageWidth - PDF_MARGIN - 16, footerTopY + 58);
+  drawRequestQrCode(doc, qrDataUrl, getRequestCode(request), pageWidth - PDF_MARGIN - 16, footerTopY + 52);
 
   return doc.output("blob");
 }
