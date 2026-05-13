@@ -1,9 +1,17 @@
 ﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { deleteAdminUser, saveAdminUser } from "@/lib/admin-user-actions";
+import { formatLocationName } from "@/lib/location-normalizer";
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from "@/lib/product-options";
 import { formatProgramName } from "@/lib/program-options";
 
@@ -54,6 +64,7 @@ function UsuarioFormPage() {
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
   const [funcao, setFuncao] = useState("");
+  const [senha, setSenha] = useState("123456");
   const [setor, setSetor] = useState("");
   const [unidadeNome, setUnidadeNome] = useState("");
   const [locais, setLocais] = useState<LocalRow[]>([]);
@@ -61,6 +72,8 @@ function UsuarioFormPage() {
   const [categoriasPermitidas, setCategoriasPermitidas] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const title = useMemo(() => (isNew ? "Novo usuário" : "Editar usuário"), [isNew]);
@@ -123,6 +136,7 @@ function UsuarioFormPage() {
       setEmail(usuario.email);
       setCpf(usuario.cpf ?? "");
       setFuncao(usuario.funcao ?? "");
+      setSenha("");
       setSetor(usuario.setor ?? "");
       setUnidadeNome(usuario.unidade_nome ?? "");
       setCategoriasPermitidas(
@@ -173,6 +187,7 @@ function UsuarioFormPage() {
     }
 
     const payload = {
+      id: isNew ? null : usuarioId,
       nome: nomeLimpo,
       email: emailLimpo,
       cpf: cpf.trim() || null,
@@ -180,20 +195,34 @@ function UsuarioFormPage() {
       setor: setor.trim() || null,
       unidade_nome: unidadeNome.trim() || null,
       categorias_permitidas: categoriasPermitidas,
+      password: senha.trim() || null,
     };
 
-    const result = isNew
-      ? await supabase.from("usuarios").insert(payload).select("id").single()
-      : await supabase.from("usuarios").update(payload).eq("id", usuarioId).select("id").single();
-
-    if (result.error) {
-      setError(result.error.message);
+    try {
+      await saveAdminUser({ data: payload });
       setSaving(false);
-      return;
+      navigate({ to: "/admin/cadastros/usuarios" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar usuário.");
+      setSaving(false);
     }
+  };
 
-    setSaving(false);
-    navigate({ to: "/admin/cadastros/usuarios" });
+  const handleDelete = async () => {
+    if (isNew) return;
+
+    setDeleting(true);
+    setError(null);
+
+    try {
+      await deleteAdminUser({ data: { id: usuarioId } });
+      setDeleteOpen(false);
+      navigate({ to: "/admin/cadastros/usuarios" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir usuário.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -266,7 +295,7 @@ function UsuarioFormPage() {
                     <SelectItem value={EMPTY_SELECT_VALUE}>Sem local</SelectItem>
                     {locais.map((local) => (
                       <SelectItem key={local.id} value={local.nome}>
-                        {local.nome}
+                        {formatLocationName(local.nome)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -302,6 +331,24 @@ function UsuarioFormPage() {
                   placeholder="Função"
                 />
               </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="senha">{isNew ? "Senha inicial" : "Nova senha"}</Label>
+                <Input
+                  id="senha"
+                  type="password"
+                  value={senha}
+                  onChange={(event) => setSenha(event.target.value)}
+                  placeholder={isNew ? "Senha inicial" : "Deixe em branco para manter a senha"}
+                  required={isNew}
+                  minLength={isNew || senha ? 6 : undefined}
+                />
+                <p className="text-sm text-muted-foreground">
+                  {isNew
+                    ? "O usuário já poderá entrar com este e-mail e senha."
+                    : "Preencha apenas se quiser trocar a senha de acesso."}
+                </p>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -333,9 +380,41 @@ function UsuarioFormPage() {
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Salvar
             </Button>
+            {!isNew && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="ml-2 gap-2"
+                disabled={saving || deleting}
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir usuário
+              </Button>
+            )}
           </form>
         )}
       </Card>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir usuário</DialogTitle>
+            <DialogDescription>
+              Esta ação remove o cadastro e o login do usuário. As requisições já feitas continuam no histórico.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="destructive" disabled={deleting} onClick={handleDelete}>
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

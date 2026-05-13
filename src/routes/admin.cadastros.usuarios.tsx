@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
+import { formatLocationName } from "@/lib/location-normalizer";
 import { normalizeProductCategory } from "@/lib/product-options";
 import { formatProgramName } from "@/lib/program-options";
 
@@ -52,7 +53,7 @@ function UsuariosPage() {
     {
       key: "unidade_nome",
       label: "Local",
-      render: (r) => formatProgramName(r.unidade_nome || r.setor) || "—",
+      render: (r) => formatLocationName(r.unidade_nome || r.setor) || "—",
     },
     { key: "setor", label: "Programa", render: (r) => formatProgramName(r.setor) || "—" },
     { key: "categorias_permitidas", label: "Tipos que pode pedir", render: renderCategorias },
