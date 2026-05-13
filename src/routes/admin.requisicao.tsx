@@ -10,6 +10,7 @@ import {
   isMedicationProduct,
   normalizeProductSearchValue,
   normalizeProductCategory,
+  productMatchesSearch,
   productHasSubcategory,
   productHasCategory,
   sortProductsByMaterialGroup,
@@ -439,7 +440,6 @@ function CriarRequisicaoPage() {
   }, [sections, selectedSectionId]);
 
   const visibleItems = useMemo(() => {
-    const normalizedSearch = normalizeProductSearchValue(searchQuery);
     if (!selectedSection) return [];
 
     return sortProductsByMaterialGroup(
@@ -447,15 +447,21 @@ function CriarRequisicaoPage() {
         if (!itemMatchesSection(item, selectedSection)) return false;
         if (!isItemAllowedForProfileProgram(item, profile, selectedSection)) return false;
         if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
-        if (!normalizedSearch) return true;
 
-        return [item.nome, item.unidade, item.subcategoria]
-          .filter(Boolean)
-          .some((value) => normalizeProductSearchValue(String(value)).includes(normalizedSearch));
+        return productMatchesSearch(
+          [
+            item.nome,
+            item.unidade,
+            item.categoria,
+            item.subcategoria,
+            ...(item.programa_produtos ?? []).map((link) => link.programas?.nome),
+          ],
+          searchQuery,
+        );
       }),
       selectedSection.baseCategory,
     );
-  }, [items, searchQuery, selectedSection]);
+  }, [items, profile, searchQuery, selectedSection]);
 
   const handleQuantityChange = (itemId: string, value: string) => {
     setQuantities((current) => ({ ...current, [itemId]: value }));
