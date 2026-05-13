@@ -49,7 +49,11 @@ function UsuariosPage() {
     { key: "nome", label: "Nome" },
     { key: "email", label: "E-mail" },
     { key: "cpf", label: "CPF", render: (r) => r.cpf || "—" },
-    { key: "unidade_nome", label: "Local", render: (r) => r.unidade_nome || r.setor || "—" },
+    {
+      key: "unidade_nome",
+      label: "Local",
+      render: (r) => formatProgramName(r.unidade_nome || r.setor) || "—",
+    },
     { key: "setor", label: "Programa", render: (r) => formatProgramName(r.setor) || "—" },
     { key: "categorias_permitidas", label: "Tipos que pode pedir", render: renderCategorias },
   ];

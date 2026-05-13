@@ -20,7 +20,7 @@ function LocaisPage() {
   const { data, loading, error } = useSupabaseList<Setor>("setores");
 
   const columns: Column<Setor>[] = [
-    { key: "nome", label: "Nome" },
+    { key: "nome", label: "Nome", render: (r) => formatProgramName(r.nome) || r.nome },
     { key: "responsavel", label: "Responsável", render: (r) => r.responsavel || "—" },
     { key: "programa", label: "Programa", render: (r) => formatProgramName(r.programa) || "—" },
     { key: "descricao", label: "Descrição", render: (r) => r.descricao || "—" },
