@@ -57,6 +57,7 @@ function Index() {
             <Input
               id="email"
               type="email"
+              autoComplete="email"
               placeholder="Informe seu e-mail"
               className="h-11 rounded-md border-slate-300 bg-slate-50 focus-visible:ring-primary"
               value={email}
@@ -69,6 +70,7 @@ function Index() {
             <Input
               id="senha"
               type="password"
+              autoComplete="current-password"
               placeholder="Informe sua senha"
               className="h-11 rounded-md border-slate-300 bg-slate-50 focus-visible:ring-primary"
               value={senha}

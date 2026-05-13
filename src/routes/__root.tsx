@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 import {
   Outlet,
   Link,
@@ -9,6 +10,65 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+
+const STALE_CHUNK_RELOAD_KEY = "almoxarifado:stale-chunk-reload";
+const STALE_CHUNK_ERROR_PATTERNS = [
+  "failed to fetch dynamically imported module",
+  "importing a module script failed",
+  "error loading dynamically imported module",
+  "loading chunk",
+  "chunkloaderror",
+];
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message ?? "");
+  }
+  return String(error ?? "");
+}
+
+function isStaleChunkError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return STALE_CHUNK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
+function reloadOnceForFreshAssets() {
+  if (typeof window === "undefined") return false;
+
+  const now = Date.now();
+  const previousReload = Number(window.sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY) ?? 0);
+  if (now - previousReload < 30_000) return false;
+
+  window.sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(now));
+  window.location.reload();
+  return true;
+}
+
+function useReloadOnStaleChunks() {
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      if (isStaleChunkError(event.error) || isStaleChunkError(event.message)) {
+        reloadOnceForFreshAssets();
+      }
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      if (isStaleChunkError(event.reason)) {
+        reloadOnceForFreshAssets();
+      }
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+    };
+  }, []);
+}
 
 function NotFoundComponent() {
   return (
@@ -35,19 +95,33 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const staleChunkError = isStaleChunkError(error);
+
+  useEffect(() => {
+    if (staleChunkError) {
+      reloadOnceForFreshAssets();
+    }
+  }, [staleChunkError]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          {staleChunkError ? "Atualizando o sistema" : "This page didn't load"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          {staleChunkError
+            ? "Uma nova versao foi publicada. Recarregue para baixar os arquivos atualizados."
+            : "Something went wrong on our end. You can try refreshing or head back home."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
+              if (staleChunkError) {
+                window.location.reload();
+                return;
+              }
+
               router.invalidate();
               reset();
             }}
@@ -108,6 +182,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  useReloadOnStaleChunks();
   const { queryClient } = Route.useRouteContext();
 
   return (
