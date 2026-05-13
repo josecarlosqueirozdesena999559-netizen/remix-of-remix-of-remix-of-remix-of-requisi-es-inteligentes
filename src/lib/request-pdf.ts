@@ -4,14 +4,6 @@ import autoTable from "jspdf-autotable";
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
-const PDF_PAGE_BOTTOM_MARGIN = 16;
-const PDF_SIGNATURE_SECTION_HEIGHT = 82;
-const PDF_SIGNATURE_SECTION_GAP = 10;
-const PDF_SIGNATURE_PAGE_START_Y = 100;
-
-const WAREHOUSE_RESPONSIBLE_NAME = "JOSE CARLOS QUEIROZ DE SENA";
-const WAREHOUSE_RESPONSIBLE_CPF = "07465636396";
-const WAREHOUSE_RESPONSIBLE_ROLE = "Responsável pelo almoxarifado";
 
 let pdfLogoDataUrlPromise: Promise<string | null> | null = null;
 
@@ -47,12 +39,6 @@ export interface RequestPdfData {
   requesterDisplayRole?: string | null;
   items?: RequestPdfItem[] | null;
 }
-
-type JsPdfWithAutoTable = jsPDF & {
-  lastAutoTable?: {
-    finalY: number;
-  };
-};
 
 function toPdfAscii(value: unknown) {
   return String(value ?? "")
@@ -248,61 +234,8 @@ function drawRequestPdfHeader(
   }
 }
 
-function drawSignatureBlock(
-  doc: jsPDF,
-  centerX: number,
-  topY: number,
-  title: string,
-  name: string,
-  cpf: string,
-  roleLabel: string,
-  showGovLabel = true,
-) {
-  const boxWidth = 76;
-  const boxHeight = 18;
-  const boxX = centerX - boxWidth / 2;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(71, 85, 105);
-  doc.text(toPdfAscii(title), centerX, topY - 6, { align: "center" });
-
-  if (showGovLabel) {
-    doc.setDrawColor(190, 198, 210);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(boxX, topY, boxWidth, boxHeight, 1.5, 1.5);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.4);
-    doc.setTextColor(71, 85, 105);
-    doc.text(toPdfAscii("ASSINATURA GOV.BR"), centerX, topY + 6, { align: "center" });
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.4);
-    doc.setTextColor(107, 114, 128);
-    doc.text(toPdfAscii("Assine neste campo"), centerX, topY + 11.8, { align: "center" });
-  }
-
-  doc.setDrawColor(120, 120, 120);
-  doc.setLineWidth(0.35);
-  doc.line(centerX - 34, topY + 30, centerX + 34, topY + 30);
-
-  doc.setTextColor(20, 24, 28);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 68 });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.9);
-  doc.text(toPdfAscii(`CPF: ${String(cpf || "-")}`), centerX, topY + 43, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.8);
-  doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 72 });
-}
-
 export async function createRequestPdfBlob(request: RequestPdfData) {
-  const doc = new jsPDF() as JsPdfWithAutoTable;
+  const doc = new jsPDF();
   const logoDataUrl = await loadPdfLogoDataUrl();
   const bodyRows = getRequestItemsForPdf(request);
 
@@ -361,55 +294,11 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     },
   });
 
-  const finalY = doc.lastAutoTable?.finalY ?? PDF_TABLE_START_Y;
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const signaturesNeedExtraPage =
-    finalY + PDF_SIGNATURE_SECTION_GAP + PDF_SIGNATURE_SECTION_HEIGHT >
-    pageHeight - PDF_PAGE_BOTTOM_MARGIN;
-
-  if (signaturesNeedExtraPage) {
-    doc.addPage();
-  }
-
   const finalTotalPages = doc.getNumberOfPages();
   for (let page = 1; page <= finalTotalPages; page += 1) {
     doc.setPage(page);
     drawRequestPdfHeader(doc, request, logoDataUrl, page, finalTotalPages);
   }
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const footerTopY = signaturesNeedExtraPage
-    ? PDF_SIGNATURE_PAGE_START_Y
-    : finalY + PDF_SIGNATURE_SECTION_GAP;
-  doc.setPage(finalTotalPages);
-  const leftSignatureX = PDF_MARGIN + 38;
-  const rightSignatureX = pageWidth - PDF_MARGIN - 38;
-  const dividerTopY = footerTopY - 8;
-
-  doc.setDrawColor(190, 198, 210);
-  doc.setLineWidth(0.45);
-  doc.line(PDF_MARGIN, dividerTopY, pageWidth - PDF_MARGIN, dividerTopY);
-  doc.line(pageWidth / 2, dividerTopY + 4, pageWidth / 2, footerTopY + 52);
-
-  drawSignatureBlock(
-    doc,
-    rightSignatureX,
-    footerTopY,
-    "Recebido por",
-    WAREHOUSE_RESPONSIBLE_NAME,
-    WAREHOUSE_RESPONSIBLE_CPF,
-    WAREHOUSE_RESPONSIBLE_ROLE,
-    false,
-  );
-  drawSignatureBlock(
-    doc,
-    leftSignatureX,
-    footerTopY,
-    "Solicitado por",
-    request.requesterDisplayName || request.solicitante || "-",
-    request.requesterDisplayCpf || request.solicitante_cpf || "-",
-    request.requesterDisplayRole || request.solicitante_funcao || "Solicitante do setor",
-  );
 
   return doc.output("blob");
 }
