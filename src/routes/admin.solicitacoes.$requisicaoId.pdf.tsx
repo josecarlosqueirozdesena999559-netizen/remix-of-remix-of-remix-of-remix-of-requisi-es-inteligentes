@@ -8,6 +8,7 @@ import {
   getRequestSignedAttachment,
   resolveAttachmentUrl,
 } from "@/lib/attachments";
+import { formatProgramName } from "@/lib/program-options";
 import { formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
 import { createRequestPdfBlob, type RequestPdfData, type RequestPdfItem } from "@/lib/request-pdf";
 
@@ -82,7 +83,7 @@ function SolicitacaoPdfPage() {
       return {
         ...request,
         saida_codigo: code,
-        programa,
+        programa: formatProgramName(programa) || programa,
         requesterDisplayName,
         requesterDisplayCpf,
         requesterDisplayRole,

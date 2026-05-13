@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { resolveCanonicalLocationOption, type LocationOption } from "@/lib/location-normalizer";
+import { formatProgramName } from "@/lib/program-options";
 import type { RequestPdfData, RequestPdfItem } from "@/lib/request-pdf";
 
 export interface RequisicaoPdfRow {
@@ -55,7 +56,7 @@ export async function resolveRequestForPdf(request: RequisicaoPdfRow, code: stri
   return {
     ...request,
     saida_codigo: code,
-    programa,
+    programa: formatProgramName(programa) || programa,
     requesterDisplayName,
     requesterDisplayCpf,
     requesterDisplayRole,

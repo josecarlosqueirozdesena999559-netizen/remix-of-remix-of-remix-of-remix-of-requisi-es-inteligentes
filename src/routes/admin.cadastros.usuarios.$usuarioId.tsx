@@ -286,7 +286,7 @@ function UsuarioFormPage() {
                     <SelectItem value={EMPTY_SELECT_VALUE}>Sem programa</SelectItem>
                     {programas.map((programa) => (
                       <SelectItem key={programa.id} value={programa.nome}>
-                        {programa.nome}
+                        {formatProgramName(programa.nome)}
                       </SelectItem>
                     ))}
                   </SelectContent>

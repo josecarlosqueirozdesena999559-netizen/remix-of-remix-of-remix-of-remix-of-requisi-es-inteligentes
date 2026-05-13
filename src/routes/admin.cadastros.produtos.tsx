@@ -30,6 +30,7 @@ import {
   PRODUCT_SUBCATEGORIES,
   sortProductsByMaterialGroup,
 } from "@/lib/product-options";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/produtos")({
   component: ProdutosPage,
@@ -92,7 +93,7 @@ function ProdutosPage() {
       <div className="flex flex-wrap gap-1">
         {programas.map((programa) => (
           <Badge key={programa} variant="secondary">
-            {programa}
+            {formatProgramName(programa)}
           </Badge>
         ))}
       </div>
@@ -360,7 +361,7 @@ function ProdutosPage() {
                       checked={bulkProgramas.includes(programa.id)}
                       onCheckedChange={() => toggleBulkPrograma(programa.id)}
                     />
-                    <span>{programa.nome}</span>
+                    <span>{formatProgramName(programa.nome)}</span>
                   </label>
                 ))}
               </div>

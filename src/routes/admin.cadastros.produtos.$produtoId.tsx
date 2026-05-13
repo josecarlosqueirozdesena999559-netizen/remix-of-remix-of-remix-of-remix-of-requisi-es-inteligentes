@@ -28,6 +28,7 @@ import {
   PRODUCT_CATEGORIES,
   PRODUCT_SUBCATEGORIES,
 } from "@/lib/product-options";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/produtos/$produtoId")({
   component: ProdutoFormPage,
@@ -406,7 +407,7 @@ function ProdutoFormPage() {
                       checked={selectedProgramas.includes(programa.id)}
                       onCheckedChange={() => togglePrograma(programa.id)}
                     />
-                    <span>{programa.nome}</span>
+                    <span>{formatProgramName(programa.nome)}</span>
                   </label>
                 ))}
               </div>

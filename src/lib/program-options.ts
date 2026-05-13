@@ -1,15 +1,15 @@
 import { normalizeProductSearchValue } from "@/lib/product-options";
 
 const PROGRAM_LABELS: Record<string, string> = {
-  "atencao basica": "ATENCAO BASICA",
+  "atencao basica": "ATENÇÃO BÁSICA",
   hospital: "HOSPITAL",
-  odontologico: "ODONTOLOGICO",
+  odontologico: "ODONTOLÓGICO",
   sesb: "SESB",
   fisioterapia: "FISIOTERAPIA",
   endemias: "ENDEMIAS",
   "casa de apoio": "CASA DE APOIO",
-  "secretaria de saude": "SECRETARIA DE SAUDE",
-  "vigilancia sanitaria": "VIGILANCIA SANITARIA",
+  "secretaria de saude": "SECRETARIA DE SAÚDE",
+  "vigilancia sanitaria": "VIGILÂNCIA SANITÁRIA",
 };
 
 export function normalizeProgramKey(value: string | null | undefined) {

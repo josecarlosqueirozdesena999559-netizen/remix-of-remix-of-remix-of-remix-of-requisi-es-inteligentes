@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/programas")({
   component: ProgramasPage,
@@ -18,7 +19,7 @@ function ProgramasPage() {
   const { data, loading, error } = useSupabaseList<Programa>("programas");
 
   const columns: Column<Programa>[] = [
-    { key: "nome", label: "Nome" },
+    { key: "nome", label: "Nome", render: (programa) => formatProgramName(programa.nome) },
   ];
 
   return (

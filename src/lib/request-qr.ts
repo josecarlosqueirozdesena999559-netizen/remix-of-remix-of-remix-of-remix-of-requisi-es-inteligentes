@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 
+import { formatProgramName } from "@/lib/program-options";
 import type { RequestPdfData } from "@/lib/request-pdf";
 
 export interface RequestQrPayload {
@@ -25,7 +26,7 @@ export function buildRequestQrPayload(request: RequestPdfData): RequestQrPayload
     requestId: request.id,
     requestCode: valueOrDash(request.saida_codigo || request.id),
     materialType: valueOrDash(request.categoria),
-    program: valueOrDash(request.programa || request.setor),
+    program: valueOrDash(formatProgramName(request.programa || request.setor)),
     requester: valueOrDash(request.requesterDisplayName || request.solicitante),
     requesterCpf: valueOrDash(request.requesterDisplayCpf || request.solicitante_cpf),
     requestDate: valueOrDash(request.data),

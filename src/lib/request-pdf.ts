@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatProgramName } from "@/lib/program-options";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
@@ -158,7 +159,7 @@ function drawRequestPdfHeader(
   const rightColX = pageWidth - PDF_MARGIN;
   const lineY = 32;
   const requestDate = formatDate(request.data);
-  const programa = request.programa || request.setor || "-";
+  const programa = formatProgramName(request.programa || request.setor) || "-";
 
   doc.setDrawColor(76, 124, 73);
   doc.setLineWidth(0.35);
