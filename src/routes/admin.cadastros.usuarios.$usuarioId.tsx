@@ -26,6 +26,7 @@ import { deleteAdminUser, saveAdminUser } from "@/lib/admin-user-actions";
 import { formatLocationName } from "@/lib/location-normalizer";
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from "@/lib/product-options";
 import { formatProgramName } from "@/lib/program-options";
+import type { CheckedState } from "@radix-ui/react-checkbox";
 
 export const Route = createFileRoute("/admin/cadastros/usuarios/$usuarioId")({
   component: UsuarioFormPage,
@@ -154,12 +155,17 @@ function UsuarioFormPage() {
     };
   }, [isNew, usuarioId]);
 
-  const toggleCategoria = (categoria: string) => {
-    setCategoriasPermitidas((current) =>
-      current.includes(categoria)
-        ? current.filter((item) => item !== categoria)
-        : [...current, categoria],
-    );
+  const handleCategoriaCheckedChange = (categoria: string, checked: CheckedState) => {
+    setCategoriasPermitidas((current) => {
+      const normalizedCategory = normalizeProductCategory(categoria);
+      const nextValues = checked
+        ? [...current, normalizedCategory]
+        : current.filter((item) => item !== normalizedCategory);
+
+      return nextValues.filter(
+        (item, index, values) => item && values.indexOf(item) === index,
+      );
+    });
   };
 
   const handleLocalChange = (value: string) => {
@@ -194,7 +200,11 @@ function UsuarioFormPage() {
       funcao: funcao.trim() || null,
       setor: setor.trim() || null,
       unidade_nome: unidadeNome.trim() || null,
-      categorias_permitidas: categoriasPermitidas,
+      categorias_permitidas: categoriasPermitidas
+        .map(normalizeProductCategory)
+        .filter((categoria, index, categorias) => {
+          return Boolean(categoria) && categorias.indexOf(categoria) === index;
+        }),
       password: senha.trim() || null,
     };
 
@@ -362,11 +372,15 @@ function UsuarioFormPage() {
                 {PRODUCT_CATEGORIES.map((categoria) => (
                   <label
                     key={categoria}
+                    htmlFor={`categoria-${normalizeProductCategory(categoria)}`}
                     className="flex items-center gap-3 rounded-md border p-3 text-sm"
                   >
                     <Checkbox
+                      id={`categoria-${normalizeProductCategory(categoria)}`}
                       checked={categoriasPermitidas.includes(categoria)}
-                      onCheckedChange={() => toggleCategoria(categoria)}
+                      onCheckedChange={(checked) =>
+                        handleCategoriaCheckedChange(categoria, checked)
+                      }
                     />
                     <span>{categoria}</span>
                   </label>

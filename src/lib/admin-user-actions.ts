@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { normalizeProductCategory } from "@/lib/product-options";
 
 type AdminUserPayload = {
   id?: string | null;
@@ -32,7 +33,12 @@ function validateUserPayload(input: unknown): AdminUserPayload {
   if (!email) throw new Error("Informe o e-mail do usuário.");
 
   const categorias = Array.isArray(data.categorias_permitidas)
-    ? data.categorias_permitidas.map(String)
+    ? data.categorias_permitidas
+        .map(String)
+        .map(normalizeProductCategory)
+        .filter((categoria, index, categoriasNormalizadas) => {
+          return Boolean(categoria) && categoriasNormalizadas.indexOf(categoria) === index;
+        })
     : [];
 
   return {
