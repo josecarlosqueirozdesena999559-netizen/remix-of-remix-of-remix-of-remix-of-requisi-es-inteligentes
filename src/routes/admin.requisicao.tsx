@@ -41,6 +41,7 @@ interface ItemRow {
 }
 
 interface EditableRequestItem {
+  item_id?: string | null;
   item?: string | null;
   nome?: string | null;
   description?: string | null;
@@ -92,6 +93,58 @@ function hasRequestedQuantity(value: string | undefined) {
 
 function getItemName(item: EditableRequestItem) {
   return String(item.item || item.nome || "").trim();
+}
+
+function findMatchingLoadedItem(
+  requestItem: EditableRequestItem,
+  loadedItems: ItemRow[],
+  sections: RequestSection[],
+) {
+  const savedItemId = String(requestItem.item_id ?? "").trim();
+  if (savedItemId) {
+    const matchedById = loadedItems.find((item) => item.id === savedItemId);
+    if (matchedById) return matchedById;
+  }
+
+  const itemName = getItemName(requestItem);
+  if (!itemName) return null;
+
+  const normalizedUnit = String(requestItem.unit ?? requestItem.unidade ?? "").trim().toLowerCase();
+  const normalizedCategory = normalizeProductCategory(requestItem.categoria);
+  const normalizedSubcategory = normalizeProductCategory(requestItem.subcategoria);
+  const normalizedSection = String(requestItem.request_section ?? "").trim().toLowerCase();
+  const sectionOrder = requestItem.request_section_order ?? null;
+
+  const candidates = loadedItems.filter((item) => item.nome.trim() === itemName);
+  if (candidates.length <= 1) {
+    return candidates[0] ?? null;
+  }
+
+  const exactMatch = candidates.find((item) => {
+    const itemSection = getRequestSectionForItem(item, sections);
+    const sameUnit = !normalizedUnit || item.unidade.trim().toLowerCase() === normalizedUnit;
+    const sameCategory =
+      !normalizedCategory || normalizeProductCategory(item.categoria) === normalizedCategory;
+    const sameSubcategory =
+      !normalizedSubcategory || normalizeProductCategory(item.subcategoria) === normalizedSubcategory;
+    const sameSectionLabel =
+      !normalizedSection || itemSection?.label.trim().toLowerCase() === normalizedSection;
+    const sameSectionOrder = sectionOrder == null || itemSection?.order === sectionOrder;
+
+    return sameUnit && sameCategory && sameSubcategory && sameSectionLabel && sameSectionOrder;
+  });
+
+  if (exactMatch) return exactMatch;
+
+  return (
+    candidates.find((item) => {
+      const sameUnit = !normalizedUnit || item.unidade.trim().toLowerCase() === normalizedUnit;
+      const sameCategory =
+        !normalizedCategory || normalizeProductCategory(item.categoria) === normalizedCategory;
+
+      return sameUnit && sameCategory;
+    }) ?? candidates[0] ?? null
+  );
 }
 
 const requestSearchStorageKey = "admin:requisicao:search";
@@ -390,8 +443,7 @@ function CriarRequisicaoPage() {
           const nextQuantities: Record<string, string> = {};
 
           editableRequest.items.forEach((requestItem) => {
-            const itemName = getItemName(requestItem);
-            const matchedItem = loadedItems.find((item) => item.nome.trim() === itemName);
+            const matchedItem = findMatchingLoadedItem(requestItem, loadedItems, availableSections);
             if (!matchedItem) return;
 
             nextStocks[matchedItem.id] = String(requestItem.stock ?? requestItem.qtdDisponivel ?? "");
@@ -484,6 +536,7 @@ function CriarRequisicaoPage() {
         if (!section) return null;
 
         return {
+          item_id: item.id,
           item: item.nome,
           nome: item.nome,
           description: item.nome,
