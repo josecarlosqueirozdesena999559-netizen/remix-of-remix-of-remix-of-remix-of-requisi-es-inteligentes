@@ -10,12 +10,6 @@ const WHATSAPP_SETTING_KEYS = [
   "WHATSAPP_GRAPH_API_VERSION",
 ] as const;
 
-export interface WhatsAppTextMessageInput {
-  to: string;
-  body: string;
-  previewUrl?: boolean;
-}
-
 export interface WhatsAppTemplateMessageInput {
   to: string;
   templateName: string;
@@ -123,78 +117,6 @@ export function normalizeWhatsAppPhoneNumber(value: string) {
   }
 
   return digits;
-}
-
-export function buildRequestReadyWhatsAppMessage(input: {
-  requestCode: string;
-  requestType?: string | null;
-}) {
-  const requestType = input.requestType?.trim() || "requisição";
-
-  return [
-    `Seu pedido número ${input.requestCode}, tipo ${requestType}, está separado.`,
-    "Por favor, venha retirar no almoxarifado.",
-  ].join("\n");
-}
-
-export async function sendWhatsAppTextMessage({
-  to,
-  body,
-  previewUrl = false,
-}: WhatsAppTextMessageInput): Promise<WhatsAppMessageResult> {
-  const config = await getWhatsAppConfig();
-  const { url } = getWhatsAppRequestUrl(config);
-  const recipient = normalizeWhatsAppPhoneNumber(to);
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: recipient,
-      type: "text",
-      text: {
-        preview_url: previewUrl,
-        body,
-      },
-    }),
-  });
-
-  const payload = (await response.json().catch(() => null)) as
-    | WhatsAppMessagesResponse
-    | WhatsAppErrorResponse
-    | null;
-
-  if (!response.ok) {
-    const errorPayload = payload as WhatsAppErrorResponse | null;
-    const error = errorPayload?.error;
-    const details = [
-      error?.message || `Erro ${response.status} ao enviar WhatsApp.`,
-      error?.code ? `code=${error.code}` : "",
-      error?.error_subcode ? `subcode=${error.error_subcode}` : "",
-      error?.fbtrace_id ? `trace=${error.fbtrace_id}` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
-    throw new Error(details);
-  }
-
-  const successPayload = payload as WhatsAppMessagesResponse | null;
-  const messageId = successPayload?.messages?.[0]?.id;
-
-  if (!messageId) {
-    throw new Error("WhatsApp enviado, mas a resposta não retornou o id da mensagem.");
-  }
-
-  return {
-    messageId,
-    contactWaId: successPayload?.contacts?.[0]?.wa_id,
-  };
 }
 
 export async function sendWhatsAppTemplateMessage({

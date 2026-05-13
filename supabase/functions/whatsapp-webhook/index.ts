@@ -402,80 +402,6 @@ async function insertStatusAuditRows(rows: WhatsAppStatusAuditRow[]) {
   });
 }
 
-async function sendTextMessage(input: { to: string; text: string }) {
-  const config = await getSettings();
-  const response = await fetch(
-    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: normalizePhoneNumber(input.to),
-        type: "text",
-        text: {
-          preview_url: false,
-          body: input.text,
-        },
-      }),
-    },
-  );
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || "Erro ao enviar WhatsApp.");
-  }
-}
-
-async function sendConfirmationButtonMessage(input: {
-  to: string;
-  pending: PendingConfirmation;
-}) {
-  const config = await getSettings();
-  const response = await fetch(
-    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: normalizePhoneNumber(input.to),
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: {
-            text: buildConfirmationMessage(input.pending),
-          },
-          action: {
-            buttons: [
-              {
-                type: "reply",
-                reply: {
-                  id: CONFIRM_BUTTON_ID,
-                  title: "Confirmar",
-                },
-              },
-            ],
-          },
-        },
-      }),
-    },
-  );
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || "Erro ao enviar botão de confirmação.");
-  }
-}
-
 async function sendReadyTemplate(input: {
   to: string;
   requestCode: string;
@@ -784,51 +710,8 @@ async function confirmPending(pending: PendingConfirmation) {
   return { request, messageId, notificationSkippedReason };
 }
 
-function buildConfirmationMessage(pending: PendingConfirmation) {
-  return [
-    "Pedido encontrado. Confira antes de confirmar:",
-    "",
-    `Usuário: ${pending.request.requester}`,
-    `CPF: ${pending.request.requesterCpf}`,
-    `Tipo: ${pending.request.materialType}`,
-    `Número: ${pending.request.requestCode}`,
-    `Data: ${pending.request.requestDate}`,
-  ].join("\n");
-}
-
-function buildConfirmationInstructionMessage(pending: PendingConfirmation) {
-  return [
-    `Se o botão "Confirmar" não aparecer, responda CONFIRMAR para liberar o pedido ${pending.request.requestCode}.`,
-    "Depois da confirmação, eu aviso aqui se o usuário foi notificado no WhatsApp ou se houve algum impedimento.",
-  ].join("\n");
-}
-
-function buildConfirmationFallbackMessage(pending: PendingConfirmation) {
-  return [buildConfirmationMessage(pending), "", buildConfirmationInstructionMessage(pending)].join(
-    "\n",
-  );
-}
-
 async function savePendingAndAskConfirmation(from: string, pending: PendingConfirmation) {
   await upsertPendingConfirmation(from, pending);
-  let buttonSent = false;
-
-  try {
-    await sendConfirmationButtonMessage({ to: from, pending });
-    buttonSent = true;
-  } catch (_error) {
-    await sendTextMessage({
-      to: from,
-      text: buildConfirmationFallbackMessage(pending),
-    });
-  }
-
-  if (buttonSent) {
-    await sendTextMessage({
-      to: from,
-      text: buildConfirmationInstructionMessage(pending),
-    });
-  }
 }
 
 async function handleImageMessage(from: string, mediaId: string) {
@@ -878,33 +761,12 @@ async function handleTextMessage(from: string, text: string) {
 async function handleConfirmation(from: string) {
   const pendingRaw = await getPendingConfirmation(from);
   if (!pendingRaw) {
-    await sendTextMessage({
-      to: from,
-      text: "Nenhum pedido aguardando confirmação. Envie a foto do QR Code ou digite o COD abaixo do QR.",
-    });
     return;
   }
 
   const pending = JSON.parse(pendingRaw) as PendingConfirmation;
-  const ageMs = Date.now() - Date.parse(pending.createdAt);
-  if (!Number.isFinite(ageMs) || ageMs > 24 * 60 * 60 * 1000) {
-    await deletePendingConfirmation(from);
-    await sendTextMessage({
-      to: from,
-      text: "Confirmação expirada. Envie a foto do QR Code ou digite o COD novamente.",
-    });
-    return;
-  }
-
-  const result = await confirmPending(pending);
+  await confirmPending(pending);
   await deletePendingConfirmation(from);
-
-  await sendTextMessage({
-    to: from,
-    text: result.notificationSkippedReason
-      ? `Pedido ${result.request.requestCode} confirmado. ${result.notificationSkippedReason}`
-      : `Pedido ${result.request.requestCode} confirmado. Responsável avisado no WhatsApp.`,
-  });
 }
 
 function extractMessages(payload: any) {
@@ -982,18 +844,9 @@ Deno.serve(async (request) => {
             return;
           }
 
-          await sendTextMessage({
-            to: from,
-            text: "Envie uma foto do QR Code ou digite o COD abaixo do QR.",
-          });
+          return;
         } catch (error) {
-          await sendTextMessage({
-            to: from,
-            text:
-              error instanceof Error
-                ? `${error.message}\n\nSe a foto não ler, digite o COD que aparece abaixo do QR Code.`
-                : "Não foi possível processar. Se a foto não ler, digite o COD abaixo do QR Code.",
-          });
+          console.error(error);
         }
       }),
     );

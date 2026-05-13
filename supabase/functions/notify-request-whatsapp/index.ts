@@ -12,12 +12,13 @@ const corsHeaders = {
 const WHATSAPP_TEMPLATE_LANGUAGE = "pt_BR";
 const WHATSAPP_TEMPLATE_NAMES = {
   requestCreated: "pedido_gerado_assinatura",
+  requestSigned: "requisicao_assinada",
   outputAttached: "saida_anexada_pedido",
   readyForPickup: "pedido_pronto_retirada",
 } as const;
 
 type UserTemplateNotificationType = keyof typeof WHATSAPP_TEMPLATE_NAMES;
-type NotificationType = UserTemplateNotificationType | "requestSigned";
+type NotificationType = UserTemplateNotificationType;
 
 type AppSetting = {
   key: string;
@@ -210,46 +211,6 @@ async function getRequestNotificationData(requestId: string) {
   };
 }
 
-async function sendTextMessage(input: { to: string; text: string }) {
-  const config = await getWhatsAppSettings();
-  const response = await fetch(
-    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: normalizeWhatsAppPhoneNumber(input.to),
-        type: "text",
-        text: {
-          preview_url: false,
-          body: input.text,
-        },
-      }),
-    },
-  );
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = payload?.error;
-    throw new Error(
-      [
-        error?.message || `Erro ${response.status} ao enviar WhatsApp.`,
-        error?.code ? `code=${error.code}` : "",
-        error?.error_subcode ? `subcode=${error.error_subcode}` : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
-    );
-  }
-
-  return payload?.messages?.[0]?.id as string | undefined;
-}
-
 async function sendRequestTemplate(input: {
   to: string;
   templateName: string;
@@ -306,34 +267,6 @@ async function sendRequestTemplate(input: {
   return payload?.messages?.[0]?.id as string | undefined;
 }
 
-function getAdminNotificationTitle(notificationType: NotificationType, status?: string | null) {
-  if (notificationType === "requestCreated") return "Nova requisição gerada";
-  if (notificationType === "requestSigned") {
-    return status === "concluido" ? "Saída assinada pelo usuário" : "Requisição assinada pelo usuário";
-  }
-  if (notificationType === "outputAttached") return "Saída anexada pelo admin";
-  if (notificationType === "readyForPickup") return "Pedido liberado para retirada";
-  return "Atualização de requisição";
-}
-
-function buildAdminNotificationMessage(input: {
-  notificationType: NotificationType;
-  requestCode: string;
-  materialType: string | null;
-  requestDate: string | null;
-  requesterName: string | null | undefined;
-  status?: string | null;
-}) {
-  return [
-    getAdminNotificationTitle(input.notificationType, input.status),
-    "",
-    `Usuário: ${valueOrDash(input.requesterName)}`,
-    `Tipo: ${valueOrDash(input.materialType)}`,
-    `Número: ${valueOrDash(input.requestCode)}`,
-    `Data: ${valueOrDash(input.requestDate)}`,
-  ].join("\n");
-}
-
 async function notifyAdmins(input: {
   notificationType: NotificationType;
   requestCode: string;
@@ -347,20 +280,15 @@ async function notifyAdmins(input: {
   if (!numbers.length) return [];
 
   const results = await Promise.allSettled(
-    numbers.map((number) => {
-      if (input.notificationType === "requestSigned") {
-        const text = buildAdminNotificationMessage(input);
-        return sendTextMessage({ to: number, text });
-      }
-
-      return sendRequestTemplate({
+    numbers.map((number) =>
+      sendRequestTemplate({
         to: number,
         templateName: WHATSAPP_TEMPLATE_NAMES[input.notificationType],
         requestCode: input.requestCode,
         materialType: input.materialType,
         requestDate: input.requestDate,
-      });
-    }),
+      }),
+    ),
   );
 
   return results.map((result, index) => ({

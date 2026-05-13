@@ -28,13 +28,8 @@ wrangler secret put WHATSAPP_GRAPH_API_VERSION
 
 1. Adicionar o telefone/WhatsApp do usuário no cadastro.
 2. Gerar um QR code no PDF contendo o identificador seguro da requisição.
-3. Criar a tela/leitor para o admin marcar a requisição como separada.
-4. Ao ler o QR code, buscar a requisição e enviar:
-
-```txt
-Seu pedido número {codigo}, tipo {tipo}, está separado.
-Por favor, venha retirar no almoxarifado.
-```
+3. Criar a tela/leitor para o admin marcar a requisicao como separada.
+4. Ao ler o QR code, buscar a requisicao e enviar somente o template `pedido_pronto_retirada`.
 
 ## Template de boas-vindas
 
@@ -84,6 +79,37 @@ Seu pedido numero {{1}} foi gerado.
 Tipo de material solicitado: {{2}}
 Data: {{3}}
 Por favor, assine a requisicao para que o almoxarifado receba o pedido.
+```
+
+Variaveis:
+
+```txt
+{{1}} = numero/codigo da requisicao
+{{2}} = tipo de material
+{{3}} = data da requisicao
+```
+
+## Template de requisicao assinada
+
+Quando o usuario assina a requisicao ou a saida, o backend notifica os administradores pelo template:
+
+```txt
+requisicao_assinada
+```
+
+Idioma:
+
+```txt
+pt_BR
+```
+
+Corpo sugerido no Meta Business:
+
+```txt
+Requisicao assinada pelo usuario.
+Numero: {{1}}
+Tipo de material: {{2}}
+Data: {{3}}
 ```
 
 Variaveis:
@@ -162,18 +188,9 @@ Tambem existe o fluxo por WhatsApp:
 
 1. O administrador cadastra um ou mais numeros autorizados em **Configuracoes > WhatsApp dos administradores**.
 2. O administrador envia uma foto do QR Code para o numero oficial do almoxarifado.
-3. A Edge Function `whatsapp-webhook` baixa a imagem, le o QR Code e responde ao administrador com:
-
-```txt
-Usuario
-CPF
-Tipo
-Numero
-Data
-```
-
+3. A Edge Function `whatsapp-webhook` baixa a imagem, le o QR Code e salva a confirmacao pendente sem enviar texto livre.
 4. O administrador responde `CONFIRMAR`.
-5. A Function marca a requisicao como `pronto_retirada` e envia o template `pedido_pronto_retirada` ao responsavel pelo pedido.
+5. A Function marca a requisicao como `pronto_retirada` e envia somente o template `pedido_pronto_retirada` ao responsavel pelo pedido.
 
 URL do webhook:
 
