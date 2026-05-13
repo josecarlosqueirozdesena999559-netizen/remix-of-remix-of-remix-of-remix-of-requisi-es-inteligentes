@@ -81,6 +81,16 @@ type WhatsAppStatusAuditRow = {
   error_summary: string | null;
   raw_payload: unknown;
 };
+
+type WhatsAppMessageAuditRow = {
+  message_id: string;
+  sender_id: string | null;
+  message_type: string | null;
+  body: string | null;
+  occurred_at: string | null;
+  raw_payload: unknown;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
@@ -390,6 +400,48 @@ function extractStatuses(payload: any): WhatsAppStatusAuditRow[] {
         .filter(Boolean),
     ),
   );
+}
+
+function extractMessageBody(message: any) {
+  if (typeof message?.text?.body === "string") return message.text.body;
+  if (typeof message?.button?.text === "string") return message.button.text;
+  if (typeof message?.button?.payload === "string") return message.button.payload;
+  if (typeof message?.interactive?.button_reply?.title === "string") {
+    return message.interactive.button_reply.title;
+  }
+  if (typeof message?.interactive?.button_reply?.id === "string") {
+    return message.interactive.button_reply.id;
+  }
+
+  return null;
+}
+
+function buildMessageAuditRows(messages: any[]): WhatsAppMessageAuditRow[] {
+  return messages
+    .map((message: any) => {
+      const messageId = String(message?.id || "").trim();
+      if (!messageId) return null;
+
+      return {
+        message_id: messageId,
+        sender_id: typeof message?.from === "string" ? message.from.trim() || null : null,
+        message_type: typeof message?.type === "string" ? message.type.trim() || null : null,
+        body: extractMessageBody(message),
+        occurred_at: parseStatusTimestamp(message?.timestamp),
+        raw_payload: message,
+      } satisfies WhatsAppMessageAuditRow;
+    })
+    .filter(Boolean);
+}
+
+async function insertMessageAuditRows(rows: WhatsAppMessageAuditRow[]) {
+  if (!rows.length) return;
+
+  await supabaseFetch("whatsapp_webhook_message_audit", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(rows),
+  });
 }
 
 async function insertStatusAuditRows(rows: WhatsAppStatusAuditRow[]) {
@@ -805,6 +857,7 @@ Deno.serve(async (request) => {
     const statuses = extractStatuses(payload);
     await insertStatusAuditRows(statuses);
     const messages = extractMessages(payload);
+    await insertMessageAuditRows(buildMessageAuditRows(messages));
 
     await Promise.all(
       messages.map(async (message: any) => {
