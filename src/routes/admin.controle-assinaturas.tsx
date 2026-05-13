@@ -10,6 +10,7 @@ import {
   resolveCanonicalLocationNameFromCandidates,
   type LocationOption,
 } from "@/lib/location-normalizer";
+import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -127,7 +128,7 @@ function ControleAssinaturasPage() {
 
         requests.forEach((request) => {
           const fallbackUser = users.find((user) => user.cpf && user.cpf === request.solicitante_cpf);
-          const localidade = resolveCanonicalLocationNameFromCandidates(
+          const rawLocalidade = resolveCanonicalLocationNameFromCandidates(
             [
               request.setor?.trim(),
               fallbackUser?.unidade_nome?.trim(),
@@ -136,6 +137,7 @@ function ControleAssinaturasPage() {
             locationOptions,
             "Sem localidade",
           );
+          const localidade = formatProgramName(rawLocalidade) || rawLocalidade;
           const usuarioNome =
             request.solicitante?.trim() ||
             fallbackUser?.nome?.trim() ||

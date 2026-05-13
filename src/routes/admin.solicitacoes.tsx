@@ -29,6 +29,7 @@ import {
   resolveCanonicalLocationNameFromCandidates,
   type LocationOption,
 } from "@/lib/location-normalizer";
+import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
@@ -148,10 +149,8 @@ function Solicitacoes() {
         const pendingOutputRequests = requests.filter(needsAdminOutput);
 
         setData(
-          pendingOutputRequests.map((request) => ({
-            ...request,
-            status: "recebido",
-            displaySetor: resolveCanonicalLocationNameFromCandidates(
+          pendingOutputRequests.map((request) => {
+            const displaySetor = resolveCanonicalLocationNameFromCandidates(
               [
                 request.setor?.trim(),
                 usersByCpf.get(request.solicitante_cpf?.trim() || "")?.unidade_nome?.trim(),
@@ -159,8 +158,14 @@ function Solicitacoes() {
               ],
               locationOptions,
               "Sem setor",
-            ),
-          })),
+            );
+
+            return {
+              ...request,
+              status: "recebido",
+              displaySetor: formatProgramName(displaySetor) || displaySetor,
+            };
+          }),
         );
         setCodeByRequestId(buildGlobalRequestCodes(pendingOutputRequests));
       }
