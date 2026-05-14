@@ -52,6 +52,7 @@ type ConversationMessage = {
   occurredAt: string;
   createdAt: string;
   direction: "incoming" | "outgoing";
+  status?: "sending" | "failed";
 };
 
 type ConversationSummary = {
@@ -183,6 +184,7 @@ function getInitials(name: string) {
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
+  optimisticMessages?: ConversationMessage[];
   users: UserRow[];
 }) {
   const byPhone = new Map<string, ConversationMessage[]>();
@@ -221,6 +223,15 @@ function buildConversationSummaries(input: {
     byPhone.set(phone, next);
   });
 
+  (input.optimisticMessages || []).forEach((message) => {
+    const phone = canonicalConversationPhone(message.phone);
+    if (!phone) return;
+
+    const next = byPhone.get(phone) || [];
+    next.push({ ...message, phone });
+    byPhone.set(phone, next);
+  });
+
   return [...byPhone.entries()]
     .map(([phone, messages]) => {
       const sortedMessages = [...messages].sort(
@@ -254,6 +265,7 @@ function ConversasPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<IncomingMessage[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
+  const [optimisticMessages, setOptimisticMessages] = useState<ConversationMessage[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
   const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "online" | "offline">(
@@ -364,8 +376,8 @@ function ConversasPage() {
   }, []);
 
   const conversations = useMemo(
-    () => buildConversationSummaries({ incoming, outgoing, users }),
-    [incoming, outgoing, users],
+    () => buildConversationSummaries({ incoming, outgoing, optimisticMessages, users }),
+    [incoming, outgoing, optimisticMessages, users],
   );
   const selectedPhone = canonicalConversationPhone(search.phone);
 
@@ -425,6 +437,23 @@ function ConversasPage() {
     setSaving(true);
     setError(null);
     setNotice(null);
+    setReplyText("");
+
+    const now = new Date().toISOString();
+    const optimisticId = `local-${phone}-${Date.now()}`;
+    setOptimisticMessages((current) => [
+      ...current,
+      {
+        id: optimisticId,
+        phone,
+        body: text,
+        messageType: "text",
+        occurredAt: now,
+        createdAt: now,
+        direction: "outgoing",
+        status: "sending",
+      },
+    ]);
 
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -456,10 +485,15 @@ function ConversasPage() {
       }
       if (!result?.ok) throw new Error(result?.error || "Erro ao enviar resposta.");
 
-      setReplyText("");
-      setNotice("Resposta enviada com sucesso.");
       await loadConversations();
+      setOptimisticMessages((current) => current.filter((message) => message.id !== optimisticId));
     } catch (sendError) {
+      setOptimisticMessages((current) =>
+        current.map((message) =>
+          message.id === optimisticId ? { ...message, status: "failed" } : message,
+        ),
+      );
+      setReplyText(text);
       setError(sendError instanceof Error ? sendError.message : "Erro ao enviar resposta.");
     } finally {
       setSaving(false);
@@ -521,7 +555,7 @@ function ConversasPage() {
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:h-[74vh] xl:grid-cols-[370px_minmax(0,1fr)]">
+        <div className="grid min-h-[620px] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm lg:h-[calc(100vh-150px)] xl:grid-cols-[370px_minmax(0,1fr)]">
           <Card className="flex min-h-[420px] flex-col overflow-hidden rounded-none border-0 border-r bg-white shadow-none xl:h-full">
             <CardHeader className="border-b bg-[#f0f2f5] px-4 py-4">
               <div className="flex items-center justify-between gap-3">
@@ -647,10 +681,12 @@ function ConversasPage() {
                             {message.direction === "outgoing" ? "Admin" : "Usuario"}
                           </p>
                           <p className="whitespace-pre-wrap break-words">{message.body}</p>
-                          <p
-                            className="mt-1 text-right text-[11px] text-[#667781]"
-                          >
-                            {formatDateTime(message.createdAt || message.occurredAt)}
+                          <p className="mt-1 text-right text-[11px] text-[#667781]">
+                            {message.status === "sending"
+                              ? "Enviando..."
+                              : message.status === "failed"
+                                ? "Falhou ao enviar"
+                                : formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
                         </div>
                       </div>
@@ -666,14 +702,13 @@ function ConversasPage() {
                         onKeyDown={handleReplyKeyDown}
                         placeholder="Mensagem"
                         rows={1}
-                        disabled={saving}
                         className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
                       />
                       <Button
                         type="button"
                         size="icon"
                         className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
-                        disabled={saving || !replyText.trim()}
+                        disabled={!replyText.trim()}
                         onClick={() => void handleReply()}
                         title="Enviar"
                         aria-label="Enviar mensagem"
