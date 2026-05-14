@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, MessageSquareMore, Send } from "lucide-react";
+import { Loader2, MessageCircle, MessageSquareMore, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -256,6 +256,9 @@ function ConversasPage() {
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
+  const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "online" | "offline">(
+    "connecting",
+  );
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations() {
@@ -343,10 +346,13 @@ function ConversasPage() {
         { event: "*", schema: "public", table: "whatsapp_outbound_message_audit" },
         () => void loadConversations(),
       )
-      .subscribe();
+      .subscribe((status) => {
+        setRealtimeStatus(status === "SUBSCRIBED" ? "online" : "connecting");
+      });
 
     return () => {
       active = false;
+      setRealtimeStatus("offline");
       void supabase.removeChannel(channel);
     };
   }, []);
@@ -454,11 +460,35 @@ function ConversasPage() {
     }
   };
 
+  const handleReplyKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    void handleReply();
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Admin / WhatsApp</p>
-        <h2 className="text-2xl text-foreground">Conversas</h2>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Admin / WhatsApp</p>
+          <h2 className="text-2xl text-foreground">Conversas</h2>
+        </div>
+        <div className="flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              realtimeStatus === "online"
+                ? "bg-emerald-500"
+                : realtimeStatus === "connecting"
+                  ? "bg-amber-500"
+                  : "bg-slate-400"
+            }`}
+          />
+          {realtimeStatus === "online"
+            ? "WebSocket em tempo real"
+            : realtimeStatus === "connecting"
+              ? "Conectando ao tempo real"
+              : "Tempo real desconectado"}
+        </div>
       </div>
 
       {error && (
@@ -485,15 +515,22 @@ function ConversasPage() {
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <Card className="overflow-hidden xl:h-[72vh] xl:flex xl:flex-col">
-            <CardHeader className="border-b bg-linear-to-b from-slate-50 to-white">
-              <CardTitle>Conversas</CardTitle>
-              <CardDescription>
-                Nome, numero e ultima mensagem de cada usuario.
-              </CardDescription>
+        <div className="grid overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:h-[74vh] xl:grid-cols-[370px_minmax(0,1fr)]">
+          <Card className="flex min-h-[420px] flex-col overflow-hidden rounded-none border-0 border-r bg-white shadow-none xl:h-full">
+            <CardHeader className="border-b bg-[#f0f2f5] px-4 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Conversas</CardTitle>
+                  <CardDescription className="mt-1">
+                    Usuarios e ultimas mensagens.
+                  </CardDescription>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00a884] text-white">
+                  <MessageCircle className="h-5 w-5" />
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="max-h-[72vh] space-y-2 overflow-y-auto p-3">
+            <CardContent className="min-h-0 flex-1 overflow-y-auto p-0">
               {conversations.map((conversation) => {
                 const isActive = conversation.phone === selectedPhone;
 
@@ -502,23 +539,23 @@ function ConversasPage() {
                     key={conversation.phone}
                     type="button"
                     onClick={() => openConversation(conversation.phone)}
-                    className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
+                    className={`w-full border-b px-4 py-3 text-left transition-colors ${
                       isActive
-                        ? "border-sky-300 bg-sky-50 shadow-sm"
-                        : "border-border/70 bg-card hover:border-sky-200 hover:bg-slate-50"
+                        ? "border-slate-200 bg-[#d9fdd3]"
+                        : "border-slate-100 bg-white hover:bg-[#f5f6f6]"
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm text-white">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#111b21] text-sm text-white">
                         {getInitials(conversation.displayName)}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
+                            <p className="truncate text-sm font-medium text-[#111b21]">
                               {conversation.displayName}
                             </p>
-                            <p className="truncate text-xs text-muted-foreground">
+                            <p className="truncate text-xs text-[#667781]">
                               {formatPhone(conversation.phone)}
                             </p>
                             <p
@@ -531,11 +568,11 @@ function ConversasPage() {
                                 : "Sem entrada recente registrada"}
                             </p>
                           </div>
-                          <p className="shrink-0 text-[11px] text-muted-foreground">
+                          <p className="shrink-0 text-[11px] text-[#667781]">
                             {formatConversationTime(conversation.lastAt)}
                           </p>
                         </div>
-                        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                        <p className="mt-1 line-clamp-2 text-sm text-[#667781]">
                           {conversation.preview}
                         </p>
                       </div>
@@ -546,24 +583,25 @@ function ConversasPage() {
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden xl:h-[72vh] xl:flex xl:flex-col">
+          <Card className="flex min-h-[520px] flex-col overflow-hidden rounded-none border-0 bg-[#efeae2] shadow-none xl:h-full">
             {selectedConversation ? (
               <>
-                <CardHeader className="border-b bg-linear-to-r from-sky-50 via-white to-slate-50">
+                <CardHeader className="border-b bg-[#f0f2f5] px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600 text-sm text-white shadow-sm">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00a884] text-sm text-white">
                         {getInitials(selectedConversation.displayName)}
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Conversa</p>
-                        <CardTitle className="flex items-center gap-2">
-                          <MessageSquareMore className="h-5 w-5" />
+                        <CardTitle className="flex items-center gap-2 text-base text-[#111b21]">
+                          <MessageSquareMore className="h-4 w-4" />
                           {selectedConversation.displayName}
                         </CardTitle>
-                        <CardDescription>{formatPhone(selectedConversation.phone)}</CardDescription>
+                        <CardDescription className="text-xs">
+                          {formatPhone(selectedConversation.phone)}
+                        </CardDescription>
                         <p
-                          className={`mt-1 text-xs ${
+                          className={`mt-0.5 text-[11px] ${
                             selectedConversation.isWindowOpen
                               ? "text-emerald-600"
                               : "text-amber-600"
@@ -580,14 +618,11 @@ function ConversasPage() {
                         {selectedConversation.messages.length} mensagem
                         {selectedConversation.messages.length === 1 ? "" : "ens"}
                       </p>
-                      <Button type="button" variant="outline" size="sm" onClick={closeConversation}>
-                        Sair do chat
-                      </Button>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex h-full flex-col gap-4 p-4 sm:p-6">
-                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-3xl border bg-muted/20 p-4">
+                <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-5 sm:px-8">
                     {selectedConversation.messages.map((message) => (
                       <div
                         key={message.id}
@@ -596,19 +631,15 @@ function ConversasPage() {
                         }`}
                       >
                         <div
-                          className={`max-w-[88%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[75%] ${
+                          className={`relative max-w-[88%] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[72%] ${
                             message.direction === "outgoing"
-                              ? "bg-sky-600 text-white"
-                              : "border bg-background text-foreground"
+                              ? "bg-[#d9fdd3] text-[#111b21]"
+                              : "bg-white text-[#111b21]"
                           }`}
                         >
                           <p className="whitespace-pre-wrap break-words">{message.body}</p>
                           <p
-                            className={`mt-2 text-[11px] ${
-                              message.direction === "outgoing"
-                                ? "text-sky-100"
-                                : "text-muted-foreground"
-                            }`}
+                            className="mt-1 text-right text-[11px] text-[#667781]"
                           >
                             {formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
@@ -618,30 +649,32 @@ function ConversasPage() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <div className="rounded-3xl border bg-card p-4">
-                    <div className="space-y-3">
+                  <div className="border-t bg-[#f0f2f5] px-4 py-3">
+                    <div className="flex items-end gap-3">
                       <Textarea
                         value={replyText}
                         onChange={(event) => setReplyText(event.target.value)}
-                        placeholder="Digite a resposta para o usuario"
-                        rows={4}
+                        onKeyDown={handleReplyKeyDown}
+                        placeholder="Mensagem"
+                        rows={1}
                         disabled={saving}
+                        className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
                       />
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          className="gap-2"
-                          disabled={saving}
-                          onClick={() => void handleReply()}
-                        >
-                          {saving ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
-                          )}
-                          Enviar resposta
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
+                        disabled={saving || !replyText.trim()}
+                        onClick={() => void handleReply()}
+                        title="Enviar"
+                        aria-label="Enviar mensagem"
+                      >
+                        {saving ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Send className="h-5 w-5" />
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -649,11 +682,11 @@ function ConversasPage() {
             ) : (
               <CardContent className="flex h-full min-h-[420px] items-center justify-center p-6">
                 <div className="mx-auto max-w-sm text-center">
-                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-sky-100 text-sky-700">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#d9fdd3] text-[#00a884]">
                     <MessageSquareMore className="h-8 w-8" />
                   </div>
-                  <h3 className="mt-4 text-lg font-medium text-foreground">Selecione uma conversa</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <h3 className="mt-4 text-lg font-medium text-[#111b21]">Selecione uma conversa</h3>
+                  <p className="mt-2 text-sm text-[#667781]">
                     Escolha um usuario na coluna ao lado para visualizar o historico completo e
                     responder com mais organizacao.
                   </p>
