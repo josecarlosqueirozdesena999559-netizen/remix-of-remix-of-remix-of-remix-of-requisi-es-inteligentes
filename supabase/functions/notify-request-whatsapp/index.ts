@@ -70,6 +70,12 @@ function getBrazilianPhoneVariants(phone: string) {
   return [...variants];
 }
 
+function phonesMatch(left: string, right: string) {
+  const leftVariants = getBrazilianPhoneVariants(left);
+  const rightVariants = getBrazilianPhoneVariants(right);
+  return leftVariants.some((value) => rightVariants.includes(value));
+}
+
 function userSessionKeys(phone: string) {
   return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_USER_SESSION_${variant}`);
 }
@@ -203,6 +209,16 @@ async function resolveRequestCode(requisicao: RequestCodeSource) {
   return requisicao.id;
 }
 
+function resolveRequestDate(value: string | null, fallback: string | null) {
+  const raw = (value?.trim() || fallback?.trim() || "").trim();
+  if (!raw) return null;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(parsed);
+}
+
 async function getRequestNotificationData(requestId: string) {
   const requests = (await supabaseFetch(
     `requisicoes?select=id,saida_codigo,categoria,data,created_at,solicitante,solicitante_cpf,setor,status&id=eq.${encodeURIComponent(
@@ -228,32 +244,35 @@ async function getRequestNotificationData(requestId: string) {
     | {
         nome: string | null;
         whatsapp: string | null;
+        is_admin: boolean | null;
       }
     | undefined;
 
   if (requisicao.solicitante_cpf) {
     const users = (await supabaseFetch(
-      `usuarios?select=nome,whatsapp&cpf=eq.${encodeURIComponent(
+      `usuarios?select=nome,whatsapp,is_admin&cpf=eq.${encodeURIComponent(
         requisicao.solicitante_cpf,
       )}&limit=1`,
-    )) as Array<{ nome: string | null; whatsapp: string | null }>;
+    )) as Array<{ nome: string | null; whatsapp: string | null; is_admin: boolean | null }>;
     user = users[0];
   }
 
   if (!user && requisicao.solicitante) {
     const users = (await supabaseFetch(
-      `usuarios?select=nome,whatsapp&nome=eq.${encodeURIComponent(requisicao.solicitante)}&limit=1`,
-    )) as Array<{ nome: string | null; whatsapp: string | null }>;
+      `usuarios?select=nome,whatsapp,is_admin&nome=eq.${encodeURIComponent(requisicao.solicitante)}&limit=1`,
+    )) as Array<{ nome: string | null; whatsapp: string | null; is_admin: boolean | null }>;
     user = users[0];
   }
 
   return {
     whatsapp: user?.whatsapp?.trim() || "",
+    requesterIsAdmin: Boolean(user?.is_admin),
     requestCode,
     materialType: requisicao.categoria,
     requesterName: user?.nome || requisicao.solicitante,
     locationName: requisicao.setor,
     status: requisicao.status,
+    requestDate: resolveRequestDate(requisicao.data, requisicao.created_at),
   };
 }
 
@@ -324,6 +343,7 @@ function buildUserNotificationMessage(input: {
   materialType: string | null;
   requesterName: string | null | undefined;
   locationName: string | null;
+  requestDate?: string | null;
   status?: string | null;
 }) {
   if (input.notificationType === "requestCreated") {
@@ -333,6 +353,7 @@ function buildUserNotificationMessage(input: {
       `Nome: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo do material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
       `Numero: ${valueOrDash(input.requestCode)}`,
       "Assine sua requisicao.",
     ].join("\n");
@@ -372,6 +393,7 @@ function buildAdminNotificationMessage(input: {
   materialType: string | null;
   requesterName: string | null | undefined;
   locationName: string | null;
+  requestDate?: string | null;
   status?: string | null;
 }) {
   if (input.notificationType === "requestCreated") {
@@ -381,6 +403,7 @@ function buildAdminNotificationMessage(input: {
       `Solicitante: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
     ].join("\n");
   }
 
@@ -394,6 +417,7 @@ function buildAdminNotificationMessage(input: {
       `Solicitante: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
     ].join("\n");
   }
 
@@ -404,6 +428,7 @@ function buildAdminNotificationMessage(input: {
       `Solicitante: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
       "Aguardando assinatura da saida.",
     ].join("\n");
   }
@@ -414,6 +439,7 @@ function buildAdminNotificationMessage(input: {
     `Solicitante: ${valueOrDash(input.requesterName)}`,
     `Local: ${valueOrDash(input.locationName)}`,
     `Tipo de material: ${valueOrDash(input.materialType)}`,
+    `Data: ${valueOrDash(input.requestDate)}`,
   ].join("\n");
 }
 
@@ -449,9 +475,16 @@ Deno.serve(async (request) => {
       error?: string;
     }> = [];
 
+    const requesterIsAdminNumber =
+      Boolean(notificationData.whatsapp) &&
+      adminNumbers.some((adminNumber) => phonesMatch(adminNumber, notificationData.whatsapp));
+
     if (!notificationData.whatsapp) {
       skipped = true;
       reason = "Usuario sem WhatsApp cadastrado.";
+    } else if (notificationData.requesterIsAdmin || requesterIsAdminNumber) {
+      skipped = true;
+      reason = "Destinatario principal e admin; mensagem de usuario nao enviada.";
     } else if (!(await hasActiveUserSession(notificationData.whatsapp))) {
       skipped = true;
       reason =
@@ -464,6 +497,7 @@ Deno.serve(async (request) => {
         materialType: notificationData.materialType,
         requesterName: notificationData.requesterName,
         locationName: notificationData.locationName,
+        requestDate: notificationData.requestDate,
         status: notificationData.status,
       });
 
@@ -492,6 +526,7 @@ Deno.serve(async (request) => {
         materialType: notificationData.materialType,
         requesterName: notificationData.requesterName,
         locationName: notificationData.locationName,
+        requestDate: notificationData.requestDate,
         status: notificationData.status,
       });
 
