@@ -74,6 +74,25 @@ function parseAdminNumbers(value: string) {
     .filter((number, index, numbers) => numbers.indexOf(number) === index);
 }
 
+function getBrazilianPhoneVariants(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  const variants = new Set<string>([digits]);
+
+  if (digits.startsWith("55") && digits.length === 13 && digits[4] === "9") {
+    variants.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+  }
+
+  if (digits.startsWith("55") && digits.length === 12) {
+    variants.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+  }
+
+  return [...variants];
+}
+
+function adminSessionKeys(phone: string) {
+  return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_ADMIN_SESSION_${variant}`);
+}
+
 function getNotificationType(value: unknown): NotificationType {
   if (
     value === "requestCreated" ||
@@ -150,6 +169,28 @@ async function getWhatsAppSettings() {
   }
 
   return { accessToken, phoneNumberId, graphApiVersion, adminNumbers };
+}
+
+async function getSetting(key: string) {
+  const rows = (await supabaseFetch(
+    `app_settings?select=value&key=eq.${encodeURIComponent(key)}&limit=1`,
+  )) as Array<{ value: string }>;
+
+  return rows[0]?.value || "";
+}
+
+async function hasActiveAdminSession(phone: string) {
+  for (const key of adminSessionKeys(phone)) {
+    const rawValue = await getSetting(key);
+    if (!rawValue) continue;
+
+    const expiresAt = Date.parse(rawValue);
+    if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function resolveRequestCode(requisicao: RequestCodeSource) {
@@ -267,6 +308,75 @@ async function sendRequestTemplate(input: {
   return payload?.messages?.[0]?.id as string | undefined;
 }
 
+async function sendTextMessage(input: { to: string; text: string }) {
+  const config = await getWhatsAppSettings();
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizeWhatsAppPhoneNumber(input.to),
+        type: "text",
+        text: {
+          preview_url: false,
+          body: input.text,
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = payload?.error;
+    throw new Error(
+      [
+        error?.message || `Erro ${response.status} ao enviar WhatsApp.`,
+        error?.code ? `code=${error.code}` : "",
+        error?.error_subcode ? `subcode=${error.error_subcode}` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
+  return payload?.messages?.[0]?.id as string | undefined;
+}
+
+function buildAdminNotificationMessage(input: {
+  notificationType: NotificationType;
+  requestCode: string;
+  materialType: string | null;
+  requestDate: string | null;
+  requesterName: string | null | undefined;
+  status?: string | null;
+}) {
+  const headline =
+    input.notificationType === "requestSigned"
+      ? "Requisicao assinada pelo usuario."
+      : input.notificationType === "requestCreated"
+        ? "Nova requisicao gerada."
+        : input.notificationType === "outputAttached"
+          ? "Saida anexada para assinatura."
+          : "Pedido pronto para retirada.";
+
+  return [
+    headline,
+    `Numero: ${valueOrDash(input.requestCode)}`,
+    `Tipo de material: ${valueOrDash(input.materialType)}`,
+    `Data: ${valueOrDash(input.requestDate)}`,
+    `Solicitante: ${valueOrDash(input.requesterName)}`,
+    input.status ? `Status: ${valueOrDash(input.status)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 async function notifyAdmins(input: {
   notificationType: NotificationType;
   requestCode: string;
@@ -280,22 +390,31 @@ async function notifyAdmins(input: {
   if (!numbers.length) return [];
 
   const results = await Promise.allSettled(
-    numbers.map((number) =>
-      sendRequestTemplate({
+    numbers.map(async (number) => {
+      const hasActiveSession = await hasActiveAdminSession(number);
+      if (hasActiveSession) {
+        const text = buildAdminNotificationMessage(input);
+        return sendTextMessage({ to: number, text });
+      }
+
+      return sendRequestTemplate({
         to: number,
         templateName: WHATSAPP_TEMPLATE_NAMES[input.notificationType],
         requestCode: input.requestCode,
         materialType: input.materialType,
         requestDate: input.requestDate,
-      }),
-    ),
+      });
+    }),
   );
 
   return results.map((result, index) => ({
     to: numbers[index],
     ok: result.status === "fulfilled",
     messageId: result.status === "fulfilled" ? result.value : undefined,
-    error: result.status === "rejected" ? String(result.reason?.message || result.reason) : undefined,
+    error:
+      result.status === "rejected"
+        ? String(result.reason?.message || result.reason)
+        : undefined,
   }));
 }
 

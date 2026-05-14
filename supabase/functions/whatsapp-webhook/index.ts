@@ -10,6 +10,13 @@ const corsHeaders = {
 const WHATSAPP_TEMPLATE_LANGUAGE = "pt_BR";
 const READY_TEMPLATE_NAME = "pedido_pronto_retirada";
 const CONFIRM_BUTTON_ID = "confirmar_retirada";
+const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+const ADMIN_KEEPALIVE_BUTTON_IDS = ["admin_keepalive_confirmar", "abrir_janela_24h_admin"];
+const ADMIN_KEEPALIVE_BUTTON_TITLES = [
+  "abrir janela 24h",
+  "confirmar janela",
+  "confirmar recebimento",
+];
 const SETTINGS_KEYS = [
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_PHONE_NUMBER_ID",
@@ -214,6 +221,10 @@ function pendingKeys(phone: string) {
   return [...getBrazilianPhoneVariants(phone)].map(pendingKey);
 }
 
+function adminSessionKeys(phone: string) {
+  return [...getBrazilianPhoneVariants(phone)].map((variant) => `WHATSAPP_ADMIN_SESSION_${variant}`);
+}
+
 function parseQrPayload(value: string) {
   const parsed = JSON.parse(value) as RequestQrPayload;
 
@@ -321,6 +332,12 @@ async function getPendingConfirmation(phone: string) {
 
 async function deletePendingConfirmation(phone: string) {
   await Promise.all(pendingKeys(phone).map((key) => deleteSetting(key)));
+}
+
+async function markAdminSessionActive(phone: string) {
+  const expiresAt = new Date(Date.now() + ADMIN_SESSION_DURATION_MS).toISOString();
+  await Promise.all(adminSessionKeys(phone).map((key) => upsertSetting(key, expiresAt)));
+  return expiresAt;
 }
 
 function parseStatusTimestamp(value: unknown) {
@@ -487,6 +504,37 @@ async function sendReadyTemplate(input: {
               ],
             },
           ],
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || "Erro ao enviar WhatsApp.");
+  }
+
+  return payload?.messages?.[0]?.id as string | undefined;
+}
+
+async function sendTextMessage(input: { to: string; text: string }) {
+  const config = await getSettings();
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizePhoneNumber(input.to),
+        type: "text",
+        text: {
+          preview_url: false,
+          body: input.text,
         },
       }),
     },
@@ -821,6 +869,29 @@ async function handleConfirmation(from: string) {
   await deletePendingConfirmation(from);
 }
 
+function matchesAdminKeepaliveButton(message: any) {
+  const interactiveId = String(message?.interactive?.button_reply?.id || "").trim().toLowerCase();
+  const interactiveTitle = String(message?.interactive?.button_reply?.title || "").trim().toLowerCase();
+  const buttonPayload = String(message?.button?.payload || "").trim().toLowerCase();
+  const buttonText = String(message?.button?.text || "").trim().toLowerCase();
+
+  return (
+    ADMIN_KEEPALIVE_BUTTON_IDS.includes(interactiveId) ||
+    ADMIN_KEEPALIVE_BUTTON_IDS.includes(buttonPayload) ||
+    ADMIN_KEEPALIVE_BUTTON_TITLES.includes(interactiveTitle) ||
+    ADMIN_KEEPALIVE_BUTTON_TITLES.includes(buttonText)
+  );
+}
+
+async function handleAdminKeepalive(from: string) {
+  await markAdminSessionActive(from);
+  await sendTextMessage({
+    to: from,
+    text:
+      "Recebido. Sua janela de mensagens ficou aberta por 24 horas a partir desta resposta. Os alertas do sistema podem ser enviados normalmente durante esse período.",
+  });
+}
+
 function extractMessages(payload: any) {
   const entries = Array.isArray(payload?.entry) ? payload.entry : [];
   return entries.flatMap((entry: any) =>
@@ -867,6 +938,16 @@ Deno.serve(async (request) => {
         }
 
         try {
+          await markAdminSessionActive(from);
+
+          if (
+            (message.type === "interactive" || message.type === "button") &&
+            matchesAdminKeepaliveButton(message)
+          ) {
+            await handleAdminKeepalive(from);
+            return;
+          }
+
           if (message.type === "image" && message.image?.id) {
             await handleImageMessage(from, message.image.id);
             return;
