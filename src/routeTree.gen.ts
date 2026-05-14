@@ -19,6 +19,7 @@ import { Route as AdminMinhasAssinaturasRouteImport } from './routes/admin.minha
 import { Route as AdminMeusAssinadosRouteImport } from './routes/admin.meus-assinados'
 import { Route as AdminControleEntradasRouteImport } from './routes/admin.controle-entradas'
 import { Route as AdminControleAssinaturasRouteImport } from './routes/admin.controle-assinaturas'
+import { Route as AdminConversasRouteImport } from './routes/admin.conversas'
 import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
 import { Route as AdminCompletarCadastroRouteImport } from './routes/admin.completar-cadastro'
 import { Route as AdminAssinadasRouteImport } from './routes/admin.assinadas'
@@ -84,6 +85,11 @@ const AdminControleAssinaturasRoute =
     path: '/controle-assinaturas',
     getParentRoute: () => AdminRoute,
   } as any)
+const AdminConversasRoute = AdminConversasRouteImport.update({
+  id: '/conversas',
+  path: '/conversas',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminConfiguracoesRoute = AdminConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/admin/assinadas': typeof AdminAssinadasRouteWithChildren
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
+  '/admin/conversas': typeof AdminConversasRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
   '/admin/controle-entradas': typeof AdminControleEntradasRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/assinadas': typeof AdminAssinadasRouteWithChildren
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
+  '/admin/conversas': typeof AdminConversasRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
   '/admin/controle-entradas': typeof AdminControleEntradasRoute
@@ -211,6 +219,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/admin/assinadas': typeof AdminAssinadasRouteWithChildren
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
+  '/admin/conversas': typeof AdminConversasRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
   '/admin/controle-entradas': typeof AdminControleEntradasRoute
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin/assinadas'
     | '/admin/completar-cadastro'
+    | '/admin/conversas'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
     | '/admin/controle-entradas'
@@ -262,6 +272,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/assinadas'
     | '/admin/completar-cadastro'
+    | '/admin/conversas'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
     | '/admin/controle-entradas'
@@ -287,6 +298,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin/assinadas'
     | '/admin/completar-cadastro'
+    | '/admin/conversas'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
     | '/admin/controle-entradas'
@@ -397,6 +409,13 @@ declare module '@tanstack/react-router' {
       path: '/completar-cadastro'
       fullPath: '/admin/completar-cadastro'
       preLoaderRoute: typeof AdminCompletarCadastroRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/conversas': {
+      id: '/admin/conversas'
+      path: '/conversas'
+      fullPath: '/admin/conversas'
+      preLoaderRoute: typeof AdminConversasRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/assinadas': {
@@ -560,6 +579,7 @@ const AdminCadastrosUsuariosRouteWithChildren =
 interface AdminRouteChildren {
   AdminAssinadasRoute: typeof AdminAssinadasRouteWithChildren
   AdminCompletarCadastroRoute: typeof AdminCompletarCadastroRoute
+  AdminConversasRoute: typeof AdminConversasRoute
   AdminConfiguracoesRoute: typeof AdminConfiguracoesRoute
   AdminControleAssinaturasRoute: typeof AdminControleAssinaturasRoute
   AdminControleEntradasRoute: typeof AdminControleEntradasRoute
@@ -578,6 +598,7 @@ interface AdminRouteChildren {
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAssinadasRoute: AdminAssinadasRouteWithChildren,
   AdminCompletarCadastroRoute: AdminCompletarCadastroRoute,
+  AdminConversasRoute: AdminConversasRoute,
   AdminConfiguracoesRoute: AdminConfiguracoesRoute,
   AdminControleAssinaturasRoute: AdminControleAssinaturasRoute,
   AdminControleEntradasRoute: AdminControleEntradasRoute,

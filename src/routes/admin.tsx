@@ -183,6 +183,13 @@ function AdminLayout() {
               >
                 Controle de Assinaturas
               </Link>
+              <Link
+                to="/admin/conversas"
+                className={itemCls}
+                activeProps={{ className: `${itemCls} ${activeCls}` }}
+              >
+                Conversas
+              </Link>
 
               <button
                 type="button"
@@ -288,7 +295,7 @@ function AdminLayout() {
         </nav>
       </aside>
       <main className="flex-1 space-y-4 p-8">
-        <Alert className="border-sky-200 bg-sky-50 text-sky-950">
+        <Alert className="rounded-md border-none bg-primary/10 text-primary shadow-none">
           <AlertDescription>
             Para receber alertas de assinaturas e pedidos no WhatsApp, envie uma mensagem para o
             numero oficial do almoxarifado. Isso abre sua janela de 24 horas para os avisos.
