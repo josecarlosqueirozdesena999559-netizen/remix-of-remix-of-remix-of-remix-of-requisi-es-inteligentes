@@ -512,7 +512,9 @@ function AssinadasPage() {
                         </td>
                         <td className="px-3 py-2">
                           {request.printed_at ? (
-                            <span className="text-xs text-muted-foreground">Ja foi feito</span>
+                            <div className="flex items-center gap-2">
+                              <Checkbox checked disabled aria-label="Documento ja verificado" />
+                            </div>
                           ) : (
                             <div className="flex items-center gap-2">
                               <Checkbox
