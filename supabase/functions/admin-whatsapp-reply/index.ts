@@ -270,12 +270,6 @@ Deno.serve(async (request) => {
 
     if (!to) throw new Error("Numero do destinatario nao informado.");
     if (!text) throw new Error("Digite uma mensagem para enviar.");
-    if (!(await hasActiveUserSession(to)) && !(await hasRecentInboundMessage(to))) {
-      throw new Error(
-        "A janela de 24 horas do usuario esta fechada. Aguarde uma nova mensagem dele para responder por aqui.",
-      );
-    }
-
     const payload = await sendTextMessage({ to, text });
     const messageId = payload.messages?.[0]?.id?.trim();
     if (!messageId) {

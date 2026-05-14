@@ -554,14 +554,6 @@ Deno.serve(async (request) => {
     } else if (notificationData.requesterIsAdmin || requesterIsAdminNumber) {
       skipped = true;
       reason = "Destinatario principal e admin; mensagem de usuario nao enviada.";
-    } else if (
-      !(await hasActiveUserSession(notificationData.whatsapp)) &&
-      !(await hasRecentInboundMessage(notificationData.whatsapp))
-    ) {
-      skipped = true;
-      reason =
-        `Janela de ${USER_SESSION_DURATION_HOURS} horas do usuario esta fechada. ` +
-        "Peca para ele enviar uma mensagem ao WhatsApp oficial e tente novamente.";
     } else {
       const text = buildUserNotificationMessage({
         notificationType,

@@ -332,17 +332,12 @@ function ConversasPage() {
     () => buildConversationSummaries({ incoming, outgoing, users }),
     [incoming, outgoing, users],
   );
-  const activeConversations = useMemo(
-    () => conversations.filter((conversation) => conversation.isWindowOpen),
-    [conversations],
-  );
-
   const selectedPhone = canonicalConversationPhone(search.phone);
 
   useEffect(() => {
     if (
       selectedPhone &&
-      !activeConversations.some((conversation) => conversation.phone === selectedPhone)
+      !conversations.some((conversation) => conversation.phone === selectedPhone)
     ) {
       void navigate({
         to: "/admin/conversas",
@@ -350,10 +345,10 @@ function ConversasPage() {
         replace: true,
       });
     }
-  }, [activeConversations, navigate, selectedPhone]);
+  }, [conversations, navigate, selectedPhone]);
 
   const selectedConversation =
-    activeConversations.find((conversation) => conversation.phone === selectedPhone) || null;
+    conversations.find((conversation) => conversation.phone === selectedPhone) || null;
 
   const openConversation = (phone: string) => {
     setNotice(null);
@@ -458,9 +453,9 @@ function ConversasPage() {
             Carregando conversas...
           </div>
         </Card>
-      ) : activeConversations.length === 0 ? (
+      ) : conversations.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
-          Nenhuma conversa com janela de 24 horas aberta no momento.
+          Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -472,7 +467,7 @@ function ConversasPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="max-h-[72vh] space-y-2 overflow-y-auto p-3">
-              {activeConversations.map((conversation) => {
+              {conversations.map((conversation) => {
                 const isActive = conversation.phone === selectedPhone;
 
                 return (
@@ -506,7 +501,7 @@ function ConversasPage() {
                             >
                               {conversation.isWindowOpen
                                 ? "Janela de 24h aberta"
-                                : "Janela de 24h expirada"}
+                                : "Sem entrada recente registrada"}
                             </p>
                           </div>
                           <p className="shrink-0 text-[11px] text-muted-foreground">
@@ -534,7 +529,7 @@ function ConversasPage() {
                         {getInitials(selectedConversation.displayName)}
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Conversa ativa</p>
+                        <p className="text-sm text-muted-foreground">Conversa</p>
                         <CardTitle className="flex items-center gap-2">
                           <MessageSquareMore className="h-5 w-5" />
                           {selectedConversation.displayName}
@@ -549,7 +544,7 @@ function ConversasPage() {
                         >
                           {selectedConversation.isWindowOpen
                             ? "Janela de 24h aberta para responder e notificar."
-                            : "Janela de 24h expirada. O usuário precisa enviar nova mensagem."}
+                            : "Sem entrada recente registrada. A API do WhatsApp validara o envio."}
                         </p>
                       </div>
                     </div>
