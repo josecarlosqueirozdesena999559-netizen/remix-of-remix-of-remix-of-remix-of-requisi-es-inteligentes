@@ -125,7 +125,6 @@ function AssinadasPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
-  const [showArchived, setShowArchived] = useState(false);
   const [reviewingRequest, setReviewingRequest] = useState<RequisicaoAssinada | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode>("devolver");
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget>("saida");
@@ -179,12 +178,8 @@ function AssinadasPage() {
   }, []);
 
   const filteredData = useMemo(() => {
-    return (data ?? []).filter((request) => {
-      if (getRequestMonth(request) !== selectedMonth) return false;
-      if (!showArchived && request.printed_at) return false;
-      return true;
-    });
-  }, [data, selectedMonth, showArchived]);
+    return (data ?? []).filter((request) => getRequestMonth(request) === selectedMonth);
+  }, [data, selectedMonth]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, RequisicaoAssinada[]>();
@@ -219,6 +214,8 @@ function AssinadasPage() {
   };
 
   const togglePrinted = async (request: RequisicaoAssinada, checked: boolean) => {
+    if (request.printed_at || !checked) return;
+
     setPrintingRequestId(request.id);
     setMessage(null);
     setError(null);
@@ -235,11 +232,7 @@ function AssinadasPage() {
       setData((current) =>
         current?.map((item) => (item.id === request.id ? { ...item, printed_at: printedAt } : item)),
       );
-      setMessage(
-        checked
-          ? "Documento marcado como impresso e arquivado."
-          : "Documento removido do arquivo de impressos.",
-      );
+      setMessage("Documento verificado com sucesso.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao atualizar arquivamento.");
     } finally {
@@ -394,28 +387,18 @@ function AssinadasPage() {
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-            Mes
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(event) => {
-                setSelectedMonth(event.target.value || getCurrentMonth());
-                setSelected(null);
-              }}
-              className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
-            />
-          </label>
-
-          <label className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Checkbox
-              checked={showArchived}
-              onCheckedChange={(checked) => setShowArchived(checked === true)}
-            />
-            Mostrar documentos ja arquivados
-          </label>
-        </div>
+        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+          Mes
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => {
+              setSelectedMonth(event.target.value || getCurrentMonth());
+              setSelected(null);
+            }}
+            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+          />
+        </label>
       </Card>
 
       {message && <Card className="p-4 text-sm text-muted-foreground">{message}</Card>}
@@ -460,9 +443,9 @@ function AssinadasPage() {
                     <th className="px-3 py-2 text-left font-normal">Data</th>
                     <th className="px-3 py-2 text-left font-normal">Numero</th>
                     <th className="px-3 py-2 text-left font-normal">Status</th>
-                    <th className="px-3 py-2 text-left font-normal">Verificado</th>
                     <th className="px-3 py-2 text-right font-normal">PDF</th>
                     <th className="px-3 py-2 text-right font-normal">Acoes</th>
+                    <th className="px-3 py-2 text-left font-normal">Verificado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -484,21 +467,6 @@ function AssinadasPage() {
                         <td className="px-3 py-2 text-foreground">{code}</td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {getStatusLabel(request.status)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={Boolean(request.printed_at)}
-                              disabled={printingRequestId === request.id}
-                              onCheckedChange={(checked) =>
-                                void togglePrinted(request, checked === true)
-                              }
-                              aria-label="Marcar documento como impresso e arquivado"
-                            />
-                            {request.printed_at ? (
-                              <span className="text-xs text-muted-foreground">Verificado</span>
-                            ) : null}
-                          </div>
                         </td>
                         <td className="px-3 py-2 text-right">
                           <Button
@@ -541,6 +509,22 @@ function AssinadasPage() {
                               Excluir
                             </Button>
                           </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          {request.printed_at ? (
+                            <span className="text-xs text-muted-foreground">Ja foi feito</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={false}
+                                disabled={printingRequestId === request.id}
+                                onCheckedChange={(checked) =>
+                                  void togglePrinted(request, checked === true)
+                                }
+                                aria-label="Marcar documento como verificado"
+                              />
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
