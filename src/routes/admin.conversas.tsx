@@ -32,6 +32,11 @@ type OutgoingMessage = {
   message_type: string | null;
   occurred_at: string | null;
   created_at: string;
+  raw_payload?: {
+    source?: string | null;
+    audience?: string | null;
+    notificationType?: string | null;
+  } | null;
 };
 
 type UserRow = {
@@ -252,7 +257,7 @@ function ConversasPage() {
           .limit(500),
         (supabase as any)
           .from("whatsapp_outbound_message_audit")
-          .select("message_id,recipient_id,body,message_type,occurred_at,created_at")
+          .select("message_id,recipient_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("recipient_id", "is", null)
           .order("occurred_at", { ascending: false })
           .limit(500),
@@ -277,6 +282,7 @@ function ConversasPage() {
       setOutgoing(
         ((outgoingResult.data ?? []) as OutgoingMessage[]).filter(
           (message) =>
+            message.raw_payload?.source !== "notify-request-whatsapp" &&
             !nextAdminNumbers.some((adminNumber) =>
               phonesMatch(adminNumber, message.recipient_id || ""),
             ),

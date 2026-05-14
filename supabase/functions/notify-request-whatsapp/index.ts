@@ -580,6 +580,11 @@ Deno.serve(async (request) => {
           messageId,
           to: notificationData.whatsapp,
           text,
+          rawPayload: {
+            source: "notify-request-whatsapp",
+            audience: "user",
+            notificationType,
+          },
         });
       }
     }
@@ -631,6 +636,11 @@ Deno.serve(async (request) => {
             messageId: adminMessageId,
             to: adminNumber,
             text: adminText,
+            rawPayload: {
+              source: "notify-request-whatsapp",
+              audience: "admin",
+              notificationType,
+            },
           });
 
           adminNotifications.push({
