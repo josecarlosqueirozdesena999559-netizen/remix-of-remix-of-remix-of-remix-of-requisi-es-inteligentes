@@ -347,7 +347,13 @@ function ConversasPage() {
         () => void loadConversations(),
       )
       .subscribe((status) => {
-        setRealtimeStatus(status === "SUBSCRIBED" ? "online" : "connecting");
+        if (status === "SUBSCRIBED") {
+          setRealtimeStatus("online");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setRealtimeStatus("offline");
+        } else {
+          setRealtimeStatus("connecting");
+        }
       });
 
     return () => {
@@ -637,6 +643,9 @@ function ConversasPage() {
                               : "bg-white text-[#111b21]"
                           }`}
                         >
+                          <p className="mb-1 text-[11px] font-medium text-[#667781]">
+                            {message.direction === "outgoing" ? "Admin" : "Usuario"}
+                          </p>
                           <p className="whitespace-pre-wrap break-words">{message.body}</p>
                           <p
                             className="mt-1 text-right text-[11px] text-[#667781]"
