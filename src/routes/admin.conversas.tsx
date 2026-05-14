@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, MessageSquareMore, Send } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquareMore, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,9 @@ import { getWhatsAppAdminNumbers } from "@/lib/app-settings-actions";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/conversas")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    phone: typeof search.phone === "string" ? search.phone : "",
+  }),
   component: ConversasPage,
 });
 
@@ -164,6 +167,8 @@ function buildConversationSummaries(input: {
 }
 
 function ConversasPage() {
+  const navigate = Route.useNavigate();
+  const search = Route.useSearch();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +176,6 @@ function ConversasPage() {
   const [incoming, setIncoming] = useState<IncomingMessage[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [selectedPhone, setSelectedPhone] = useState("");
   const [replyText, setReplyText] = useState("");
 
   async function loadConversations() {
@@ -254,19 +258,39 @@ function ConversasPage() {
     [incoming, outgoing, users],
   );
 
-  useEffect(() => {
-    if (!conversations.length) {
-      setSelectedPhone("");
-      return;
-    }
+  const selectedPhone = normalizePhone(search.phone);
 
-    if (!selectedPhone || !conversations.some((conversation) => conversation.phone === selectedPhone)) {
-      setSelectedPhone(conversations[0].phone);
+  useEffect(() => {
+    if (selectedPhone && !conversations.some((conversation) => conversation.phone === selectedPhone)) {
+      void navigate({
+        to: "/admin/conversas",
+        search: {},
+        replace: true,
+      });
     }
-  }, [conversations, selectedPhone]);
+  }, [conversations, navigate, selectedPhone]);
 
   const selectedConversation =
     conversations.find((conversation) => conversation.phone === selectedPhone) || null;
+
+  const openConversation = (phone: string) => {
+    setNotice(null);
+    setError(null);
+    void navigate({
+      to: "/admin/conversas",
+      search: { phone },
+    });
+  };
+
+  const closeConversation = () => {
+    setReplyText("");
+    setNotice(null);
+    setError(null);
+    void navigate({
+      to: "/admin/conversas",
+      search: {},
+    });
+  };
 
   const handleReply = async () => {
     const phone = selectedConversation?.phone || "";
@@ -328,8 +352,10 @@ function ConversasPage() {
 
       <Alert className="border-sky-200 bg-sky-50 text-sky-950">
         <AlertDescription>
-          Aqui aparecem as mensagens que os usuarios enviaram para o numero oficial. Voce pode
-          responder enquanto a janela de 24 horas da conversa estiver aberta.
+          Aqui ficam as conversas recebidas no numero oficial do almoxarifado. Clique em um
+          contato para abrir o chat individual e responder enquanto a janela de 24 horas do
+          WhatsApp estiver ativa. Se esse prazo fechar, sera preciso aguardar uma nova mensagem do
+          usuario.
         </AlertDescription>
       </Alert>
 
@@ -357,100 +383,126 @@ function ConversasPage() {
           Nenhuma mensagem recebida no WhatsApp ate agora.
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Contatos</CardTitle>
-              <CardDescription>Mensagens recebidas pelo numero oficial.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {conversations.map((conversation) => (
-                <button
-                  key={conversation.phone}
-                  type="button"
-                  onClick={() => setSelectedPhone(conversation.phone)}
-                  className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
-                    conversation.phone === selectedPhone
-                      ? "border-sky-300 bg-sky-50"
-                      : "hover:bg-muted/40"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">{conversation.displayName}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {formatPhone(conversation.phone)}
+        <div className="space-y-4">
+          {!selectedConversation ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Conversas</CardTitle>
+                <CardDescription>
+                  Selecione um contato para abrir o historico completo e responder por aqui.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {conversations.map((conversation) => (
+                  <button
+                    key={conversation.phone}
+                    type="button"
+                    onClick={() => openConversation(conversation.phone)}
+                    className="w-full rounded-2xl border border-border/70 bg-card px-4 py-4 text-left transition-all hover:border-sky-300 hover:bg-sky-50/70"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-medium text-foreground">
+                          {conversation.displayName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {formatPhone(conversation.phone)}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-xs text-muted-foreground">
+                        {formatDateTime(conversation.lastAt)}
                       </p>
                     </div>
-                    <p className="shrink-0 text-xs text-muted-foreground">
-                      {formatDateTime(conversation.lastAt)}
+                    <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                      {conversation.preview}
                     </p>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader className="gap-4 border-b bg-linear-to-r from-sky-50 via-white to-slate-50">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Button type="button" variant="outline" size="icon" onClick={closeConversation}>
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Conversa individual</p>
+                      <CardTitle className="flex items-center gap-2">
+                        <MessageSquareMore className="h-5 w-5" />
+                        {selectedConversation.displayName}
+                      </CardTitle>
+                      <CardDescription>{formatPhone(selectedConversation.phone)}</CardDescription>
+                    </div>
                   </div>
-                  <p className="mt-2 truncate text-sm text-muted-foreground">{conversation.preview}</p>
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquareMore className="h-5 w-5" />
-                {selectedConversation?.displayName || "Conversa"}
-              </CardTitle>
-              <CardDescription>
-                {selectedConversation ? formatPhone(selectedConversation.phone) : "Selecione um contato."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="max-h-[480px] space-y-3 overflow-y-auto rounded-lg border bg-muted/20 p-4">
-                {selectedConversation?.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.direction === "outgoing" ? "justify-end" : "justify-start"}`}
-                  >
+                  <p className="text-xs text-muted-foreground">
+                    {selectedConversation.messages.length} mensagem
+                    {selectedConversation.messages.length === 1 ? "" : "ens"}
+                  </p>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4 sm:p-6">
+                <div className="max-h-[60vh] space-y-3 overflow-y-auto rounded-3xl border bg-muted/20 p-4">
+                  {selectedConversation.messages.map((message) => (
                     <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                        message.direction === "outgoing"
-                          ? "bg-sky-600 text-white"
-                          : "border bg-background text-foreground"
+                      key={message.id}
+                      className={`flex ${
+                        message.direction === "outgoing" ? "justify-end" : "justify-start"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words">{message.body}</p>
-                      <p
-                        className={`mt-2 text-[11px] ${
-                          message.direction === "outgoing" ? "text-sky-100" : "text-muted-foreground"
+                      <div
+                        className={`max-w-[88%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[75%] ${
+                          message.direction === "outgoing"
+                            ? "bg-sky-600 text-white"
+                            : "border bg-background text-foreground"
                         }`}
                       >
-                        {formatDateTime(message.occurredAt)}
-                      </p>
+                        <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                        <p
+                          className={`mt-2 text-[11px] ${
+                            message.direction === "outgoing"
+                              ? "text-sky-100"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {formatDateTime(message.occurredAt)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-3xl border bg-card p-4">
+                  <div className="space-y-3">
+                    <Textarea
+                      value={replyText}
+                      onChange={(event) => setReplyText(event.target.value)}
+                      placeholder="Digite a resposta para o usuario"
+                      rows={4}
+                      disabled={saving}
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        className="gap-2"
+                        disabled={saving}
+                        onClick={() => void handleReply()}
+                      >
+                        {saving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                        Enviar resposta
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <Textarea
-                  value={replyText}
-                  onChange={(event) => setReplyText(event.target.value)}
-                  placeholder="Digite a resposta para o usuario"
-                  rows={4}
-                  disabled={saving || !selectedConversation}
-                />
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    className="gap-2"
-                    disabled={saving || !selectedConversation}
-                    onClick={() => void handleReply()}
-                  >
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    Enviar resposta
-                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>
