@@ -37,6 +37,10 @@ function normalizeWhatsAppPhoneNumber(value: string) {
     return `55${digits}`;
   }
 
+  if (digits.startsWith("55") && digits.length === 12) {
+    return `${digits.slice(0, 4)}9${digits.slice(4)}`;
+  }
+
   if (!digits.startsWith("55") || digits.length < 12) {
     throw new Error("Telefone do WhatsApp invalido. Informe DDI + DDD + numero.");
   }

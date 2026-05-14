@@ -16,7 +16,10 @@ function normalizeWhatsAppPhoneNumber(value: string) {
 
   if (!digits) return "";
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) return digits;
+  if (digits.startsWith("55") && digits.length === 12) {
+    return `${digits.slice(0, 4)}9${digits.slice(4)}`;
+  }
+  if (digits.startsWith("55") && digits.length === 13) return digits;
 
   throw new Error(`WhatsApp invalido: ${value}`);
 }
