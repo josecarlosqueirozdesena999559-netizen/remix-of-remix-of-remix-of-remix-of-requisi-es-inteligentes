@@ -2,6 +2,7 @@ import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tan
 import { ChevronDown, Loader2, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -286,7 +287,13 @@ function AdminLayout() {
           </button>
         </nav>
       </aside>
-      <main className="flex-1 p-8">
+      <main className="flex-1 space-y-4 p-8">
+        <Alert className="border-sky-200 bg-sky-50 text-sky-950">
+          <AlertDescription>
+            Para receber alertas de assinaturas e pedidos no WhatsApp, envie uma mensagem para o
+            numero oficial do almoxarifado. Isso abre sua janela de 24 horas para os avisos.
+          </AlertDescription>
+        </Alert>
         <Outlet />
       </main>
       <Dialog open={mustRegisterWhatsApp} onOpenChange={() => {}}>

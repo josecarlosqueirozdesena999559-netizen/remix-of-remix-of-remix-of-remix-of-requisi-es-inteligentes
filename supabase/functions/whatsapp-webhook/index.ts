@@ -11,6 +11,7 @@ const WHATSAPP_TEMPLATE_LANGUAGE = "pt_BR";
 const READY_TEMPLATE_NAME = "pedido_pronto_retirada";
 const CONFIRM_BUTTON_ID = "confirmar_retirada";
 const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+const USER_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 const ADMIN_KEEPALIVE_BUTTON_IDS = ["admin_keepalive_confirmar", "abrir_janela_24h_admin"];
 const ADMIN_KEEPALIVE_BUTTON_TITLES = [
   "abrir janela 24h",
@@ -225,6 +226,10 @@ function adminSessionKeys(phone: string) {
   return [...getBrazilianPhoneVariants(phone)].map((variant) => `WHATSAPP_ADMIN_SESSION_${variant}`);
 }
 
+function userSessionKeys(phone: string) {
+  return [...getBrazilianPhoneVariants(phone)].map((variant) => `WHATSAPP_USER_SESSION_${variant}`);
+}
+
 function parseQrPayload(value: string) {
   const parsed = JSON.parse(value) as RequestQrPayload;
 
@@ -337,6 +342,12 @@ async function deletePendingConfirmation(phone: string) {
 async function markAdminSessionActive(phone: string) {
   const expiresAt = new Date(Date.now() + ADMIN_SESSION_DURATION_MS).toISOString();
   await Promise.all(adminSessionKeys(phone).map((key) => upsertSetting(key, expiresAt)));
+  return expiresAt;
+}
+
+async function markUserSessionActive(phone: string) {
+  const expiresAt = new Date(Date.now() + USER_SESSION_DURATION_MS).toISOString();
+  await Promise.all(userSessionKeys(phone).map((key) => upsertSetting(key, expiresAt)));
   return expiresAt;
 }
 
@@ -933,6 +944,8 @@ Deno.serve(async (request) => {
     await Promise.all(
       messages.map(async (message: any) => {
         const from = normalizePhoneNumber(String(message?.from || ""));
+        await markUserSessionActive(from);
+
         if (!isAuthorizedAdminNumber(from, settings.adminNumbers)) {
           return;
         }

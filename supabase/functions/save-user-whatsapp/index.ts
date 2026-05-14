@@ -2,6 +2,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const DEFAULT_GRAPH_API_VERSION = "v25.0";
+const USER_SESSION_DURATION_HOURS = 24;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,10 +38,29 @@ function normalizeWhatsAppPhoneNumber(value: string) {
   }
 
   if (!digits.startsWith("55") || digits.length < 12) {
-    throw new Error("Telefone do WhatsApp inválido. Informe DDI + DDD + número.");
+    throw new Error("Telefone do WhatsApp invalido. Informe DDI + DDD + numero.");
   }
 
   return digits;
+}
+
+function getBrazilianPhoneVariants(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  const variants = new Set<string>([digits]);
+
+  if (digits.startsWith("55") && digits.length === 13 && digits[4] === "9") {
+    variants.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+  }
+
+  if (digits.startsWith("55") && digits.length === 12) {
+    variants.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+  }
+
+  return [...variants];
+}
+
+function userSessionKeys(phone: string) {
+  return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_USER_SESSION_${variant}`);
 }
 
 async function supabaseFetch(path: string, options: RequestInit = {}) {
@@ -65,7 +85,7 @@ async function supabaseFetch(path: string, options: RequestInit = {}) {
 async function getAuthenticatedUser(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    throw new Error("Sessão expirada. Entre novamente.");
+    throw new Error("Sessao expirada. Entre novamente.");
   }
 
   const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
@@ -77,7 +97,7 @@ async function getAuthenticatedUser(request: Request) {
 
   const user = (await response.json().catch(() => null)) as SupabaseUser | null;
   if (!response.ok || !user?.id) {
-    throw new Error("Sessão inválida. Entre novamente.");
+    throw new Error("Sessao invalida. Entre novamente.");
   }
 
   return user;
@@ -101,13 +121,35 @@ async function getWhatsAppSettings() {
     DEFAULT_GRAPH_API_VERSION;
 
   if (!accessToken || !phoneNumberId) {
-    throw new Error("WhatsApp não configurado.");
+    throw new Error("WhatsApp nao configurado.");
   }
 
   return { accessToken, phoneNumberId, graphApiVersion };
 }
 
-async function sendWelcomeTemplate(input: { to: string; requesterName: string }) {
+async function getSetting(key: string) {
+  const rows = (await supabaseFetch(
+    `app_settings?select=value&key=eq.${encodeURIComponent(key)}&limit=1`,
+  )) as Array<{ value: string }>;
+
+  return rows[0]?.value || "";
+}
+
+async function hasActiveUserSession(phone: string) {
+  for (const key of userSessionKeys(phone)) {
+    const rawValue = await getSetting(key);
+    if (!rawValue) continue;
+
+    const expiresAt = Date.parse(rawValue);
+    if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function sendWelcomeText(input: { to: string; requesterName: string }) {
   const config = await getWhatsAppSettings();
   const response = await fetch(
     `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
@@ -121,16 +163,12 @@ async function sendWelcomeTemplate(input: { to: string; requesterName: string })
         messaging_product: "whatsapp",
         recipient_type: "individual",
         to: input.to,
-        type: "template",
-        template: {
-          name: "boas_vindas_almoxarifado",
-          language: { code: "pt_BR" },
-          components: [
-            {
-              type: "body",
-              parameters: [{ type: "text", text: input.requesterName || "-" }],
-            },
-          ],
+        type: "text",
+        text: {
+          preview_url: false,
+          body:
+            `Ola, ${input.requesterName || "usuario"}.\n` +
+            "Seu WhatsApp foi cadastrado com sucesso no sistema do almoxarifado.",
         },
       }),
     },
@@ -156,12 +194,12 @@ async function sendWelcomeTemplate(input: { to: string; requesterName: string })
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") {
-    return jsonResponse({ ok: false, error: "Método não permitido." }, 405);
+    return jsonResponse({ ok: false, error: "Metodo nao permitido." }, 405);
   }
 
   try {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Supabase não configurado.");
+      throw new Error("Supabase nao configurado.");
     }
 
     const user = await getAuthenticatedUser(request);
@@ -169,8 +207,8 @@ Deno.serve(async (request) => {
     const profileId = typeof body.profileId === "string" ? body.profileId : "";
     const whatsappInput = typeof body.whatsapp === "string" ? body.whatsapp : "";
 
-    if (!profileId) throw new Error("Perfil do usuário não informado.");
-    if (!whatsappInput) throw new Error("Informe o número do WhatsApp.");
+    if (!profileId) throw new Error("Perfil do usuario nao informado.");
+    if (!whatsappInput) throw new Error("Informe o numero do WhatsApp.");
 
     const whatsapp = normalizeWhatsAppPhoneNumber(whatsappInput);
 
@@ -185,7 +223,7 @@ Deno.serve(async (request) => {
     }>;
 
     const profile = rows[0];
-    if (!profile) throw new Error("Perfil do usuário não encontrado.");
+    if (!profile) throw new Error("Perfil do usuario nao encontrado.");
 
     const profileEmail = profile.email?.trim().toLowerCase() || "";
     const currentUserEmail = user.email?.trim().toLowerCase() || "";
@@ -193,7 +231,7 @@ Deno.serve(async (request) => {
       profile.auth_user_id === user.id || (!profile.auth_user_id && profileEmail === currentUserEmail);
 
     if (!belongsToCurrentUser) {
-      throw new Error("Você não tem permissão para alterar este perfil.");
+      throw new Error("Voce nao tem permissao para alterar este perfil.");
     }
 
     const updated = (await supabaseFetch(
@@ -206,22 +244,28 @@ Deno.serve(async (request) => {
     )) as Array<{ whatsapp: string | null }>;
 
     if (!updated[0]?.whatsapp) {
-      throw new Error("Não foi possível salvar o WhatsApp do usuário.");
+      throw new Error("Nao foi possivel salvar o WhatsApp do usuario.");
     }
 
     let messageId: string | undefined;
     let welcomeError: string | undefined;
 
     try {
-      messageId = await sendWelcomeTemplate({
-        to: whatsapp,
-        requesterName: profile.nome || currentUserEmail || "usuário",
-      });
+      if (await hasActiveUserSession(whatsapp)) {
+        messageId = await sendWelcomeText({
+          to: whatsapp,
+          requesterName: profile.nome || currentUserEmail || "usuario",
+        });
+      } else {
+        welcomeError =
+          `WhatsApp salvo, mas a janela de ${USER_SESSION_DURATION_HOURS} horas esta fechada. ` +
+          "Peca para o usuario enviar uma mensagem ao WhatsApp oficial e tente novamente.";
+      }
     } catch (error) {
       welcomeError =
         error instanceof Error
           ? error.message
-          : "WhatsApp salvo, mas não foi possível enviar a mensagem de boas-vindas.";
+          : "WhatsApp salvo, mas nao foi possivel enviar a mensagem de boas-vindas.";
     }
 
     return jsonResponse({
