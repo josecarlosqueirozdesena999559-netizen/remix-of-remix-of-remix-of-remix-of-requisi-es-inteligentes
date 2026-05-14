@@ -74,6 +74,10 @@ function userSessionKeys(phone: string) {
   return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_USER_SESSION_${variant}`);
 }
 
+function adminSessionKeys(phone: string) {
+  return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_ADMIN_SESSION_${variant}`);
+}
+
 function getNotificationType(value: unknown): NotificationType {
   if (
     value === "requestCreated" ||
@@ -159,8 +163,29 @@ async function getSetting(key: string) {
   return rows[0]?.value || "";
 }
 
+function parseAdminNumbers(value: string) {
+  return value
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 async function hasActiveUserSession(phone: string) {
   for (const key of userSessionKeys(phone)) {
+    const rawValue = await getSetting(key);
+    if (!rawValue) continue;
+
+    const expiresAt = Date.parse(rawValue);
+    if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function hasActiveAdminSession(phone: string) {
+  for (const key of adminSessionKeys(phone)) {
     const rawValue = await getSetting(key);
     if (!rawValue) continue;
 
@@ -272,6 +297,27 @@ async function sendTextMessage(input: { to: string; text: string }) {
   return payload?.messages?.[0]?.id as string | undefined;
 }
 
+async function logOutboundMessage(input: {
+  messageId: string;
+  to: string;
+  text: string;
+  occurredAt?: string;
+  rawPayload?: unknown;
+}) {
+  await supabaseFetch("whatsapp_outbound_message_audit", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      message_id: input.messageId,
+      recipient_id: normalizeWhatsAppPhoneNumber(input.to),
+      message_type: "text",
+      body: input.text,
+      occurred_at: input.occurredAt || new Date().toISOString(),
+      raw_payload: input.rawPayload ?? {},
+    }),
+  });
+}
+
 function buildUserNotificationMessage(input: {
   notificationType: NotificationType;
   requestCode: string;
@@ -320,6 +366,57 @@ function buildUserNotificationMessage(input: {
   ].join("\n");
 }
 
+function buildAdminNotificationMessage(input: {
+  notificationType: NotificationType;
+  requestCode: string;
+  materialType: string | null;
+  requesterName: string | null | undefined;
+  locationName: string | null;
+  status?: string | null;
+}) {
+  if (input.notificationType === "requestCreated") {
+    return [
+      "Nova requisicao gerada.",
+      `Numero: ${valueOrDash(input.requestCode)}`,
+      `Solicitante: ${valueOrDash(input.requesterName)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+    ].join("\n");
+  }
+
+  if (input.notificationType === "requestSigned") {
+    const title =
+      input.status === "concluido" ? "Saida assinada pelo usuario." : "Requisicao assinada pelo usuario.";
+
+    return [
+      title,
+      `Numero: ${valueOrDash(input.requestCode)}`,
+      `Solicitante: ${valueOrDash(input.requesterName)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+    ].join("\n");
+  }
+
+  if (input.notificationType === "outputAttached") {
+    return [
+      "Saida gerada pelo almoxarifado.",
+      `Numero: ${valueOrDash(input.requestCode)}`,
+      `Solicitante: ${valueOrDash(input.requesterName)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+      "Aguardando assinatura da saida.",
+    ].join("\n");
+  }
+
+  return [
+    "Pedido pronto para retirada.",
+    `Numero: ${valueOrDash(input.requestCode)}`,
+    `Solicitante: ${valueOrDash(input.requesterName)}`,
+    `Local: ${valueOrDash(input.locationName)}`,
+    `Tipo de material: ${valueOrDash(input.materialType)}`,
+  ].join("\n");
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") {
@@ -339,10 +436,18 @@ Deno.serve(async (request) => {
 
     const notificationType = getNotificationType(body.notificationType);
     const notificationData = await getRequestNotificationData(requestId);
+    const adminNumbers = parseAdminNumbers(await getSetting("WHATSAPP_ADMIN_NUMBERS"));
 
     let skipped = false;
     let reason = "";
     let messageId: string | undefined;
+    const adminNotifications: Array<{
+      to: string;
+      ok: boolean;
+      messageId?: string;
+      skipped?: boolean;
+      error?: string;
+    }> = [];
 
     if (!notificationData.whatsapp) {
       skipped = true;
@@ -366,6 +471,77 @@ Deno.serve(async (request) => {
         to: notificationData.whatsapp,
         text,
       });
+
+      if (messageId) {
+        await logOutboundMessage({
+          messageId,
+          to: notificationData.whatsapp,
+          text,
+        });
+      }
+    }
+
+    if (
+      notificationType === "requestCreated" ||
+      notificationType === "requestSigned" ||
+      notificationType === "outputAttached"
+    ) {
+      const adminText = buildAdminNotificationMessage({
+        notificationType,
+        requestCode: notificationData.requestCode,
+        materialType: notificationData.materialType,
+        requesterName: notificationData.requesterName,
+        locationName: notificationData.locationName,
+        status: notificationData.status,
+      });
+
+      for (const adminNumber of adminNumbers) {
+        try {
+          if (!(await hasActiveAdminSession(adminNumber))) {
+            adminNotifications.push({
+              to: normalizeWhatsAppPhoneNumber(adminNumber),
+              ok: false,
+              skipped: true,
+              error:
+                `Janela de ${USER_SESSION_DURATION_HOURS} horas do admin esta fechada. ` +
+                "Peca para ele enviar uma mensagem ao WhatsApp oficial.",
+            });
+            continue;
+          }
+
+          const adminMessageId = await sendTextMessage({
+            to: adminNumber,
+            text: adminText,
+          });
+
+          if (!adminMessageId) {
+            adminNotifications.push({
+              to: normalizeWhatsAppPhoneNumber(adminNumber),
+              ok: false,
+              error: "WhatsApp enviado sem retorno do id da mensagem.",
+            });
+            continue;
+          }
+
+          await logOutboundMessage({
+            messageId: adminMessageId,
+            to: adminNumber,
+            text: adminText,
+          });
+
+          adminNotifications.push({
+            to: normalizeWhatsAppPhoneNumber(adminNumber),
+            ok: true,
+            messageId: adminMessageId,
+          });
+        } catch (adminError) {
+          adminNotifications.push({
+            to: normalizeWhatsAppPhoneNumber(adminNumber),
+            ok: false,
+            error: adminError instanceof Error ? adminError.message : "Erro ao enviar aviso ao admin.",
+          });
+        }
+      }
     }
 
     return jsonResponse({
@@ -374,6 +550,7 @@ Deno.serve(async (request) => {
       reason,
       messageId,
       requesterName: valueOrDash(notificationData.requesterName),
+      adminNotifications,
     });
   } catch (error) {
     return jsonResponse(

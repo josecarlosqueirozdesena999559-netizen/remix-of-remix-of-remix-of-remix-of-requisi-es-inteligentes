@@ -215,7 +215,7 @@ function ConversasPage() {
       }
 
       const adminNumbersResult = await getWhatsAppAdminNumbers().catch(() => ({ numbers: [] }));
-      const adminNumbers = Array.isArray((adminNumbersResult as any)?.numbers)
+      const nextAdminNumbers = Array.isArray((adminNumbersResult as any)?.numbers)
         ? (adminNumbersResult as any).numbers.map(String)
         : [];
 
@@ -246,10 +246,18 @@ function ConversasPage() {
 
       setIncoming(
         ((incomingResult.data ?? []) as IncomingMessage[]).filter(
-          (message) => !adminNumbers.some((adminNumber) => phonesMatch(adminNumber, message.sender_id || "")),
+          (message) =>
+            !nextAdminNumbers.some((adminNumber) => phonesMatch(adminNumber, message.sender_id || "")),
         ),
       );
-      setOutgoing((outgoingResult.data ?? []) as OutgoingMessage[]);
+      setOutgoing(
+        ((outgoingResult.data ?? []) as OutgoingMessage[]).filter(
+          (message) =>
+            !nextAdminNumbers.some((adminNumber) =>
+              phonesMatch(adminNumber, message.recipient_id || ""),
+            ),
+        ),
+      );
       setUsers((usersResult.data ?? []) as UserRow[]);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Erro ao carregar conversas.");
@@ -303,6 +311,16 @@ function ConversasPage() {
     void navigate({
       to: "/admin/conversas",
       search: { phone },
+    });
+  };
+
+  const closeConversation = () => {
+    setReplyText("");
+    setNotice(null);
+    setError(null);
+    void navigate({
+      to: "/admin/conversas",
+      search: {},
     });
   };
 
@@ -458,10 +476,15 @@ function ConversasPage() {
                         <CardDescription>{formatPhone(selectedConversation.phone)}</CardDescription>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedConversation.messages.length} mensagem
-                      {selectedConversation.messages.length === 1 ? "" : "ens"}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {selectedConversation.messages.length} mensagem
+                        {selectedConversation.messages.length === 1 ? "" : "ens"}
+                      </p>
+                      <Button type="button" variant="outline" size="sm" onClick={closeConversation}>
+                        Sair do chat
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="flex h-full flex-col gap-4 p-4 sm:p-6">
