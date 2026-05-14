@@ -117,8 +117,20 @@ function formatConversationTime(value: string) {
   }).format(date);
 }
 
+function resolveConversationUser(phone: string, users: UserRow[]) {
+  const exactMatch = users.find((user) => normalizePhone(user.whatsapp) === phone);
+  if (exactMatch?.nome?.trim()) return exactMatch;
+
+  const variantMatches = users.filter((user) => phonesMatch(user.whatsapp || "", phone));
+  if (variantMatches.length === 1 && variantMatches[0]?.nome?.trim()) {
+    return variantMatches[0];
+  }
+
+  return null;
+}
+
 function getDisplayName(phone: string, users: UserRow[]) {
-  const matchedUser = users.find((user) => phonesMatch(user.whatsapp || "", phone));
+  const matchedUser = resolveConversationUser(phone, users);
   return matchedUser?.nome?.trim() || formatPhone(phone);
 }
 
