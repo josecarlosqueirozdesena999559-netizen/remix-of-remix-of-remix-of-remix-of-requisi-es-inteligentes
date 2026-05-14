@@ -145,11 +145,11 @@ function isWhatsAppWindowOpen(value: string | null) {
 }
 
 function getMessageSortTime(message: Pick<ConversationMessage, "occurredAt" | "createdAt">) {
-  const occurred = Date.parse(message.occurredAt);
-  if (Number.isFinite(occurred)) return occurred;
-
   const created = Date.parse(message.createdAt);
-  return Number.isFinite(created) ? created : 0;
+  if (Number.isFinite(created)) return created;
+
+  const occurred = Date.parse(message.occurredAt);
+  return Number.isFinite(occurred) ? occurred : 0;
 }
 
 function resolveConversationUser(phone: string, users: UserRow[]) {
@@ -230,13 +230,15 @@ function buildConversationSummaries(input: {
       const lastIncomingMessage =
         [...sortedMessages].reverse().find((message) => message.direction === "incoming") || null;
 
+      const lastIncomingAt = lastIncomingMessage?.createdAt || lastIncomingMessage?.occurredAt || null;
+
       return {
         phone,
         displayName: getDisplayName(phone, input.users),
         preview: lastMessage?.body || "",
-        lastAt: lastMessage?.occurredAt || new Date(0).toISOString(),
-        lastIncomingAt: lastIncomingMessage?.occurredAt || null,
-        isWindowOpen: isWhatsAppWindowOpen(lastIncomingMessage?.occurredAt || null),
+        lastAt: lastMessage?.createdAt || lastMessage?.occurredAt || new Date(0).toISOString(),
+        lastIncomingAt,
+        isWindowOpen: isWhatsAppWindowOpen(lastIncomingAt),
         messages: sortedMessages,
       } satisfies ConversationSummary;
     })
@@ -307,7 +309,6 @@ function ConversasPage() {
       setOutgoing(
         ((outgoingResult.data ?? []) as OutgoingMessage[]).filter(
           (message) =>
-            message.raw_payload?.source !== "notify-request-whatsapp" &&
             !nextAdminNumbers.some((adminNumber) =>
               phonesMatch(adminNumber, message.recipient_id || ""),
             ),
@@ -609,7 +610,7 @@ function ConversasPage() {
                                 : "text-muted-foreground"
                             }`}
                           >
-                            {formatDateTime(message.occurredAt)}
+                            {formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
                         </div>
                       </div>
