@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, MessageSquareMore, Send } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,7 @@ type ConversationMessage = {
   body: string;
   messageType: string;
   occurredAt: string;
+  createdAt: string;
   direction: "incoming" | "outgoing";
 };
 
@@ -143,6 +144,14 @@ function isWhatsAppWindowOpen(value: string | null) {
   return parsed > Date.now() - 24 * 60 * 60 * 1000;
 }
 
+function getMessageSortTime(message: Pick<ConversationMessage, "occurredAt" | "createdAt">) {
+  const occurred = Date.parse(message.occurredAt);
+  if (Number.isFinite(occurred)) return occurred;
+
+  const created = Date.parse(message.createdAt);
+  return Number.isFinite(created) ? created : 0;
+}
+
 function resolveConversationUser(phone: string, users: UserRow[]) {
   const exactMatch = users.find((user) => canonicalConversationPhone(user.whatsapp) === phone);
   if (exactMatch?.nome?.trim()) return exactMatch;
@@ -189,6 +198,7 @@ function buildConversationSummaries(input: {
       body: message.body?.trim() || "[mensagem sem texto]",
       messageType: message.message_type?.trim() || "desconhecida",
       occurredAt: message.occurred_at || message.created_at,
+      createdAt: message.created_at,
       direction: "incoming",
     });
     byPhone.set(phone, next);
@@ -205,6 +215,7 @@ function buildConversationSummaries(input: {
       body: message.body?.trim() || "[mensagem sem texto]",
       messageType: message.message_type?.trim() || "text",
       occurredAt: message.occurred_at || message.created_at,
+      createdAt: message.created_at,
       direction: "outgoing",
     });
     byPhone.set(phone, next);
@@ -213,7 +224,7 @@ function buildConversationSummaries(input: {
   return [...byPhone.entries()]
     .map(([phone, messages]) => {
       const sortedMessages = [...messages].sort(
-        (left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime(),
+        (left, right) => getMessageSortTime(left) - getMessageSortTime(right),
       );
       const lastMessage = sortedMessages[sortedMessages.length - 1];
       const lastIncomingMessage =
@@ -229,7 +240,7 @@ function buildConversationSummaries(input: {
         messages: sortedMessages,
       } satisfies ConversationSummary;
     })
-    .sort((left, right) => new Date(right.lastAt).getTime() - new Date(left.lastAt).getTime());
+    .sort((left, right) => Date.parse(right.lastAt) - Date.parse(left.lastAt));
 }
 
 function ConversasPage() {
@@ -243,6 +254,7 @@ function ConversasPage() {
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations() {
     setError(null);
@@ -266,13 +278,13 @@ function ConversasPage() {
           .from("whatsapp_webhook_message_audit")
           .select("message_id,sender_id,body,message_type,occurred_at,created_at")
           .not("sender_id", "is", null)
-          .order("occurred_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(500),
         (supabase as any)
           .from("whatsapp_outbound_message_audit")
           .select("message_id,recipient_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("recipient_id", "is", null)
-          .order("occurred_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(500),
         supabase.from("usuarios").select("nome,whatsapp").not("whatsapp", "is", null),
       ]);
@@ -318,13 +330,23 @@ function ConversasPage() {
 
     void boot();
 
-    const intervalId = window.setInterval(() => {
-      void loadConversations();
-    }, 20000);
+    const channel = supabase
+      .channel("admin-whatsapp-conversas")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_webhook_message_audit" },
+        () => void loadConversations(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_outbound_message_audit" },
+        () => void loadConversations(),
+      )
+      .subscribe();
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      void supabase.removeChannel(channel);
     };
   }, []);
 
@@ -349,6 +371,10 @@ function ConversasPage() {
 
   const selectedConversation =
     conversations.find((conversation) => conversation.phone === selectedPhone) || null;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [selectedConversation?.phone, selectedConversation?.messages.length]);
 
   const openConversation = (phone: string) => {
     setNotice(null);
@@ -588,6 +614,7 @@ function ConversasPage() {
                         </div>
                       </div>
                     ))}
+                    <div ref={messagesEndRef} />
                   </div>
 
                   <div className="rounded-3xl border bg-card p-4">
