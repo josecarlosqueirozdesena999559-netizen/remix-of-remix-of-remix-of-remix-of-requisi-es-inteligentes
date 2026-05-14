@@ -27,6 +27,8 @@ export const Route = createFileRoute("/admin/requisicao")({
   component: CriarRequisicaoPage,
 });
 
+const REQUEST_FLASH_KEY = "admin_request_whatsapp_flash";
+
 interface ItemRow {
   id: string;
   nome: string;
@@ -638,12 +640,23 @@ function CriarRequisicaoPage() {
 
     if (savedRequestId) {
       try {
-        await notifyRequestByWhatsApp({
+        const notificationResult = await notifyRequestByWhatsApp({
           requestId: savedRequestId,
           notificationType: "requestCreated",
         });
+
+        if (notificationResult.skipped) {
+          sessionStorage.setItem(
+            REQUEST_FLASH_KEY,
+            `Requisição criada, mas o WhatsApp não foi enviado. ${notificationResult.reason || ""}`.trim(),
+          );
+        }
       } catch (err) {
         console.error(err);
+        sessionStorage.setItem(
+          REQUEST_FLASH_KEY,
+          "Requisição criada, mas não foi possível enviar a notificação por WhatsApp.",
+        );
       }
     }
 

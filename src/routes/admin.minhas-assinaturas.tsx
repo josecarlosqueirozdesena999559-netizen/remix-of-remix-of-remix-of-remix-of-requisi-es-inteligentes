@@ -24,6 +24,8 @@ export const Route = createFileRoute("/admin/minhas-assinaturas")({
   component: MinhasAssinaturasPage,
 });
 
+const REQUEST_FLASH_KEY = "admin_request_whatsapp_flash";
+
 interface Requisicao {
   id: string;
   saida_codigo: string | null;
@@ -113,6 +115,14 @@ function MinhasAssinaturasPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const flash = sessionStorage.getItem(REQUEST_FLASH_KEY);
+    if (!flash) return;
+
+    setMessage(flash);
+    sessionStorage.removeItem(REQUEST_FLASH_KEY);
+  }, []);
 
   async function loadRequests() {
     setLoading(true);
@@ -262,14 +272,20 @@ function MinhasAssinaturasPage() {
         removeOldAttachment(previousAdminAttachment),
       ]);
 
-      setMessage(isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.");
+      const sentMessage = isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.";
+      setMessage(sentMessage);
       try {
-        await notifyRequestByWhatsApp({
+        const notificationResult = await notifyRequestByWhatsApp({
           requestId: request.id,
           notificationType: "requestSigned",
         });
+
+        if (notificationResult.skipped) {
+          setMessage(`${sentMessage} ${notificationResult.reason || ""}`.trim());
+        }
       } catch (notificationError) {
         console.error(notificationError);
+        setMessage(`${sentMessage} Não foi possível enviar a notificação por WhatsApp.`);
       }
 
       setRequests((current) => current.filter((item) => item.id !== request.id));

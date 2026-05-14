@@ -58,6 +58,8 @@ type ConversationSummary = {
   displayName: string;
   preview: string;
   lastAt: string;
+  lastIncomingAt: string | null;
+  isWindowOpen: boolean;
   messages: ConversationMessage[];
 };
 
@@ -134,6 +136,13 @@ function formatConversationTime(value: string) {
   }).format(date);
 }
 
+function isWhatsAppWindowOpen(value: string | null) {
+  if (!value) return false;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return false;
+  return parsed > Date.now() - 24 * 60 * 60 * 1000;
+}
+
 function resolveConversationUser(phone: string, users: UserRow[]) {
   const exactMatch = users.find((user) => canonicalConversationPhone(user.whatsapp) === phone);
   if (exactMatch?.nome?.trim()) return exactMatch;
@@ -207,12 +216,16 @@ function buildConversationSummaries(input: {
         (left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime(),
       );
       const lastMessage = sortedMessages[sortedMessages.length - 1];
+      const lastIncomingMessage =
+        [...sortedMessages].reverse().find((message) => message.direction === "incoming") || null;
 
       return {
         phone,
         displayName: getDisplayName(phone, input.users),
         preview: lastMessage?.body || "",
         lastAt: lastMessage?.occurredAt || new Date(0).toISOString(),
+        lastIncomingAt: lastIncomingMessage?.occurredAt || null,
+        isWindowOpen: isWhatsAppWindowOpen(lastIncomingMessage?.occurredAt || null),
         messages: sortedMessages,
       } satisfies ConversationSummary;
     })
@@ -479,6 +492,15 @@ function ConversasPage() {
                             <p className="truncate text-xs text-muted-foreground">
                               {formatPhone(conversation.phone)}
                             </p>
+                            <p
+                              className={`mt-1 text-[11px] ${
+                                conversation.isWindowOpen ? "text-emerald-600" : "text-amber-600"
+                              }`}
+                            >
+                              {conversation.isWindowOpen
+                                ? "Janela de 24h aberta"
+                                : "Janela de 24h expirada"}
+                            </p>
                           </div>
                           <p className="shrink-0 text-[11px] text-muted-foreground">
                             {formatConversationTime(conversation.lastAt)}
@@ -511,6 +533,17 @@ function ConversasPage() {
                           {selectedConversation.displayName}
                         </CardTitle>
                         <CardDescription>{formatPhone(selectedConversation.phone)}</CardDescription>
+                        <p
+                          className={`mt-1 text-xs ${
+                            selectedConversation.isWindowOpen
+                              ? "text-emerald-600"
+                              : "text-amber-600"
+                          }`}
+                        >
+                          {selectedConversation.isWindowOpen
+                            ? "Janela de 24h aberta para responder e notificar."
+                            : "Janela de 24h expirada. O usuário precisa enviar nova mensagem."}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
