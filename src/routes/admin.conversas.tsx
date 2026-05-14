@@ -61,8 +61,20 @@ function normalizePhone(value: string | null | undefined) {
   return digits || "";
 }
 
+function canonicalConversationPhone(value: string | null | undefined) {
+  const digits = normalizePhone(value);
+  if (!digits) return "";
+
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if (digits.startsWith("55") && digits.length === 12) {
+    return `${digits.slice(0, 4)}9${digits.slice(4)}`;
+  }
+
+  return digits;
+}
+
 function getPhoneVariants(phone: string) {
-  const digits = normalizePhone(phone);
+  const digits = canonicalConversationPhone(phone);
   if (!digits) return [];
 
   const variants = new Set<string>([digits]);
@@ -118,7 +130,7 @@ function formatConversationTime(value: string) {
 }
 
 function resolveConversationUser(phone: string, users: UserRow[]) {
-  const exactMatch = users.find((user) => normalizePhone(user.whatsapp) === phone);
+  const exactMatch = users.find((user) => canonicalConversationPhone(user.whatsapp) === phone);
   if (exactMatch?.nome?.trim()) return exactMatch;
 
   const variantMatches = users.filter((user) => phonesMatch(user.whatsapp || "", phone));
@@ -153,7 +165,7 @@ function buildConversationSummaries(input: {
   const byPhone = new Map<string, ConversationMessage[]>();
 
   input.incoming.forEach((message) => {
-    const phone = normalizePhone(message.sender_id);
+    const phone = canonicalConversationPhone(message.sender_id);
     if (!phone) return;
 
     const next = byPhone.get(phone) || [];
@@ -169,7 +181,7 @@ function buildConversationSummaries(input: {
   });
 
   input.outgoing.forEach((message) => {
-    const phone = normalizePhone(message.recipient_id);
+    const phone = canonicalConversationPhone(message.recipient_id);
     if (!phone) return;
 
     const next = byPhone.get(phone) || [];
@@ -302,7 +314,7 @@ function ConversasPage() {
     [incoming, outgoing, users],
   );
 
-  const selectedPhone = normalizePhone(search.phone);
+  const selectedPhone = canonicalConversationPhone(search.phone);
 
   useEffect(() => {
     if (selectedPhone && !conversations.some((conversation) => conversation.phone === selectedPhone)) {
