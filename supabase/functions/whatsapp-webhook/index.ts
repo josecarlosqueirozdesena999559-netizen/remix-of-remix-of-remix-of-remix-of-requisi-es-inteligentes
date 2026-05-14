@@ -170,7 +170,10 @@ function normalizePhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "");
 
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
-  if (digits.startsWith("55") && digits.length >= 12) return digits;
+  if (digits.startsWith("55") && digits.length === 12) {
+    return `${digits.slice(0, 4)}9${digits.slice(4)}`;
+  }
+  if (digits.startsWith("55") && digits.length === 13) return digits;
 
   throw new Error("WhatsApp inválido.");
 }
@@ -404,7 +407,9 @@ function extractStatuses(payload: any): WhatsAppStatusAuditRow[] {
           return {
             message_id: messageId,
             recipient_id:
-              typeof status?.recipient_id === "string" ? status.recipient_id.trim() || null : null,
+              typeof status?.recipient_id === "string"
+                ? normalizePhoneNumber(status.recipient_id.trim() || "")
+                : null,
             status: state,
             occurred_at: parseStatusTimestamp(status?.timestamp),
             conversation_id:
@@ -456,7 +461,10 @@ function buildMessageAuditRows(messages: any[]): WhatsAppMessageAuditRow[] {
 
       return {
         message_id: messageId,
-        sender_id: typeof message?.from === "string" ? message.from.trim() || null : null,
+        sender_id:
+          typeof message?.from === "string"
+            ? normalizePhoneNumber(message.from.trim() || "")
+            : null,
         message_type: typeof message?.type === "string" ? message.type.trim() || null : null,
         body: extractMessageBody(message),
         occurred_at: parseStatusTimestamp(message?.timestamp),
