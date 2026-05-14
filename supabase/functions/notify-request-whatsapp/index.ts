@@ -76,6 +76,13 @@ function phonesMatch(left: string, right: string) {
   return leftVariants.some((value) => rightVariants.includes(value));
 }
 
+function senderIdFilter(phone: string) {
+  return getBrazilianPhoneVariants(phone)
+    .filter(Boolean)
+    .map((variant) => `sender_id.eq.${variant}`)
+    .join(",");
+}
+
 function userSessionKeys(phone: string) {
   return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_USER_SESSION_${variant}`);
 }
@@ -188,6 +195,23 @@ async function hasActiveUserSession(phone: string) {
   }
 
   return false;
+}
+
+async function hasRecentInboundMessage(phone: string) {
+  const threshold = Date.now() - USER_SESSION_DURATION_HOURS * 60 * 60 * 1000;
+  const filter = senderIdFilter(phone);
+  if (!filter) return false;
+
+  const rows = (await supabaseFetch(
+    `whatsapp_webhook_message_audit?select=message_id,occurred_at,created_at&or=(${filter})&order=occurred_at.desc&limit=20`,
+  )) as Array<{ occurred_at: string | null; created_at: string | null }>;
+
+  return rows.some((row) => {
+    const timestamp = row.occurred_at || row.created_at;
+    if (!timestamp) return false;
+    const parsed = Date.parse(timestamp);
+    return Number.isFinite(parsed) && parsed > threshold;
+  });
 }
 
 async function hasActiveAdminSession(phone: string) {
@@ -485,7 +509,10 @@ Deno.serve(async (request) => {
     } else if (notificationData.requesterIsAdmin || requesterIsAdminNumber) {
       skipped = true;
       reason = "Destinatario principal e admin; mensagem de usuario nao enviada.";
-    } else if (!(await hasActiveUserSession(notificationData.whatsapp))) {
+    } else if (
+      !(await hasActiveUserSession(notificationData.whatsapp)) &&
+      !(await hasRecentInboundMessage(notificationData.whatsapp))
+    ) {
       skipped = true;
       reason =
         `Janela de ${USER_SESSION_DURATION_HOURS} horas do usuario esta fechada. ` +
