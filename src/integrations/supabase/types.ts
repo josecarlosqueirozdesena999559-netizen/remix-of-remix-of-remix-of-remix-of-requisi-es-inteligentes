@@ -295,6 +295,35 @@ export type Database = {
         }
         Relationships: []
       }
+      user_whatsapp_reminder_ack: {
+        Row: {
+          created_at: string
+          id: string
+          reminder_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reminder_date: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reminder_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_whatsapp_reminder_ack_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usuarios: {
         Row: {
           auth_user_id: string | null

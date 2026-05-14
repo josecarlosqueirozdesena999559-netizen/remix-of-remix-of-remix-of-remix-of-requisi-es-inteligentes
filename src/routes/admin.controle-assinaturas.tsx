@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Eye, Loader2 } from "lucide-react";
+import { ArrowLeft, Eye, FileSignature, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -211,20 +211,39 @@ function ControleAssinaturasPage() {
       }));
   }, [data, localidadeFilter, nomeFilter]);
 
+  const totalPendencias = useMemo(
+    () => data.reduce((total, setor) => total + setor.pendencias, 0),
+    [data],
+  );
+
   const selectedSetorData =
     filteredSetores.find((setor) => setor.nome === selectedSetor) ||
     data.find((setor) => setor.nome === selectedSetor) ||
     null;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Início / Controle de assinaturas</p>
-        <h2 className="text-2xl text-foreground">Controle de assinaturas</h2>
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">Início / Controle de assinaturas</p>
+          <h2 className="text-2xl text-foreground">Controle de assinaturas</h2>
+          <p className="text-sm text-muted-foreground">
+            Acompanhe os setores com requisições aguardando assinatura.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-md border bg-card px-4 py-3 text-sm">
+          <FileSignature className="h-4 w-4 text-primary" />
+          <span className="text-muted-foreground">Pendências abertas</span>
+          <span className="text-lg leading-none text-foreground">{totalPendencias}</span>
+        </div>
       </div>
 
-      <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+      <Card className="p-5">
+        <div className="mb-4 flex items-center gap-2 text-sm text-foreground">
+          <Search className="h-4 w-4 text-primary" />
+          Filtros
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-2 text-sm text-muted-foreground">
             Setor
             <Input
@@ -252,13 +271,13 @@ function ControleAssinaturasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : selectedSetorData ? (
-        <Card className="p-4">
-          <div className="mb-4 flex items-start justify-between gap-3">
+        <Card className="p-5">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Setor selecionado</p>
-              <p className="text-lg text-foreground">{selectedSetorData.nome}</p>
+              <p className="text-xl text-foreground">{selectedSetorData.nome}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="destructive">
                 {selectedSetorData.requests.length} pendente{selectedSetorData.requests.length === 1 ? "" : "s"}
               </Badge>
@@ -272,15 +291,15 @@ function ControleAssinaturasPage() {
           {selectedSetorData.requests.length === 0 ? (
             <div className="p-4 text-sm text-muted-foreground">Nenhuma requisição pendente encontrada.</div>
           ) : (
-            <div className="rounded-md overflow-x-auto border">
+            <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-muted-foreground">
+                <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 text-left font-normal">Número</th>
-                    <th className="px-3 py-2 text-left font-normal">Usuário</th>
-                    <th className="px-3 py-2 text-left font-normal">Data</th>
-                    <th className="px-3 py-2 text-left font-normal">Status</th>
-                    <th className="px-3 py-2 text-right font-normal">PDF</th>
+                    <th className="px-4 py-3 text-left font-normal">Número</th>
+                    <th className="px-4 py-3 text-left font-normal">Usuário</th>
+                    <th className="px-4 py-3 text-left font-normal">Data</th>
+                    <th className="px-4 py-3 text-left font-normal">Status</th>
+                    <th className="px-4 py-3 text-right font-normal">PDF</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,12 +307,12 @@ function ControleAssinaturasPage() {
                     const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
 
                     return (
-                      <tr key={request.id} className="border-t">
-                        <td className="px-3 py-2 text-foreground">{code}</td>
-                        <td className="px-3 py-2 text-foreground">{request.usuarioNome}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{getStatusLabel(request.status)}</td>
-                        <td className="px-3 py-2 text-right">
+                      <tr key={request.id} className="border-t hover:bg-muted/30">
+                        <td className="px-4 py-3 text-foreground">{code}</td>
+                        <td className="px-4 py-3 text-foreground">{request.usuarioNome}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{request.data || "-"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{getStatusLabel(request.status)}</td>
+                        <td className="px-4 py-3 text-right">
                           <Button
                             type="button"
                             variant="outline"
@@ -321,26 +340,30 @@ function ControleAssinaturasPage() {
       ) : filteredSetores.length === 0 ? (
         <Card className="p-6 text-muted-foreground">Nenhuma pendência encontrada no controle.</Card>
       ) : (
-        filteredSetores.map((setor) => (
-          <Card key={setor.nome} className="p-4">
-            <button
-              type="button"
-              onClick={() => setSelectedSetor(setor.nome)}
-              className="flex w-full items-start justify-between gap-3 text-left"
-            >
-              <div>
-                <p className="text-sm text-muted-foreground">Setor</p>
-                <h3 className="text-lg text-foreground">{setor.nome}</h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filteredSetores.map((setor) => (
+            <Card key={setor.nome} className="overflow-hidden transition-shadow hover:shadow-md">
+              <button
+                type="button"
+                onClick={() => setSelectedSetor(setor.nome)}
+                className="flex h-full w-full flex-col items-start gap-4 p-5 text-left"
+              >
+                <div className="flex w-full items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Setor</p>
+                    <h3 className="text-lg text-foreground">{setor.nome}</h3>
+                  </div>
+                  <Badge variant="destructive" className="shrink-0">
+                    {setor.pendencias}
+                  </Badge>
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Clique para ver as requisições pendentes deste setor.
+                  Ver requisições pendentes de assinatura neste setor.
                 </p>
-              </div>
-              <Badge variant="destructive">
-                {setor.pendencias}
-              </Badge>
-            </button>
-          </Card>
-        ))
+              </button>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );

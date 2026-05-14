@@ -1,5 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ChevronDown, Loader2, Send } from "lucide-react";
+import { CheckCircle, ChevronDown, ExternalLink, Loader2, QrCode, Send } from "lucide-react";
+import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,9 +20,51 @@ import {
   type CurrentUserProfile,
 } from "@/lib/user-profile";
 
+const ALMOXARIFADO_WHATSAPP_NUMBER = "5588996374400";
+const ALMOXARIFADO_WHATSAPP_MESSAGE =
+  "Olá, gostaria de receber notificações sobre o acompanhamento das minhas requisições e entregas do almoxarifado.";
+const ALMOXARIFADO_WHATSAPP_LINK = `https://wa.me/${ALMOXARIFADO_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+  ALMOXARIFADO_WHATSAPP_MESSAGE,
+)}`;
+const WHATSAPP_REMINDER_HOUR = 7;
+const WHATSAPP_REMINDER_TIME_ZONE = "America/Fortaleza";
+
 export const Route = createFileRoute("/admin")({
   component: AdminLayout,
 });
+
+function getFortalezaDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: WHATSAPP_REMINDER_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .formatToParts(date)
+    .reduce<Record<string, string>>((current, part) => {
+      if (part.type !== "literal") current[part.type] = part.value;
+      return current;
+    }, {});
+
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
+}
+
+function getMillisecondsUntilFortalezaReminder(date = new Date()) {
+  const fortaleza = getFortalezaDateParts(date);
+  const minutesNow = fortaleza.hour * 60 + fortaleza.minute;
+  const reminderMinutes = WHATSAPP_REMINDER_HOUR * 60;
+
+  if (minutesNow >= reminderMinutes) return 0;
+
+  return (reminderMinutes - minutesNow) * 60 * 1000;
+}
 
 function AdminLayout() {
   const navigate = useNavigate();
@@ -33,6 +76,8 @@ function AdminLayout() {
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
   const [whatsappNotice, setWhatsappNotice] = useState<string | null>(null);
   const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
+  const [whatsappReminderOpen, setWhatsappReminderOpen] = useState(false);
+  const [whatsappQrCode, setWhatsappQrCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (pathname.startsWith("/admin/cadastros")) setOpenCadastros(true);
@@ -83,6 +128,60 @@ function AdminLayout() {
     !profile?.whatsapp?.trim() &&
     !whatsappConfirmed &&
     pathname !== "/admin/completar-cadastro";
+  const shouldShowWhatsAppNotice =
+    Boolean(profile?.id) && pathname !== "/admin/completar-cadastro";
+
+  useEffect(() => {
+    if (!profile?.id || profile.is_admin || pathname === "/admin/completar-cadastro" || mustRegisterWhatsApp) {
+      setWhatsappReminderOpen(false);
+      return;
+    }
+
+    const todayKey = getFortalezaDateParts().dateKey;
+    const millisecondsUntilReminder = getMillisecondsUntilFortalezaReminder();
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+
+    const showReminder = async () => {
+      if (!active) return;
+
+      try {
+        const { data: acknowledgement, error: acknowledgementError } = await supabase
+          .from("user_whatsapp_reminder_ack")
+          .select("id")
+          .eq("user_id", profile.id)
+          .eq("reminder_date", todayKey)
+          .maybeSingle();
+
+        if (!active) return;
+        if (acknowledgementError) throw new Error(acknowledgementError.message);
+        if (acknowledgement) return;
+
+        const qrCode = await QRCode.toDataURL(ALMOXARIFADO_WHATSAPP_LINK, {
+          errorCorrectionLevel: "M",
+          margin: 1,
+          width: 220,
+        });
+
+        if (!active) return;
+        setWhatsappQrCode(qrCode);
+        setWhatsappReminderOpen(true);
+      } catch {
+        if (active) setWhatsappReminderOpen(true);
+      }
+    };
+
+    if (millisecondsUntilReminder === 0) {
+      void showReminder();
+    } else {
+      timeoutId = window.setTimeout(() => void showReminder(), millisecondsUntilReminder);
+    }
+
+    return () => {
+      active = false;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [mustRegisterWhatsApp, pathname, profile?.id, profile?.is_admin]);
 
   const handleSaveWhatsApp = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -142,6 +241,21 @@ function AdminLayout() {
     } finally {
       setSavingWhatsApp(false);
     }
+  };
+
+  const handleConfirmWhatsAppReminder = async () => {
+    if (profile?.id) {
+      await supabase
+        .from("user_whatsapp_reminder_ack")
+        .upsert(
+          {
+            user_id: profile.id,
+            reminder_date: getFortalezaDateParts().dateKey,
+          },
+          { onConflict: "user_id,reminder_date" },
+        );
+    }
+    setWhatsappReminderOpen(false);
   };
 
   return (
@@ -294,15 +408,60 @@ function AdminLayout() {
           </button>
         </nav>
       </aside>
-      <main className="flex-1 space-y-4 p-8">
-        <Alert className="rounded-md border-none bg-primary/10 text-primary shadow-none">
-          <AlertDescription>
-            Para receber alertas de assinaturas e pedidos no WhatsApp, envie uma mensagem para o
-            numero oficial do almoxarifado. Isso abre sua janela de 24 horas para os avisos.
-          </AlertDescription>
-        </Alert>
-        <Outlet />
+      <main className="flex-1 bg-background">
+        {shouldShowWhatsAppNotice ? (
+          <Alert className="rounded-none border-none bg-sidebar px-8 py-4 text-center text-sidebar-foreground shadow-none">
+            <AlertDescription className="text-sm">
+              Envie uma mensagem para o WhatsApp oficial do almoxarifado para receber avisos sobre
+              o acompanhamento das suas requisições e entregas.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <div className="p-8">
+          <Outlet />
+        </div>
       </main>
+      <Dialog open={whatsappReminderOpen} onOpenChange={setWhatsappReminderOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ative os avisos pelo WhatsApp</DialogTitle>
+            <DialogDescription>
+              Envie uma mensagem para o WhatsApp oficial do almoxarifado para receber avisos sobre
+              suas requisições e entregas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex size-56 items-center justify-center rounded-md border bg-white p-3">
+              {whatsappQrCode ? (
+                <img
+                  src={whatsappQrCode}
+                  alt="QR Code para abrir o WhatsApp do almoxarifado"
+                  className="size-full"
+                />
+              ) : (
+                <QrCode className="h-16 w-16 text-muted-foreground" />
+              )}
+            </div>
+            <p className="text-center text-sm text-muted-foreground">
+              Aponte a câmera para o QR Code ou abra o link abaixo e envie a mensagem no WhatsApp.
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button type="button" variant="outline" className="gap-2" asChild>
+              <a href={ALMOXARIFADO_WHATSAPP_LINK} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Abrir WhatsApp
+              </a>
+            </Button>
+            <Button type="button" className="gap-2" onClick={handleConfirmWhatsAppReminder}>
+              <CheckCircle className="h-4 w-4" />
+              Já mandei mensagem
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={mustRegisterWhatsApp} onOpenChange={() => {}}>
         <DialogContent className="[&>button]:hidden">
           <DialogHeader>
