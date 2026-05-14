@@ -129,7 +129,7 @@ function AdminLayout() {
     !whatsappConfirmed &&
     pathname !== "/admin/completar-cadastro";
   const shouldShowWhatsAppNotice =
-    Boolean(profile?.id) && pathname !== "/admin/completar-cadastro";
+    Boolean(profile?.id) && profile?.is_admin === false && pathname !== "/admin/completar-cadastro";
 
   useEffect(() => {
     if (!profile?.id || profile.is_admin || pathname === "/admin/completar-cadastro" || mustRegisterWhatsApp) {
