@@ -372,42 +372,77 @@ function buildUserNotificationMessage(input: {
 }) {
   if (input.notificationType === "requestCreated") {
     return [
-      `Ola, ${valueOrDash(input.requesterName)}.`,
-      "Sua requisicao foi criada.",
-      `Nome: ${valueOrDash(input.requesterName)}`,
+      "📝 Requisição criada com sucesso!",
+      "",
+      `Olá, ${valueOrDash(input.requesterName)}.`,
+      `Número: ${valueOrDash(input.requestCode)}`,
       `Local: ${valueOrDash(input.locationName)}`,
-      `Tipo do material: ${valueOrDash(input.materialType)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
       `Data: ${valueOrDash(input.requestDate)}`,
-      `Numero: ${valueOrDash(input.requestCode)}`,
-      "Assine sua requisicao.",
+      "",
+      "Falta apenas sua assinatura para enviar a requisição ao almoxarifado.",
+    ].join("\n");
+  }
+
+  if (input.notificationType === "requestSigned") {
+    return [
+      "✅ Requisição assinada com sucesso!",
+      "",
+      `Olá, ${valueOrDash(input.requesterName)}.`,
+      `Número: ${valueOrDash(input.requestCode)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
+      "",
+      "Seu pedido foi enviado ao almoxarifado.",
     ].join("\n");
   }
 
   if (input.notificationType === "outputAttached") {
     return [
-      `Ola, ${valueOrDash(input.requesterName)}.`,
-      `A requisicao numero ${valueOrDash(input.requestCode)} esta com saida.`,
-      "Aguardando sua assinatura.",
+      "📎 Saída anexada pelo almoxarifado!",
+      "",
+      `Olá, ${valueOrDash(input.requesterName)}.`,
+      `Número: ${valueOrDash(input.requestCode)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
+      "",
+      "A saída foi gerada e agora está aguardando sua assinatura.",
     ].join("\n");
   }
 
   if (input.notificationType === "readyForPickup") {
     return [
-      `Ola, ${valueOrDash(input.requesterName)}.`,
-      `A requisicao numero ${valueOrDash(input.requestCode)} esta pronta para retirada.`,
+      "📦 Pedido pronto para retirada!",
+      "",
+      `Olá, ${valueOrDash(input.requesterName)}.`,
+      `Número: ${valueOrDash(input.requestCode)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
+      "",
+      "Seu pedido já pode ser retirado.",
     ].join("\n");
   }
 
   if (input.status === "concluido") {
     return [
-      `Ola, ${valueOrDash(input.requesterName)}.`,
-      `A requisicao numero ${valueOrDash(input.requestCode)} foi concluida.`,
+      "🎉 Seu pedido foi concluído com sucesso!",
+      "",
+      `Olá, ${valueOrDash(input.requesterName)}.`,
+      `Número: ${valueOrDash(input.requestCode)}`,
+      `Local: ${valueOrDash(input.locationName)}`,
+      `Tipo de material: ${valueOrDash(input.materialType)}`,
+      `Data: ${valueOrDash(input.requestDate)}`,
+      "",
+      "A assinatura e a conclusão do pedido foram registradas com sucesso.",
     ].join("\n");
   }
 
   return [
-    `Ola, ${valueOrDash(input.requesterName)}.`,
-    `A requisicao numero ${valueOrDash(input.requestCode)} foi enviada para o almoxarifado.`,
+    `Olá, ${valueOrDash(input.requesterName)}.`,
+    `A requisição número ${valueOrDash(input.requestCode)} foi enviada para o almoxarifado.`,
   ].join("\n");
 }
 
@@ -422,8 +457,9 @@ function buildAdminNotificationMessage(input: {
 }) {
   if (input.notificationType === "requestCreated") {
     return [
-      "Nova requisicao gerada.",
-      `Numero: ${valueOrDash(input.requestCode)}`,
+      "🆕 Nova requisição gerada",
+      "",
+      `Número: ${valueOrDash(input.requestCode)}`,
       `Solicitante: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo de material: ${valueOrDash(input.materialType)}`,
@@ -433,11 +469,14 @@ function buildAdminNotificationMessage(input: {
 
   if (input.notificationType === "requestSigned") {
     const title =
-      input.status === "concluido" ? "Saida assinada pelo usuario." : "Requisicao assinada pelo usuario.";
+      input.status === "concluido"
+        ? "✅ Saída assinada pelo usuário"
+        : "✅ Requisição assinada pelo usuário";
 
     return [
       title,
-      `Numero: ${valueOrDash(input.requestCode)}`,
+      "",
+      `Número: ${valueOrDash(input.requestCode)}`,
       `Solicitante: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo de material: ${valueOrDash(input.materialType)}`,
@@ -447,19 +486,22 @@ function buildAdminNotificationMessage(input: {
 
   if (input.notificationType === "outputAttached") {
     return [
-      "Saida gerada pelo almoxarifado.",
-      `Numero: ${valueOrDash(input.requestCode)}`,
+      "📎 Saída anexada pelo almoxarifado",
+      "",
+      `Número: ${valueOrDash(input.requestCode)}`,
       `Solicitante: ${valueOrDash(input.requesterName)}`,
       `Local: ${valueOrDash(input.locationName)}`,
       `Tipo de material: ${valueOrDash(input.materialType)}`,
       `Data: ${valueOrDash(input.requestDate)}`,
-      "Aguardando assinatura da saida.",
+      "",
+      "Aguardando assinatura da saída.",
     ].join("\n");
   }
 
   return [
-    "Pedido pronto para retirada.",
-    `Numero: ${valueOrDash(input.requestCode)}`,
+    "📦 Pedido pronto para retirada",
+    "",
+    `Número: ${valueOrDash(input.requestCode)}`,
     `Solicitante: ${valueOrDash(input.requesterName)}`,
     `Local: ${valueOrDash(input.locationName)}`,
     `Tipo de material: ${valueOrDash(input.materialType)}`,
