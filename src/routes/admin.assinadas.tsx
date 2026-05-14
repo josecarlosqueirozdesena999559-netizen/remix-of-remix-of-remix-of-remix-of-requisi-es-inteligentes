@@ -3,6 +3,7 @@ import { ArrowLeft, Eye, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,7 @@ interface RequisicaoAssinada {
   status: string;
   signed_attachment: unknown;
   admin_attachment: unknown;
+  printed_at: string | null;
 }
 
 type ReviewMode = "devolver" | "excluir";
@@ -70,10 +72,10 @@ function getRequestMonth(request: Pick<RequisicaoAssinada, "data" | "created_at"
 }
 
 function getStatusLabel(status: string) {
-  if (status === "concluido") return "Concluída";
-  if (status === "requisicao_assinada") return "Requisição assinada";
-  if (status === "recebido") return "Requisição assinada";
-  if (status === "aguardando_assinatura_saida") return "Aguardando saída";
+  if (status === "concluido") return "Concluida";
+  if (status === "requisicao_assinada") return "Requisicao assinada";
+  if (status === "recebido") return "Requisicao assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saida";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
   return status || "-";
 }
@@ -81,7 +83,7 @@ function getStatusLabel(status: string) {
 function hasOutputDocument(request: RequisicaoAssinada) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-    getAttachmentFile(request.admin_attachment),
+      getAttachmentFile(request.admin_attachment),
   );
 }
 
@@ -94,7 +96,7 @@ async function fetchCompletedRequests() {
     const { data, error } = await supabase
       .from("requisicoes")
       .select(
-        "id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment",
+        "id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at",
       )
       .eq("status", "concluido")
       .order("updated_at", { ascending: false })
@@ -123,11 +125,13 @@ function AssinadasPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
+  const [showArchived, setShowArchived] = useState(false);
   const [reviewingRequest, setReviewingRequest] = useState<RequisicaoAssinada | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode>("devolver");
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget>("saida");
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -145,7 +149,7 @@ function AssinadasPage() {
         if (!active) return;
 
         if (setoresResult.error) {
-          setError(setoresResult.error?.message || "Erro ao carregar requisições.");
+          setError(setoresResult.error.message || "Erro ao carregar requisicoes.");
         } else {
           const locationOptions = (setoresResult.data ?? []) as LocationOption[];
 
@@ -161,7 +165,7 @@ function AssinadasPage() {
           setCodeByRequestId(buildGlobalRequestCodes(requests));
         }
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");
       } finally {
         if (active) setLoading(false);
       }
@@ -175,8 +179,12 @@ function AssinadasPage() {
   }, []);
 
   const filteredData = useMemo(() => {
-    return (data ?? []).filter((request) => getRequestMonth(request) === selectedMonth);
-  }, [data, selectedMonth]);
+    return (data ?? []).filter((request) => {
+      if (getRequestMonth(request) !== selectedMonth) return false;
+      if (!showArchived && request.printed_at) return false;
+      return true;
+    });
+  }, [data, selectedMonth, showArchived]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, RequisicaoAssinada[]>();
@@ -208,6 +216,35 @@ function AssinadasPage() {
     setReviewingRequest(null);
     setReviewReason("");
     setReviewTarget("saida");
+  };
+
+  const togglePrinted = async (request: RequisicaoAssinada, checked: boolean) => {
+    setPrintingRequestId(request.id);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const printedAt = checked ? new Date().toISOString() : null;
+      const { error: updateError } = await supabase
+        .from("requisicoes")
+        .update({ printed_at: printedAt })
+        .eq("id", request.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      setData((current) =>
+        current?.map((item) => (item.id === request.id ? { ...item, printed_at: printedAt } : item)),
+      );
+      setMessage(
+        checked
+          ? "Documento marcado como impresso e arquivado."
+          : "Documento removido do arquivo de impressos.",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar arquivamento.");
+    } finally {
+      setPrintingRequestId(null);
+    }
   };
 
   const submitReview = async () => {
@@ -269,7 +306,7 @@ function AssinadasPage() {
             removeAttachmentFileSafely(adminAttachment, "admin attachment"),
           ]);
 
-          setMessage("Requisição devolvida para correção do usuário.");
+          setMessage("Requisicao devolvida para correcao do usuario.");
         } else {
           const payload = {
             status: "recebido",
@@ -303,7 +340,7 @@ function AssinadasPage() {
             removeAttachmentFileSafely(adminAttachment, "admin attachment"),
           ]);
 
-          setMessage("Saída devolvida para ajuste do admin.");
+          setMessage("Saida devolvida para ajuste do admin.");
         }
       } else {
         await Promise.all([
@@ -337,13 +374,13 @@ function AssinadasPage() {
 
         if (updateError) throw new Error(updateError.message);
 
-        setMessage("Requisição excluída da fila.");
+        setMessage("Requisicao excluida da fila.");
       }
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
       closeReview();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao revisar requisição.");
+      setError(err instanceof Error ? err.message : "Erro ao revisar requisicao.");
     } finally {
       setReviewSaving(false);
     }
@@ -352,23 +389,33 @@ function AssinadasPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Início / Assinadas</p>
-        <h2 className="text-2xl text-foreground">Requisições assinadas</h2>
+        <p className="text-sm text-muted-foreground">Inicio / Assinadas</p>
+        <h2 className="text-2xl text-foreground">Requisicoes assinadas</h2>
       </div>
 
       <Card className="p-4">
-        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-          Mês
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => {
-              setSelectedMonth(event.target.value || getCurrentMonth());
-              setSelected(null);
-            }}
-            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
-          />
-        </label>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+            Mes
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => {
+                setSelectedMonth(event.target.value || getCurrentMonth());
+                setSelected(null);
+              }}
+              className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+
+          <label className="flex items-center gap-3 text-sm text-muted-foreground">
+            <Checkbox
+              checked={showArchived}
+              onCheckedChange={(checked) => setShowArchived(checked === true)}
+            />
+            Mostrar documentos ja arquivados
+          </label>
+        </div>
       </Card>
 
       {message && <Card className="p-4 text-sm text-muted-foreground">{message}</Card>}
@@ -381,7 +428,7 @@ function AssinadasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : grouped.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisição encontrada neste mês.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma requisicao encontrada neste mes.</Card>
       ) : selected ? (
         <Card className="p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -401,91 +448,113 @@ function AssinadasPage() {
           </div>
 
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left font-normal">Usuário</th>
-                  <th className="px-3 py-2 text-left font-normal">Data</th>
-                  <th className="px-3 py-2 text-left font-normal">Número</th>
-                  <th className="px-3 py-2 text-left font-normal">Status</th>
-                  <th className="px-3 py-2 text-right font-normal">PDF</th>
-                  <th className="px-3 py-2 text-right font-normal">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedRequests.map((request) => {
-                  const code = request.saida_codigo || codeByRequestId.get(request.id) || "-";
-                  const requestAttachment = getRequestSignedAttachment(
-                    request.signed_attachment,
-                    request.status,
-                  );
-                  const outputAttachment =
-                    getOutputSignedAttachment(request.signed_attachment, request.status) ||
-                    getAttachmentFile(request.admin_attachment);
-                  const hasPdf = Boolean(requestAttachment || outputAttachment);
+            {selectedRequests.length === 0 ? (
+              <div className="p-6 text-sm text-muted-foreground">
+                Nenhum documento visivel neste local com o filtro atual.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-normal">Usuario</th>
+                    <th className="px-3 py-2 text-left font-normal">Data</th>
+                    <th className="px-3 py-2 text-left font-normal">Numero</th>
+                    <th className="px-3 py-2 text-left font-normal">Status</th>
+                    <th className="px-3 py-2 text-left font-normal">Verificado</th>
+                    <th className="px-3 py-2 text-right font-normal">PDF</th>
+                    <th className="px-3 py-2 text-right font-normal">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedRequests.map((request) => {
+                    const code = request.saida_codigo || codeByRequestId.get(request.id) || "-";
+                    const requestAttachment = getRequestSignedAttachment(
+                      request.signed_attachment,
+                      request.status,
+                    );
+                    const outputAttachment =
+                      getOutputSignedAttachment(request.signed_attachment, request.status) ||
+                      getAttachmentFile(request.admin_attachment);
+                    const hasPdf = Boolean(requestAttachment || outputAttachment);
 
-                  return (
-                    <tr key={request.id} className="border-t">
-                      <td className="px-3 py-2 text-foreground">{request.solicitante || "-"}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
-                      <td className="px-3 py-2 text-foreground">{code}</td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {getStatusLabel(request.status)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          disabled={!hasPdf}
-                          onClick={() =>
-                            navigate({
-                              to: "/admin/assinadas/$requisicaoId/pdf",
-                              params: { requisicaoId: request.id },
-                            })
-                          }
-                        >
-                          <Eye className="h-4 w-4" />
-                          Ver PDF
-                        </Button>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
+                    return (
+                      <tr key={request.id} className="border-t">
+                        <td className="px-3 py-2 text-foreground">{request.solicitante || "-"}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
+                        <td className="px-3 py-2 text-foreground">{code}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {getStatusLabel(request.status)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={Boolean(request.printed_at)}
+                              disabled={printingRequestId === request.id}
+                              onCheckedChange={(checked) =>
+                                void togglePrinted(request, checked === true)
+                              }
+                              aria-label="Marcar documento como impresso e arquivado"
+                            />
+                            {request.printed_at ? (
+                              <span className="text-xs text-muted-foreground">Verificado</span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-right">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             className="gap-2"
-                            onClick={() => openReview(request, "devolver")}
+                            disabled={!hasPdf}
+                            onClick={() =>
+                              navigate({
+                                to: "/admin/assinadas/$requisicaoId/pdf",
+                                params: { requisicaoId: request.id },
+                              })
+                            }
                           >
-                            <RotateCcw className="h-4 w-4" />
-                            Devolver
+                            <Eye className="h-4 w-4" />
+                            Ver PDF
                           </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-2 text-destructive"
-                            onClick={() => openReview(request, "excluir")}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Excluir
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() => openReview(request, "devolver")}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              Devolver
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2 text-destructive"
+                              onClick={() => openReview(request, "excluir")}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Excluir
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </Card>
       ) : (
         <>
           <Card className="bg-muted/30 p-6">
             <p className="text-sm text-muted-foreground">Primeiro passo</p>
-            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mês</p>
+            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mes</p>
           </Card>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -510,18 +579,18 @@ function AssinadasPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
+              {reviewMode === "devolver" ? "Devolver requisicao" : "Excluir requisicao"}
             </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
-                ? "Escolha se o erro está na requisição ou na saída para enviar o fluxo de volta ao ponto correto."
-                : "A requisição sairá da fila, mas o histórico e o motivo ficam registrados no banco."}
+                ? "Escolha se o erro esta na requisicao ou na saida para enviar o fluxo de volta ao ponto correto."
+                : "A requisicao saira da fila, mas o historico e o motivo ficam registrados no banco."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Onde está o erro?</p>
+              <p className="text-sm text-muted-foreground">Onde esta o erro?</p>
               <RadioGroup
                 value={reviewTarget}
                 onValueChange={(value) => setReviewTarget(value as ReviewTarget)}
@@ -530,18 +599,18 @@ function AssinadasPage() {
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="requisicao" id="review-target-requisicao" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-requisicao">Erro na requisição</Label>
+                    <Label htmlFor="review-target-requisicao">Erro na requisicao</Label>
                     <span className="block text-xs text-muted-foreground">
-                      O usuário recebe a mesma requisição com os itens para corrigir e reenviar.
+                      O usuario recebe a mesma requisicao com os itens para corrigir e reenviar.
                     </span>
                   </span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="saida" id="review-target-saida" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-saida">Erro na saída</Label>
+                    <Label htmlFor="review-target-saida">Erro na saida</Label>
                     <span className="block text-xs text-muted-foreground">
-                      A saída volta para pendente e a requisição assinada continua preservada.
+                      A saida volta para pendente e a requisicao assinada continua preservada.
                     </span>
                   </span>
                 </label>
@@ -565,7 +634,7 @@ function AssinadasPage() {
             </Button>
             <Button type="button" onClick={() => void submitReview()} disabled={reviewSaving}>
               {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {reviewMode === "devolver" ? "Confirmar devolução" : "Excluir"}
+              {reviewMode === "devolver" ? "Confirmar devolucao" : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>

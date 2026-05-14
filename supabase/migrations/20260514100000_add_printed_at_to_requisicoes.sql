@@ -1,0 +1,2 @@
+ALTER TABLE public.requisicoes
+ADD COLUMN IF NOT EXISTS printed_at TIMESTAMPTZ;
