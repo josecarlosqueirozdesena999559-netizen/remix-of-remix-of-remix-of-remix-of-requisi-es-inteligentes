@@ -62,6 +62,13 @@ function userSessionKeys(phone: string) {
   return getBrazilianPhoneVariants(phone).map((variant) => `WHATSAPP_USER_SESSION_${variant}`);
 }
 
+function senderIdFilter(phone: string) {
+  return getBrazilianPhoneVariants(phone)
+    .filter(Boolean)
+    .map((variant) => `sender_id.eq.${variant}`)
+    .join(",");
+}
+
 async function supabaseFetch(path: string, options: RequestInit = {}) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
@@ -176,6 +183,26 @@ async function hasActiveUserSession(phone: string) {
   return false;
 }
 
+async function hasRecentInboundMessage(phone: string) {
+  const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const filter = senderIdFilter(phone);
+  if (!filter) return false;
+
+  const rows = (await supabaseFetch(
+    `whatsapp_webhook_message_audit?select=message_id,occurred_at,created_at&or=(${filter})&order=occurred_at.desc&limit=20`,
+    {
+      headers: { Prefer: "return=representation" },
+    },
+  )) as Array<{ occurred_at: string | null; created_at: string | null }>;
+
+  return rows.some((row) => {
+    const timestamp = row.occurred_at || row.created_at;
+    if (!timestamp) return false;
+    const parsed = Date.parse(timestamp);
+    return Number.isFinite(parsed) && parsed >= Date.parse(threshold);
+  });
+}
+
 async function sendTextMessage(input: { to: string; text: string }) {
   const config = await getWhatsAppSettings();
   const response = await fetch(
@@ -239,7 +266,7 @@ Deno.serve(async (request) => {
 
     if (!to) throw new Error("Numero do destinatario nao informado.");
     if (!text) throw new Error("Digite uma mensagem para enviar.");
-    if (!(await hasActiveUserSession(to))) {
+    if (!(await hasActiveUserSession(to)) && !(await hasRecentInboundMessage(to))) {
       throw new Error(
         "A janela de 24 horas do usuario esta fechada. Aguarde uma nova mensagem dele para responder por aqui.",
       );

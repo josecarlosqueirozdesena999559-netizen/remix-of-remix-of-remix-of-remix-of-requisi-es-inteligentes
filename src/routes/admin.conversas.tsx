@@ -386,7 +386,14 @@ function ConversasPage() {
         },
       );
 
-      if (replyError) throw new Error(replyError.message);
+      if (replyError) {
+        throw new Error(
+          (replyError as any)?.context?.error ||
+            (replyError as any)?.context?.message ||
+            result?.error ||
+            replyError.message,
+        );
+      }
       if (!result?.ok) throw new Error(result?.error || "Erro ao enviar resposta.");
 
       setReplyText("");
