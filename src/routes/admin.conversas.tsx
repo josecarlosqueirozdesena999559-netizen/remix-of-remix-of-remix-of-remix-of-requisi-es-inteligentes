@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, MessageSquareMore, Send } from "lucide-react";
+import { Loader2, MessageSquareMore, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -104,9 +104,33 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatConversationTime(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  const isSameDay =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    ...(isSameDay ? { timeStyle: "short" as const } : { dateStyle: "short" as const }),
+  }).format(date);
+}
+
 function getDisplayName(phone: string, users: UserRow[]) {
   const matchedUser = users.find((user) => phonesMatch(user.whatsapp || "", phone));
   return matchedUser?.nome?.trim() || formatPhone(phone);
+}
+
+function getInitials(name: string) {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!parts.length) return "??";
+  return parts.map((part) => part[0]?.toUpperCase() || "").join("");
 }
 
 function buildConversationSummaries(input: {
@@ -282,16 +306,6 @@ function ConversasPage() {
     });
   };
 
-  const closeConversation = () => {
-    setReplyText("");
-    setNotice(null);
-    setError(null);
-    void navigate({
-      to: "/admin/conversas",
-      search: {},
-    });
-  };
-
   const handleReply = async () => {
     const phone = selectedConversation?.phone || "";
     const text = replyText.trim();
@@ -350,15 +364,6 @@ function ConversasPage() {
         <h2 className="text-2xl text-foreground">Conversas</h2>
       </div>
 
-      <Alert className="border-sky-200 bg-sky-50 text-sky-950">
-        <AlertDescription>
-          Aqui ficam as conversas recebidas no numero oficial do almoxarifado. Clique em um
-          contato para abrir o chat individual e responder enquanto a janela de 24 horas do
-          WhatsApp estiver ativa. Se esse prazo fechar, sera preciso aguardar uma nova mensagem do
-          usuario.
-        </AlertDescription>
-      </Alert>
-
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -383,126 +388,156 @@ function ConversasPage() {
           Nenhuma mensagem recebida no WhatsApp ate agora.
         </Card>
       ) : (
-        <div className="space-y-4">
-          {!selectedConversation ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Conversas</CardTitle>
-                <CardDescription>
-                  Selecione um contato para abrir o historico completo e responder por aqui.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {conversations.map((conversation) => (
+        <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <Card className="overflow-hidden xl:h-[72vh] xl:flex xl:flex-col">
+            <CardHeader className="border-b bg-linear-to-b from-slate-50 to-white">
+              <CardTitle>Conversas</CardTitle>
+              <CardDescription>
+                Nome, numero e ultima mensagem de cada usuario.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="max-h-[72vh] space-y-2 overflow-y-auto p-3">
+              {conversations.map((conversation) => {
+                const isActive = conversation.phone === selectedPhone;
+
+                return (
                   <button
                     key={conversation.phone}
                     type="button"
                     onClick={() => openConversation(conversation.phone)}
-                    className="w-full rounded-2xl border border-border/70 bg-card px-4 py-4 text-left transition-all hover:border-sky-300 hover:bg-sky-50/70"
+                    className={`w-full rounded-2xl border px-4 py-4 text-left transition-all ${
+                      isActive
+                        ? "border-sky-300 bg-sky-50 shadow-sm"
+                        : "border-border/70 bg-card hover:border-sky-200 hover:bg-slate-50"
+                    }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-medium text-foreground">
-                          {conversation.displayName}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {formatPhone(conversation.phone)}
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm text-white">
+                        {getInitials(conversation.displayName)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {conversation.displayName}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {formatPhone(conversation.phone)}
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-[11px] text-muted-foreground">
+                            {formatConversationTime(conversation.lastAt)}
+                          </p>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                          {conversation.preview}
                         </p>
                       </div>
-                      <p className="shrink-0 text-xs text-muted-foreground">
-                        {formatDateTime(conversation.lastAt)}
-                      </p>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-                      {conversation.preview}
-                    </p>
                   </button>
-                ))}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader className="gap-4 border-b bg-linear-to-r from-sky-50 via-white to-slate-50">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <Button type="button" variant="outline" size="icon" onClick={closeConversation}>
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Conversa individual</p>
-                      <CardTitle className="flex items-center gap-2">
-                        <MessageSquareMore className="h-5 w-5" />
-                        {selectedConversation.displayName}
-                      </CardTitle>
-                      <CardDescription>{formatPhone(selectedConversation.phone)}</CardDescription>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden xl:h-[72vh] xl:flex xl:flex-col">
+            {selectedConversation ? (
+              <>
+                <CardHeader className="border-b bg-linear-to-r from-sky-50 via-white to-slate-50">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600 text-sm text-white shadow-sm">
+                        {getInitials(selectedConversation.displayName)}
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Conversa ativa</p>
+                        <CardTitle className="flex items-center gap-2">
+                          <MessageSquareMore className="h-5 w-5" />
+                          {selectedConversation.displayName}
+                        </CardTitle>
+                        <CardDescription>{formatPhone(selectedConversation.phone)}</CardDescription>
+                      </div>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedConversation.messages.length} mensagem
+                      {selectedConversation.messages.length === 1 ? "" : "ens"}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedConversation.messages.length} mensagem
-                    {selectedConversation.messages.length === 1 ? "" : "ens"}
-                  </p>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4 p-4 sm:p-6">
-                <div className="max-h-[60vh] space-y-3 overflow-y-auto rounded-3xl border bg-muted/20 p-4">
-                  {selectedConversation.messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${
-                        message.direction === "outgoing" ? "justify-end" : "justify-start"
-                      }`}
-                    >
+                </CardHeader>
+                <CardContent className="flex h-full flex-col gap-4 p-4 sm:p-6">
+                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-3xl border bg-muted/20 p-4">
+                    {selectedConversation.messages.map((message) => (
                       <div
-                        className={`max-w-[88%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[75%] ${
-                          message.direction === "outgoing"
-                            ? "bg-sky-600 text-white"
-                            : "border bg-background text-foreground"
+                        key={message.id}
+                        className={`flex ${
+                          message.direction === "outgoing" ? "justify-end" : "justify-start"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap break-words">{message.body}</p>
-                        <p
-                          className={`mt-2 text-[11px] ${
+                        <div
+                          className={`max-w-[88%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[75%] ${
                             message.direction === "outgoing"
-                              ? "text-sky-100"
-                              : "text-muted-foreground"
+                              ? "bg-sky-600 text-white"
+                              : "border bg-background text-foreground"
                           }`}
                         >
-                          {formatDateTime(message.occurredAt)}
-                        </p>
+                          <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                          <p
+                            className={`mt-2 text-[11px] ${
+                              message.direction === "outgoing"
+                                ? "text-sky-100"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {formatDateTime(message.occurredAt)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-3xl border bg-card p-4">
+                    <div className="space-y-3">
+                      <Textarea
+                        value={replyText}
+                        onChange={(event) => setReplyText(event.target.value)}
+                        placeholder="Digite a resposta para o usuario"
+                        rows={4}
+                        disabled={saving}
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          className="gap-2"
+                          disabled={saving}
+                          onClick={() => void handleReply()}
+                        >
+                          {saving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          Enviar resposta
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
-
-                <div className="rounded-3xl border bg-card p-4">
-                  <div className="space-y-3">
-                    <Textarea
-                      value={replyText}
-                      onChange={(event) => setReplyText(event.target.value)}
-                      placeholder="Digite a resposta para o usuario"
-                      rows={4}
-                      disabled={saving}
-                    />
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        className="gap-2"
-                        disabled={saving}
-                        onClick={() => void handleReply()}
-                      >
-                        {saving ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                        Enviar resposta
-                      </Button>
-                    </div>
                   </div>
+                </CardContent>
+              </>
+            ) : (
+              <CardContent className="flex h-full min-h-[420px] items-center justify-center p-6">
+                <div className="mx-auto max-w-sm text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-sky-100 text-sky-700">
+                    <MessageSquareMore className="h-8 w-8" />
+                  </div>
+                  <h3 className="mt-4 text-lg font-medium text-foreground">Selecione uma conversa</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Escolha um usuario na coluna ao lado para visualizar o historico completo e
+                    responder com mais organizacao.
+                  </p>
                 </div>
               </CardContent>
-            </Card>
-          )}
+            )}
+          </Card>
         </div>
       )}
     </div>
