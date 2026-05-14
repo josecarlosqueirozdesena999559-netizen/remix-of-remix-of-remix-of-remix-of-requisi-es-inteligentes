@@ -18,6 +18,10 @@ const ADMIN_KEEPALIVE_BUTTON_TITLES = [
   "confirmar janela",
   "confirmar recebimento",
 ];
+const WEBHOOK_LAST_POST_AT_KEY = "WHATSAPP_WEBHOOK_LAST_POST_AT";
+const WEBHOOK_LAST_POST_SUMMARY_KEY = "WHATSAPP_WEBHOOK_LAST_POST_SUMMARY";
+const WEBHOOK_LAST_ERROR_AT_KEY = "WHATSAPP_WEBHOOK_LAST_ERROR_AT";
+const WEBHOOK_LAST_ERROR_KEY = "WHATSAPP_WEBHOOK_LAST_ERROR";
 const SETTINGS_KEYS = [
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_PHONE_NUMBER_ID",
@@ -912,6 +916,29 @@ function extractMessages(payload: any) {
   );
 }
 
+function buildWebhookPayloadSummary(payload: any, messages: any[], statuses: WhatsAppStatusAuditRow[]) {
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  const changes = entries.flatMap((entry: any) => (Array.isArray(entry?.changes) ? entry.changes : []));
+  const senders = Array.from(
+    new Set(
+      messages
+        .map((message: any) => String(message?.from || "").trim())
+        .filter(Boolean)
+        .slice(0, 10),
+    ),
+  );
+
+  return JSON.stringify({
+    receivedAt: new Date().toISOString(),
+    entryCount: entries.length,
+    changeCount: changes.length,
+    messageCount: messages.length,
+    statusCount: statuses.length,
+    senders,
+    topLevelKeys: Object.keys(payload || {}).slice(0, 20),
+  });
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -937,8 +964,14 @@ Deno.serve(async (request) => {
     const settings = await getSettings();
     const payload = await request.json().catch(() => ({}));
     const statuses = extractStatuses(payload);
-    await insertStatusAuditRows(statuses);
     const messages = extractMessages(payload);
+    await Promise.all([
+      upsertSetting(WEBHOOK_LAST_POST_AT_KEY, new Date().toISOString()),
+      upsertSetting(WEBHOOK_LAST_POST_SUMMARY_KEY, buildWebhookPayloadSummary(payload, messages, statuses)),
+      deleteSetting(WEBHOOK_LAST_ERROR_AT_KEY),
+      deleteSetting(WEBHOOK_LAST_ERROR_KEY),
+    ]);
+    await insertStatusAuditRows(statuses);
     await insertMessageAuditRows(buildMessageAuditRows(messages));
 
     await Promise.all(
@@ -1000,6 +1033,13 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ ok: true });
   } catch (error) {
+    await Promise.allSettled([
+      upsertSetting(WEBHOOK_LAST_ERROR_AT_KEY, new Date().toISOString()),
+      upsertSetting(
+        WEBHOOK_LAST_ERROR_KEY,
+        error instanceof Error ? error.message : "Erro desconhecido no webhook do WhatsApp.",
+      ),
+    ]);
     return jsonResponse(
       {
         ok: false,
