@@ -643,7 +643,7 @@ function ConversasPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-96px)] flex-col space-y-3">
+    <div className="flex h-[calc(100svh-64px)] min-h-0 flex-col overflow-hidden">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -657,20 +657,20 @@ function ConversasPage() {
       )}
 
       {loading ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card className="min-h-0 flex-1 p-6 text-muted-foreground">
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
             Carregando conversas...
           </div>
         </Card>
       ) : conversations.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card className="min-h-0 flex-1 p-6 text-muted-foreground">
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid min-h-[680px] flex-1 overflow-hidden rounded-md border bg-[#efeae2] shadow-sm lg:h-[calc(100vh-112px)] xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
-          <Card className="flex min-h-[260px] flex-col overflow-hidden rounded-none border-0 border-b bg-white shadow-none xl:h-full xl:border-b-0 xl:border-r">
-            <CardHeader className="border-b bg-[#f0f2f5] px-4 py-4">
+        <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,34vh)_minmax(0,1fr)] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:grid-cols-[360px_minmax(0,1fr)] xl:grid-rows-1 2xl:grid-cols-[400px_minmax(0,1fr)]">
+          <Card className="flex min-h-0 flex-col overflow-hidden rounded-none border-0 border-b bg-white shadow-none xl:h-full xl:border-b-0 xl:border-r">
+            <CardHeader className="shrink-0 border-b bg-[#f0f2f5] px-4 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">Conversas</CardTitle>
@@ -736,10 +736,10 @@ function ConversasPage() {
             </CardContent>
           </Card>
 
-          <Card className="flex min-h-[520px] flex-col overflow-hidden rounded-none border-0 bg-[#efeae2] shadow-none xl:h-full">
+          <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none border-0 bg-[#efeae2] shadow-none xl:h-full">
             {selectedConversation ? (
               <>
-                <CardHeader className="border-b bg-[#f0f2f5] px-4 py-3">
+                <CardHeader className="shrink-0 border-b bg-[#f0f2f5] px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00a884] text-sm text-white">
@@ -774,8 +774,8 @@ function ConversasPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-5 sm:px-8">
+                <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
                     {selectedConversation.messages.map((message) => (
                       <div
                         key={message.id}
@@ -784,7 +784,7 @@ function ConversasPage() {
                         }`}
                       >
                         <div
-                          className={`relative max-w-[88%] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[72%] ${
+                          className={`relative max-w-[min(92%,720px)] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[min(78%,760px)] lg:max-w-[min(68%,760px)] ${
                             message.direction === "outgoing"
                               ? "bg-[#d9fdd3] text-[#111b21]"
                               : "bg-white text-[#111b21]"
@@ -823,7 +823,7 @@ function ConversasPage() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <div className="border-t bg-[#f0f2f5] px-4 py-3">
+                  <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
                     <div className="flex items-end gap-3">
                       <Textarea
                         value={replyText}
