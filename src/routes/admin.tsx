@@ -15,6 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  getAdminSectionFromPath,
+  hasAdminSectionAccess,
+  isLimitedAdmin,
+} from "@/lib/admin-sections";
+import {
   getCurrentUserProfile,
   isUserProfileIncomplete,
   type CurrentUserProfile,
@@ -118,10 +123,21 @@ function AdminLayout() {
     };
   }, [navigate, pathname]);
 
+  useEffect(() => {
+    if (!profile?.is_admin) return;
+
+    const section = getAdminSectionFromPath(pathname);
+    if (!section) return;
+    if (hasAdminSectionAccess(profile, section)) return;
+
+    navigate({ to: "/admin" });
+  }, [navigate, pathname, profile]);
+
   const itemCls =
     "block rounded-md px-3 py-2 text-sm text-sidebar-foreground/90 hover:bg-sidebar-accent transition-colors";
   const activeCls = "bg-sidebar-accent text-sidebar-foreground";
   const isAdmin = profile?.is_admin !== false;
+  const limitedAdmin = isLimitedAdmin(profile);
   const mustRegisterWhatsApp =
     Boolean(profile?.id) &&
     !profile?.is_admin &&
@@ -287,91 +303,105 @@ function AdminLayout() {
 
           {isAdmin ? (
             <>
-              <Link
-                to="/admin/solicitacoes"
-                className={itemCls}
-                activeProps={{ className: `${itemCls} ${activeCls}` }}
-              >
-                Solicitações Pendentes
-              </Link>
-              <Link
-                to="/admin/assinadas"
-                className={itemCls}
-                activeProps={{ className: `${itemCls} ${activeCls}` }}
-              >
-                Assinadas
-              </Link>
-              <Link
-                to="/admin/controle-assinaturas"
-                className={itemCls}
-                activeProps={{ className: `${itemCls} ${activeCls}` }}
-              >
-                Controle de Assinaturas
-              </Link>
-              <Link
-                to="/admin/conversas"
-                className={itemCls}
-                activeProps={{ className: `${itemCls} ${activeCls}` }}
-              >
-                Conversas
-              </Link>
-              <Link
-                to="/admin/whatsapp-usuarios"
-                className={itemCls}
-                activeProps={{ className: `${itemCls} ${activeCls}` }}
-              >
-                Janelas WhatsApp
-              </Link>
+              {hasAdminSectionAccess(profile, "solicitacoes") ? (
+                <Link
+                  to="/admin/solicitacoes"
+                  className={itemCls}
+                  activeProps={{ className: `${itemCls} ${activeCls}` }}
+                >
+                  Solicitações Pendentes
+                </Link>
+              ) : null}
+              {hasAdminSectionAccess(profile, "assinadas") ? (
+                <Link
+                  to="/admin/assinadas"
+                  className={itemCls}
+                  activeProps={{ className: `${itemCls} ${activeCls}` }}
+                >
+                  Assinadas
+                </Link>
+              ) : null}
+              {hasAdminSectionAccess(profile, "controle_assinaturas") ? (
+                <Link
+                  to="/admin/controle-assinaturas"
+                  className={itemCls}
+                  activeProps={{ className: `${itemCls} ${activeCls}` }}
+                >
+                  Controle de Assinaturas
+                </Link>
+              ) : null}
+              {hasAdminSectionAccess(profile, "conversas") ? (
+                <Link
+                  to="/admin/conversas"
+                  className={itemCls}
+                  activeProps={{ className: `${itemCls} ${activeCls}` }}
+                >
+                  Conversas
+                </Link>
+              ) : null}
+              {hasAdminSectionAccess(profile, "whatsapp_usuarios") ? (
+                <Link
+                  to="/admin/whatsapp-usuarios"
+                  className={itemCls}
+                  activeProps={{ className: `${itemCls} ${activeCls}` }}
+                >
+                  Janelas WhatsApp
+                </Link>
+              ) : null}
 
-              <button
-                type="button"
-                onClick={() => setOpenCadastros((value) => !value)}
-                className={`${itemCls} flex w-full items-center justify-between text-left`}
-              >
-                <span>Cadastros</span>
-                <ChevronDown
-                  size={16}
-                  className={`transition-transform duration-200 ${openCadastros ? "rotate-0" : "-rotate-90"}`}
-                />
-              </button>
-              <div
-                className={`grid overflow-hidden transition-[grid-template-rows] duration-300 ease-out ${
-                  openCadastros ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                }`}
-              >
-                <div className="min-h-0 overflow-hidden">
-                  <div className="ml-3 space-y-1 border-l border-sidebar-border pl-2 pt-1">
-                    <Link
-                      to="/admin/cadastros/usuarios"
-                      className={itemCls}
-                      activeProps={{ className: `${itemCls} ${activeCls}` }}
-                    >
-                      Usuários
-                    </Link>
-                    <Link
-                      to="/admin/cadastros/produtos"
-                      className={itemCls}
-                      activeProps={{ className: `${itemCls} ${activeCls}` }}
-                    >
-                      Produtos
-                    </Link>
-                    <Link
-                      to="/admin/cadastros/programas"
-                      className={itemCls}
-                      activeProps={{ className: `${itemCls} ${activeCls}` }}
-                    >
-                      Programas
-                    </Link>
-                    <Link
-                      to="/admin/cadastros/locais"
-                      className={itemCls}
-                      activeProps={{ className: `${itemCls} ${activeCls}` }}
-                    >
-                      Locais
-                    </Link>
+              {hasAdminSectionAccess(profile, "cadastros") ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setOpenCadastros((value) => !value)}
+                    className={`${itemCls} flex w-full items-center justify-between text-left`}
+                  >
+                    <span>Cadastros</span>
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform duration-200 ${openCadastros ? "rotate-0" : "-rotate-90"}`}
+                    />
+                  </button>
+                  <div
+                    className={`grid overflow-hidden transition-[grid-template-rows] duration-300 ease-out ${
+                      openCadastros ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="ml-3 space-y-1 border-l border-sidebar-border pl-2 pt-1">
+                        <Link
+                          to="/admin/cadastros/usuarios"
+                          className={itemCls}
+                          activeProps={{ className: `${itemCls} ${activeCls}` }}
+                        >
+                          Usuários
+                        </Link>
+                        <Link
+                          to="/admin/cadastros/produtos"
+                          className={itemCls}
+                          activeProps={{ className: `${itemCls} ${activeCls}` }}
+                        >
+                          Produtos
+                        </Link>
+                        <Link
+                          to="/admin/cadastros/programas"
+                          className={itemCls}
+                          activeProps={{ className: `${itemCls} ${activeCls}` }}
+                        >
+                          Programas
+                        </Link>
+                        <Link
+                          to="/admin/cadastros/locais"
+                          className={itemCls}
+                          activeProps={{ className: `${itemCls} ${activeCls}` }}
+                        >
+                          Locais
+                        </Link>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </>
+              ) : null}
             </>
           ) : (
             <>
@@ -406,13 +436,15 @@ function AdminLayout() {
             </>
           )}
 
-          <Link
-            to="/admin/configuracoes"
-            className={itemCls}
-            activeProps={{ className: `${itemCls} ${activeCls}` }}
-          >
-            Configurações
-          </Link>
+          {(!isAdmin || !limitedAdmin || hasAdminSectionAccess(profile, "configuracoes")) ? (
+            <Link
+              to="/admin/configuracoes"
+              className={itemCls}
+              activeProps={{ className: `${itemCls} ${activeCls}` }}
+            >
+              Configurações
+            </Link>
+          ) : null}
 
           <button
             type="button"

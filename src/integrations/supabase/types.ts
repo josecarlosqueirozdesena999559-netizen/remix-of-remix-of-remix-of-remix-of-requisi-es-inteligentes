@@ -336,12 +336,12 @@ export type Database = {
           is_admin: boolean
           nome: string
           role: string
-            setor: string | null
-            unidade_nome: string | null
-            updated_at: string
-            whatsapp: string | null
-          }
-          Insert: {
+          setor: string | null
+          unidade_nome: string | null
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
           auth_user_id?: string | null
           categorias_permitidas?: Json
           cpf?: string | null
@@ -352,12 +352,12 @@ export type Database = {
           is_admin?: boolean
           nome: string
           role?: string
-            setor?: string | null
-            unidade_nome?: string | null
-            updated_at?: string
-            whatsapp?: string | null
-          }
-          Update: {
+          setor?: string | null
+          unidade_nome?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
           auth_user_id?: string | null
           categorias_permitidas?: Json
           cpf?: string | null
@@ -368,11 +368,11 @@ export type Database = {
           is_admin?: boolean
           nome?: string
           role?: string
-            setor?: string | null
-            unidade_nome?: string | null
-            updated_at?: string
-            whatsapp?: string | null
-          }
+          setor?: string | null
+          unidade_nome?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
         Relationships: []
       }
     }
