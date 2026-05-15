@@ -270,6 +270,14 @@ Deno.serve(async (request) => {
 
     if (!to) throw new Error("Numero do destinatario nao informado.");
     if (!text) throw new Error("Digite uma mensagem para enviar.");
+
+    const canSendFreeform = (await hasActiveUserSession(to)) || (await hasRecentInboundMessage(to));
+    if (!canSendFreeform) {
+      throw new Error(
+        "Sem entrada recente registrada para este usuario. Aguarde uma mensagem dele ou envie uma notificacao por template.",
+      );
+    }
+
     const payload = await sendTextMessage({ to, text });
     const messageId = payload.messages?.[0]?.id?.trim();
     if (!messageId) {

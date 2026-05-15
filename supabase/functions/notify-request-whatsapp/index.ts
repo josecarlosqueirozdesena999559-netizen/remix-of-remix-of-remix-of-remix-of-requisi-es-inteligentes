@@ -554,6 +554,12 @@ Deno.serve(async (request) => {
     } else if (notificationData.requesterIsAdmin || requesterIsAdminNumber) {
       skipped = true;
       reason = "Destinatario principal e admin; mensagem de usuario nao enviada.";
+    } else if (
+      !(await hasActiveUserSession(notificationData.whatsapp)) &&
+      !(await hasRecentInboundMessage(notificationData.whatsapp))
+    ) {
+      skipped = true;
+      reason = "Usuario sem janela de 24h aberta para receber texto livre.";
     } else {
       const text = buildUserNotificationMessage({
         notificationType,
@@ -602,6 +608,20 @@ Deno.serve(async (request) => {
 
       for (const adminNumber of adminNumbers) {
         try {
+          const canNotifyAdmin =
+            (await hasActiveAdminSession(adminNumber)) ||
+            (await hasRecentInboundMessage(adminNumber));
+
+          if (!canNotifyAdmin) {
+            adminNotifications.push({
+              to: normalizeWhatsAppPhoneNumber(adminNumber),
+              ok: false,
+              skipped: true,
+              error: "Admin sem janela de 24h aberta para receber texto livre.",
+            });
+            continue;
+          }
+
           const adminMessageId = await sendTextMessage({
             to: adminNumber,
             text: adminText,

@@ -131,6 +131,21 @@ function AdminLayout() {
   const shouldShowWhatsAppNotice =
     Boolean(profile?.id) && profile?.is_admin === false && pathname !== "/admin/completar-cadastro";
 
+  const openWhatsAppActivationReminder = async () => {
+    try {
+      const qrCode = await QRCode.toDataURL(ALMOXARIFADO_WHATSAPP_LINK, {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 220,
+      });
+      setWhatsappQrCode(qrCode);
+    } catch {
+      setWhatsappQrCode(null);
+    } finally {
+      setWhatsappReminderOpen(true);
+    }
+  };
+
   useEffect(() => {
     if (!profile?.id || profile.is_admin || pathname === "/admin/completar-cadastro" || mustRegisterWhatsApp) {
       setWhatsappReminderOpen(false);
@@ -157,15 +172,8 @@ function AdminLayout() {
         if (acknowledgementError) throw new Error(acknowledgementError.message);
         if (acknowledgement) return;
 
-        const qrCode = await QRCode.toDataURL(ALMOXARIFADO_WHATSAPP_LINK, {
-          errorCorrectionLevel: "M",
-          margin: 1,
-          width: 220,
-        });
-
         if (!active) return;
-        setWhatsappQrCode(qrCode);
-        setWhatsappReminderOpen(true);
+        await openWhatsAppActivationReminder();
       } catch {
         if (active) setWhatsappReminderOpen(true);
       }
@@ -234,6 +242,9 @@ function AdminLayout() {
           ? "WhatsApp salvo, mas a mensagem de boas-vindas nao foi entregue agora."
           : "WhatsApp salvo com sucesso.",
       );
+      if (result.welcomeError) {
+        await openWhatsAppActivationReminder();
+      }
     } catch (err) {
       setWhatsappError(
         err instanceof Error ? err.message : "Erro ao salvar WhatsApp. Tente novamente.",
