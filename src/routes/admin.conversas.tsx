@@ -40,6 +40,12 @@ type OutgoingMessage = {
     source?: string | null;
     audience?: string | null;
     notificationType?: string | null;
+    adminName?: string | null;
+    adminEmail?: string | null;
+    sentBy?: {
+      name?: string | null;
+      email?: string | null;
+    } | null;
   } | null;
 };
 
@@ -61,6 +67,7 @@ type ConversationMessage = {
   occurredAt: string;
   createdAt: string;
   direction: "incoming" | "outgoing";
+  senderName?: string | null;
   status?: "sending" | "failed";
   mediaAttachment?: AttachmentFile | null;
 };
@@ -163,6 +170,16 @@ function getMessageSortTime(message: Pick<ConversationMessage, "occurredAt" | "c
   return Number.isFinite(occurred) ? occurred : 0;
 }
 
+function getOutgoingSenderName(message: OutgoingMessage) {
+  return (
+    message.raw_payload?.sentBy?.name?.trim() ||
+    message.raw_payload?.adminName?.trim() ||
+    message.raw_payload?.sentBy?.email?.trim() ||
+    message.raw_payload?.adminEmail?.trim() ||
+    "Admin"
+  );
+}
+
 function resolveConversationUser(phone: string, users: UserRow[]) {
   const exactMatch = users.find((user) => canonicalConversationPhone(user.whatsapp) === phone);
   if (exactMatch?.nome?.trim()) return exactMatch;
@@ -245,6 +262,7 @@ function buildConversationSummaries(input: {
       occurredAt: message.occurred_at || message.created_at,
       createdAt: message.created_at,
       direction: "outgoing",
+      senderName: getOutgoingSenderName(message),
     });
     byPhone.set(phone, next);
   });
@@ -625,14 +643,7 @@ function ConversasPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <div>
-          <p className="text-sm text-muted-foreground">Admin / WhatsApp</p>
-          <h2 className="text-2xl text-foreground">Conversas</h2>
-        </div>
-      </div>
-
+    <div className="flex min-h-[calc(100vh-96px)] flex-col space-y-3">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -657,8 +668,8 @@ function ConversasPage() {
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid min-h-[620px] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm lg:h-[calc(100vh-150px)] xl:grid-cols-[370px_minmax(0,1fr)]">
-          <Card className="flex min-h-[420px] flex-col overflow-hidden rounded-none border-0 border-r bg-white shadow-none xl:h-full">
+        <div className="grid min-h-[680px] flex-1 overflow-hidden rounded-md border bg-[#efeae2] shadow-sm lg:h-[calc(100vh-112px)] xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]">
+          <Card className="flex min-h-[260px] flex-col overflow-hidden rounded-none border-0 border-b bg-white shadow-none xl:h-full xl:border-b-0 xl:border-r">
             <CardHeader className="border-b bg-[#f0f2f5] px-4 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -780,7 +791,9 @@ function ConversasPage() {
                           }`}
                         >
                           <p className="mb-1 text-[11px] font-medium text-[#667781]">
-                            {message.direction === "outgoing" ? "Admin" : "Usuário"}
+                            {message.direction === "outgoing"
+                              ? message.senderName || "Admin"
+                              : "Usuario"}
                           </p>
                           {message.messageType === "audio" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">

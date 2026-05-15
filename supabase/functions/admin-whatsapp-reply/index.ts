@@ -19,6 +19,15 @@ type SupabaseUser = {
   email?: string;
 };
 
+type AdminProfile = {
+  id: string;
+  nome: string | null;
+  email: string | null;
+  is_admin: boolean | null;
+  role: string | null;
+  auth_user_id: string | null;
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -116,26 +125,21 @@ async function getAuthenticatedUser(request: Request) {
 
 async function requireAdmin(user: SupabaseUser) {
   const rows = (await supabaseFetch(
-    `usuarios?select=id,is_admin,role,email,auth_user_id&auth_user_id=eq.${encodeURIComponent(
+    `usuarios?select=id,nome,is_admin,role,email,auth_user_id&auth_user_id=eq.${encodeURIComponent(
       user.id,
     )}&limit=1`,
-  )) as Array<{
-    is_admin: boolean | null;
-    role: string | null;
-    email: string | null;
-    auth_user_id: string | null;
-  }>;
+  )) as AdminProfile[];
 
   const profile = rows[0];
-  if (profile?.is_admin || profile?.role === "admin") return;
+  if (profile?.is_admin || profile?.role === "admin") return profile;
 
   const email = user.email?.trim().toLowerCase();
   if (email) {
     const byEmail = (await supabaseFetch(
-      `usuarios?select=id,is_admin,role&email=ilike.${encodeURIComponent(email)}&limit=1`,
-    )) as Array<{ is_admin: boolean | null; role: string | null }>;
+      `usuarios?select=id,nome,is_admin,role,email,auth_user_id&email=ilike.${encodeURIComponent(email)}&limit=1`,
+    )) as AdminProfile[];
 
-    if (byEmail[0]?.is_admin || byEmail[0]?.role === "admin") return;
+    if (byEmail[0]?.is_admin || byEmail[0]?.role === "admin") return byEmail[0];
   }
 
   throw new Error("Apenas administradores podem responder conversas.");
@@ -250,6 +254,10 @@ async function sendTextMessage(input: { to: string; text: string }) {
   };
 }
 
+function getAdminDisplayName(profile: AdminProfile, user: SupabaseUser) {
+  return profile.nome?.trim() || profile.email?.trim() || user.email?.trim() || "Admin";
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") {
@@ -262,7 +270,7 @@ Deno.serve(async (request) => {
     }
 
     const user = await getAuthenticatedUser(request);
-    await requireAdmin(user);
+    const adminProfile = await requireAdmin(user);
 
     const body = await request.json().catch(() => ({}));
     const to = typeof body.to === "string" ? normalizeWhatsAppPhoneNumber(body.to) : "";
@@ -278,7 +286,9 @@ Deno.serve(async (request) => {
       );
     }
 
-    const payload = await sendTextMessage({ to, text });
+    const adminDisplayName = getAdminDisplayName(adminProfile, user);
+    const outboundText = `*${adminDisplayName}:*\n${text}`;
+    const payload = await sendTextMessage({ to, text: outboundText });
     const messageId = payload.messages?.[0]?.id?.trim();
     if (!messageId) {
       throw new Error("WhatsApp enviado, mas a resposta nao retornou o id da mensagem.");
@@ -293,7 +303,18 @@ Deno.serve(async (request) => {
         message_type: "text",
         body: text,
         occurred_at: new Date().toISOString(),
-        raw_payload: payload,
+        raw_payload: {
+          ...payload,
+          adminName: adminProfile.nome,
+          adminEmail: adminProfile.email || user.email || null,
+          outboundBody: outboundText,
+          sentBy: {
+            id: adminProfile.id,
+            name: adminDisplayName,
+            email: adminProfile.email || user.email || null,
+            authUserId: user.id,
+          },
+        },
       }),
     });
 
