@@ -381,10 +381,18 @@ function ConversasPage() {
         { event: "*", schema: "public", table: "whatsapp_outbound_message_audit" },
         () => void loadConversations(),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "app_settings" },
+        () => void loadConversations(),
+      )
       .subscribe();
+
+    const refreshInterval = window.setInterval(() => void loadConversations(), 8000);
 
     return () => {
       active = false;
+      window.clearInterval(refreshInterval);
       void supabase.removeChannel(channel);
     };
   }, []);
