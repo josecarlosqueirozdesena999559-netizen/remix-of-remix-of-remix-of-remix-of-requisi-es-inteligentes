@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle2, FileText, Loader2, RotateCcw, Trash2, Upload }
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ interface Requisicao {
   items: RequestPdfItem[] | null;
   signed_attachment: unknown;
   admin_attachment: unknown;
+  printed_at: string | null;
   displaySetor?: string;
 }
 
@@ -89,6 +91,7 @@ function Solicitacoes() {
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -101,7 +104,7 @@ function Solicitacoes() {
       const [pendingResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment")
+          .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at")
           .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("updated_at", { ascending: false }),
         supabase
@@ -320,6 +323,33 @@ function Solicitacoes() {
     setReviewReason("");
   };
 
+  const togglePrinted = async (request: Requisicao, checked: boolean) => {
+    if (request.printed_at || !checked) return;
+
+    setPrintingRequestId(request.id);
+    setUploadMessage(null);
+    setError(null);
+
+    try {
+      const printedAt = new Date().toISOString();
+      const { error: updateError } = await supabase
+        .from("requisicoes")
+        .update({ printed_at: printedAt })
+        .eq("id", request.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      setData((current) =>
+        current?.map((item) => (item.id === request.id ? { ...item, printed_at: printedAt } : item)),
+      );
+      setUploadMessage("Marcado como impresso.");
+    } catch (err) {
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao atualizar impressao.");
+    } finally {
+      setPrintingRequestId(null);
+    }
+  };
+
   const submitReview = async () => {
     if (!reviewingRequest) return;
 
@@ -429,6 +459,7 @@ function Solicitacoes() {
                   <th className="px-3 py-2 text-left font-normal">Data</th>
                   <th className="px-3 py-2 text-left font-normal">Número</th>
                   <th className="px-3 py-2 text-left font-normal">Documento de saída</th>
+                  <th className="px-3 py-2 text-center font-normal">Impresso</th>
                   <th className="px-3 py-2 text-right font-normal">PDF</th>
                   <th className="px-3 py-2 text-right font-normal">Ações</th>
                 </tr>
@@ -491,6 +522,22 @@ function Solicitacoes() {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {r.printed_at ? (
+                          <div className="flex justify-center">
+                            <Checkbox checked disabled aria-label="Documento ja marcado como impresso" />
+                          </div>
+                        ) : (
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={false}
+                              disabled={printingRequestId === r.id}
+                              onCheckedChange={(checked) => void togglePrinted(r, checked === true)}
+                              aria-label="Marcar documento como impresso"
+                            />
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <Button

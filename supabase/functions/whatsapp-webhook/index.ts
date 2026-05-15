@@ -20,8 +20,10 @@ const ADMIN_KEEPALIVE_BUTTON_TITLES = [
 ];
 const WEBHOOK_LAST_POST_AT_KEY = "WHATSAPP_WEBHOOK_LAST_POST_AT";
 const WEBHOOK_LAST_POST_SUMMARY_KEY = "WHATSAPP_WEBHOOK_LAST_POST_SUMMARY";
+const WEBHOOK_LAST_POST_RAW_KEY = "WHATSAPP_WEBHOOK_LAST_POST_RAW";
 const WEBHOOK_LAST_ERROR_AT_KEY = "WHATSAPP_WEBHOOK_LAST_ERROR_AT";
 const WEBHOOK_LAST_ERROR_KEY = "WHATSAPP_WEBHOOK_LAST_ERROR";
+const WHATSAPP_MEDIA_BUCKET = "requisicoes";
 const SETTINGS_KEYS = [
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_PHONE_NUMBER_ID",
@@ -101,6 +103,11 @@ type WhatsAppMessageAuditRow = {
   body: string | null;
   occurred_at: string | null;
   raw_payload: unknown;
+};
+
+type DownloadedWhatsAppMedia = {
+  bytes: Uint8Array;
+  contentType: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -279,6 +286,31 @@ async function supabaseFetch(path: string, init: RequestInit = {}) {
   return payload;
 }
 
+async function uploadToStorage(bucket: string, storagePath: string, bytes: Uint8Array, contentType: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Supabase não configurado.");
+  }
+
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/${bucket}/${storagePath}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": contentType,
+      "x-upsert": "true",
+    },
+    body: bytes,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.message || "Erro ao enviar mídia para o Storage.");
+  }
+}
+
 async function getSettings() {
   const rows = (await supabaseFetch(
     `app_settings?select=key,value&key=in.(${SETTINGS_KEYS.join(",")})`,
@@ -449,8 +481,48 @@ function extractMessageBody(message: any) {
   if (typeof message?.interactive?.button_reply?.id === "string") {
     return message.interactive.button_reply.id;
   }
+  if (message?.type === "audio") return "[audio recebido]";
+  if (message?.type === "image") return "[imagem recebida]";
 
   return null;
+}
+
+function getFileExtensionFromMimeType(value: string | null | undefined) {
+  const mimeType = String(value || "").trim().toLowerCase();
+  if (!mimeType) return "bin";
+  if (mimeType.includes("ogg")) return "ogg";
+  if (mimeType.includes("mpeg")) return "mp3";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("jpeg")) return "jpg";
+  if (mimeType.includes("png")) return "png";
+
+  const extension = mimeType.split("/")[1]?.split(";")[0]?.trim();
+  return extension || "bin";
+}
+
+async function storeIncomingAudioAttachment(message: any) {
+  const mediaId = String(message?.audio?.id || "").trim();
+  if (!mediaId) return null;
+
+  const downloaded = await downloadMedia(mediaId);
+  const extension = getFileExtensionFromMimeType(
+    typeof message?.audio?.mime_type === "string" ? message.audio.mime_type : downloaded.contentType,
+  );
+  const sender = String(message?.from || "").replace(/\D/g, "") || "unknown";
+  const timestamp = String(message?.timestamp || Date.now()).replace(/\D/g, "") || String(Date.now());
+  const storagePath = `whatsapp-audio/${sender}/${timestamp}-${mediaId}.${extension}`;
+
+  await uploadToStorage(WHATSAPP_MEDIA_BUCKET, storagePath, downloaded.bytes, downloaded.contentType);
+
+  return {
+    fileName: `audio-${timestamp}.${extension}`,
+    storageBucket: WHATSAPP_MEDIA_BUCKET,
+    storagePath,
+    uploadedAt: new Date().toISOString(),
+    mimeType: downloaded.contentType,
+    kind: "audio",
+  };
 }
 
 function buildFallbackMessageId(message: any) {
@@ -468,11 +540,22 @@ function buildFallbackMessageId(message: any) {
     .slice(0, 180);
 }
 
-function buildMessageAuditRows(messages: any[]): WhatsAppMessageAuditRow[] {
-  return messages
-    .map((message: any) => {
+async function buildMessageAuditRows(messages: any[]): Promise<WhatsAppMessageAuditRow[]> {
+  const rows = await Promise.all(
+    messages.map(async (message: any) => {
       const messageId = String(message?.id || "").trim() || buildFallbackMessageId(message);
       if (!messageId) return null;
+
+      let rawPayload = message;
+
+      if (message?.type === "audio" && message?.audio?.id) {
+        try {
+          const storedMedia = await storeIncomingAudioAttachment(message);
+          rawPayload = storedMedia ? { ...message, stored_media: storedMedia } : message;
+        } catch (error) {
+          console.error("Could not store incoming WhatsApp audio.", error);
+        }
+      }
 
       return {
         message_id: messageId,
@@ -483,10 +566,12 @@ function buildMessageAuditRows(messages: any[]): WhatsAppMessageAuditRow[] {
         message_type: typeof message?.type === "string" ? message.type.trim() || null : null,
         body: extractMessageBody(message),
         occurred_at: parseStatusTimestamp(message?.timestamp),
-        raw_payload: message,
+        raw_payload: rawPayload,
       } satisfies WhatsAppMessageAuditRow;
-    })
-    .filter(Boolean);
+    }),
+  );
+
+  return rows.filter((row): row is WhatsAppMessageAuditRow => Boolean(row));
 }
 
 async function insertMessageAuditRows(rows: WhatsAppMessageAuditRow[]) {
@@ -586,7 +671,7 @@ async function sendTextMessage(input: { to: string; text: string }) {
   return payload?.messages?.[0]?.id as string | undefined;
 }
 
-async function downloadMedia(mediaId: string) {
+async function downloadMedia(mediaId: string): Promise<DownloadedWhatsAppMedia> {
   const config = await getSettings();
   const mediaResponse = await fetch(
     `https://graph.facebook.com/${config.graphApiVersion}/${mediaId}`,
@@ -597,7 +682,7 @@ async function downloadMedia(mediaId: string) {
   const media = await mediaResponse.json().catch(() => null);
 
   if (!mediaResponse.ok || !media?.url) {
-    throw new Error(media?.error?.message || "Não foi possível baixar a imagem.");
+    throw new Error(media?.error?.message || "Não foi possível baixar a mídia.");
   }
 
   const fileResponse = await fetch(media.url, {
@@ -605,10 +690,13 @@ async function downloadMedia(mediaId: string) {
   });
 
   if (!fileResponse.ok) {
-    throw new Error("Não foi possível baixar a foto do QR Code.");
+    throw new Error("Não foi possível baixar a mídia do WhatsApp.");
   }
 
-  return new Uint8Array(await fileResponse.arrayBuffer());
+  return {
+    bytes: new Uint8Array(await fileResponse.arrayBuffer()),
+    contentType: fileResponse.headers.get("content-type") || "application/octet-stream",
+  };
 }
 
 async function decodeQrFromImage(bytes: Uint8Array) {
@@ -854,7 +942,7 @@ async function savePendingAndAskConfirmation(from: string, pending: PendingConfi
 
 async function handleImageMessage(from: string, mediaId: string) {
   const image = await downloadMedia(mediaId);
-  const qrText = await decodeQrFromImage(image);
+  const qrText = await decodeQrFromImage(image.bytes);
   const { request } = await getRequestByQrPayload(qrText);
   const pending: PendingConfirmation = {
     qrPayload: qrText,
@@ -939,6 +1027,23 @@ function extractMessages(payload: any) {
   );
 }
 
+function summarizeWebhookPayloadText(payloadText: string) {
+  const trimmed = payloadText.trim();
+  if (!trimmed) {
+    return JSON.stringify({
+      receivedAt: new Date().toISOString(),
+      rawLength: 0,
+      preview: "",
+    });
+  }
+
+  return JSON.stringify({
+    receivedAt: new Date().toISOString(),
+    rawLength: trimmed.length,
+    preview: trimmed.slice(0, 1200),
+  });
+}
+
 function buildWebhookPayloadSummary(payload: any, messages: any[], statuses: WhatsAppStatusAuditRow[]) {
   const entries = Array.isArray(payload?.entry) ? payload.entry : [];
   const changes = entries.flatMap((entry: any) => (Array.isArray(entry?.changes) ? entry.changes : []));
@@ -946,6 +1051,22 @@ function buildWebhookPayloadSummary(payload: any, messages: any[], statuses: Wha
     new Set(
       messages
         .map((message: any) => String(message?.from || "").trim())
+        .filter(Boolean)
+        .slice(0, 10),
+    ),
+  );
+  const phoneNumberIds = Array.from(
+    new Set(
+      changes
+        .map((change: any) => String(change?.value?.metadata?.phone_number_id || "").trim())
+        .filter(Boolean)
+        .slice(0, 10),
+    ),
+  );
+  const displayPhones = Array.from(
+    new Set(
+      changes
+        .map((change: any) => String(change?.value?.metadata?.display_phone_number || "").trim())
         .filter(Boolean)
         .slice(0, 10),
     ),
@@ -958,6 +1079,8 @@ function buildWebhookPayloadSummary(payload: any, messages: any[], statuses: Wha
     messageCount: messages.length,
     statusCount: statuses.length,
     senders,
+    phoneNumberIds,
+    displayPhones,
     topLevelKeys: Object.keys(payload || {}).slice(0, 20),
   });
 }
@@ -985,17 +1108,22 @@ Deno.serve(async (request) => {
     }
 
     const settings = await getSettings();
-    const payload = await request.json().catch(() => ({}));
-    const statuses = extractStatuses(payload);
-    const messages = extractMessages(payload);
+    const payloadText = await request.text();
     await Promise.all([
       upsertSetting(WEBHOOK_LAST_POST_AT_KEY, new Date().toISOString()),
-      upsertSetting(WEBHOOK_LAST_POST_SUMMARY_KEY, buildWebhookPayloadSummary(payload, messages, statuses)),
+      upsertSetting(WEBHOOK_LAST_POST_RAW_KEY, summarizeWebhookPayloadText(payloadText)),
       deleteSetting(WEBHOOK_LAST_ERROR_AT_KEY),
       deleteSetting(WEBHOOK_LAST_ERROR_KEY),
     ]);
+
+    const payload = payloadText ? JSON.parse(payloadText) : {};
+    const statuses = extractStatuses(payload);
+    const messages = extractMessages(payload);
+    await Promise.all([
+      upsertSetting(WEBHOOK_LAST_POST_SUMMARY_KEY, buildWebhookPayloadSummary(payload, messages, statuses)),
+    ]);
     await insertStatusAuditRows(statuses);
-    await insertMessageAuditRows(buildMessageAuditRows(messages));
+    await insertMessageAuditRows(await buildMessageAuditRows(messages));
 
     await Promise.all(
       messages.map(async (message: any) => {

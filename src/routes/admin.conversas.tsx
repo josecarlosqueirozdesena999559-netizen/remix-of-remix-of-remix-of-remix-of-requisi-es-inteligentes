@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
 import { getWhatsAppAdminNumbers } from "@/lib/app-settings-actions";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -23,6 +24,9 @@ type IncomingMessage = {
   message_type: string | null;
   occurred_at: string | null;
   created_at: string;
+  raw_payload?: {
+    stored_media?: AttachmentFile | null;
+  } | null;
 };
 
 type OutgoingMessage = {
@@ -58,6 +62,7 @@ type ConversationMessage = {
   createdAt: string;
   direction: "incoming" | "outgoing";
   status?: "sending" | "failed";
+  mediaAttachment?: AttachmentFile | null;
 };
 
 type ConversationSummary = {
@@ -186,6 +191,18 @@ function getInitials(name: string) {
   return parts.map((part) => part[0]?.toUpperCase() || "").join("");
 }
 
+function getMessagePlaceholder(messageType: string, direction: "incoming" | "outgoing") {
+  if (messageType === "audio") return direction === "incoming" ? "[audio recebido]" : "[audio enviado]";
+  if (messageType === "image") return "[imagem]";
+  return "[mensagem sem texto]";
+}
+
+function getMessageDisplayBody(message: Pick<ConversationMessage, "body" | "messageType" | "direction">) {
+  const body = message.body?.trim();
+  if (body) return body;
+  return getMessagePlaceholder(message.messageType, message.direction);
+}
+
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
@@ -205,11 +222,12 @@ function buildConversationSummaries(input: {
     next.push({
       id: message.message_id,
       phone,
-      body: message.body?.trim() || "[mensagem sem texto]",
+      body: message.body?.trim() || getMessagePlaceholder(message.message_type?.trim() || "", "incoming"),
       messageType: message.message_type?.trim() || "desconhecida",
       occurredAt: message.occurred_at || message.created_at,
       createdAt: message.created_at,
       direction: "incoming",
+      mediaAttachment: message.raw_payload?.stored_media || null,
     });
     byPhone.set(phone, next);
   });
@@ -268,7 +286,7 @@ function buildConversationSummaries(input: {
       return {
         phone,
         displayName: getDisplayName(phone, input.users),
-        preview: lastMessage?.body || "",
+        preview: lastMessage ? getMessageDisplayBody(lastMessage) : "",
         lastAt: lastMessage?.createdAt || lastMessage?.occurredAt || new Date(0).toISOString(),
         lastIncomingAt,
         isWindowOpen: sessionOpen || adminSessionOpen || isWhatsAppWindowOpen(lastIncomingAt),
@@ -293,6 +311,7 @@ function ConversasPage() {
   const [adminNumbers, setAdminNumbers] = useState<string[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
+  const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations() {
@@ -316,7 +335,7 @@ function ConversasPage() {
       const [incomingResult, outgoingResult, usersResult, sessionsResult] = await Promise.all([
         (supabase as any)
           .from("whatsapp_webhook_message_audit")
-          .select("message_id,sender_id,body,message_type,occurred_at,created_at")
+          .select("message_id,sender_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("sender_id", "is", null)
           .order("created_at", { ascending: false })
           .limit(500),
@@ -457,6 +476,48 @@ function ConversasPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [selectedConversation?.phone, selectedConversation?.messages.length]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadMediaUrls() {
+      const audioMessages = (selectedConversation?.messages || []).filter(
+        (message) =>
+          message.messageType === "audio" &&
+          message.mediaAttachment?.storageBucket &&
+          message.mediaAttachment?.storagePath,
+      );
+
+      if (!audioMessages.length) return;
+
+      const resolvedEntries = await Promise.all(
+        audioMessages.map(async (message) => {
+          try {
+            const signedUrl = await resolveAttachmentUrl(message.mediaAttachment);
+            return [message.id, signedUrl] as const;
+          } catch {
+            return [message.id, ""] as const;
+          }
+        }),
+      );
+
+      if (!active) return;
+
+      setMessageMediaUrls((current) => {
+        const next = { ...current };
+        resolvedEntries.forEach(([messageId, signedUrl]) => {
+          if (signedUrl) next[messageId] = signedUrl;
+        });
+        return next;
+      });
+    }
+
+    void loadMediaUrls();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedConversation]);
 
   const openConversation = (phone: string) => {
     setNotice(null);
@@ -721,7 +782,21 @@ function ConversasPage() {
                           <p className="mb-1 text-[11px] font-medium text-[#667781]">
                             {message.direction === "outgoing" ? "Admin" : "Usuário"}
                           </p>
-                          <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                          {message.messageType === "audio" && messageMediaUrls[message.id] ? (
+                            <div className="space-y-2">
+                              <p className="whitespace-pre-wrap break-words">
+                                {getMessageDisplayBody(message)}
+                              </p>
+                              <audio controls preload="none" className="max-w-full">
+                                <source src={messageMediaUrls[message.id]} />
+                                Seu navegador não suporta áudio.
+                              </audio>
+                            </div>
+                          ) : (
+                            <p className="whitespace-pre-wrap break-words">
+                              {getMessageDisplayBody(message)}
+                            </p>
+                          )}
                           <p className="mt-1 text-right text-[11px] text-[#667781]">
                             {message.status === "sending"
                               ? "Enviando..."
