@@ -191,6 +191,8 @@ function buildConversationSummaries(input: {
   outgoing: OutgoingMessage[];
   optimisticMessages?: ConversationMessage[];
   userSessions?: Map<string, string>;
+  adminSessions?: Map<string, string>;
+  adminNumbers?: string[];
   users: UserRow[];
 }) {
   const byPhone = new Map<string, ConversationMessage[]>();
@@ -249,10 +251,18 @@ function buildConversationSummaries(input: {
 
       const lastIncomingAt = lastIncomingMessage?.createdAt || lastIncomingMessage?.occurredAt || null;
       const sessionExpiresAt = input.userSessions?.get(phone) || null;
+      const adminSessionExpiresAt = input.adminSessions?.get(phone) || null;
+      const isAdminNumber = input.adminNumbers?.some((adminNumber) => phonesMatch(adminNumber, phone));
       const sessionOpen = Boolean(
         sessionExpiresAt &&
           Number.isFinite(Date.parse(sessionExpiresAt)) &&
           Date.parse(sessionExpiresAt) > Date.now(),
+      );
+      const adminSessionOpen = Boolean(
+        isAdminNumber &&
+          adminSessionExpiresAt &&
+          Number.isFinite(Date.parse(adminSessionExpiresAt)) &&
+          Date.parse(adminSessionExpiresAt) > Date.now(),
       );
 
       return {
@@ -261,7 +271,7 @@ function buildConversationSummaries(input: {
         preview: lastMessage?.body || "",
         lastAt: lastMessage?.createdAt || lastMessage?.occurredAt || new Date(0).toISOString(),
         lastIncomingAt,
-        isWindowOpen: sessionOpen || isWhatsAppWindowOpen(lastIncomingAt),
+        isWindowOpen: sessionOpen || adminSessionOpen || isWhatsAppWindowOpen(lastIncomingAt),
         messages: sortedMessages,
       } satisfies ConversationSummary;
     })
@@ -279,14 +289,16 @@ function ConversasPage() {
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<ConversationMessage[]>([]);
   const [userSessions, setUserSessions] = useState<Map<string, string>>(new Map());
+  const [adminSessions, setAdminSessions] = useState<Map<string, string>>(new Map());
+  const [adminNumbers, setAdminNumbers] = useState<string[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations() {
-    setError(null);
+      setError(null);
 
-    try {
+      try {
       const { profile } = await getCurrentUserProfile();
       if (!profile?.is_admin) {
         setIncoming([]);
@@ -299,6 +311,7 @@ function ConversasPage() {
       const nextAdminNumbers = Array.isArray((adminNumbersResult as any)?.numbers)
         ? (adminNumbersResult as any).numbers.map(String)
         : [];
+      setAdminNumbers(nextAdminNumbers);
 
       const [incomingResult, outgoingResult, usersResult, sessionsResult] = await Promise.all([
         (supabase as any)
@@ -317,7 +330,7 @@ function ConversasPage() {
         (supabase as any)
           .from("app_settings")
           .select("key,value")
-          .like("key", "WHATSAPP_USER_SESSION_%"),
+          .like("key", "WHATSAPP_%_SESSION_%"),
       ]);
 
       if (incomingResult.error || outgoingResult.error || usersResult.error || sessionsResult.error) {
@@ -347,7 +360,20 @@ function ConversasPage() {
       setUsers((usersResult.data ?? []) as UserRow[]);
       setUserSessions(
         ((sessionsResult.data ?? []) as UserSessionRow[]).reduce((sessions, row) => {
-          const phone = canonicalConversationPhone(row.key.replace("WHATSAPP_USER_SESSION_", ""));
+          const isAdminSession = row.key.startsWith("WHATSAPP_ADMIN_SESSION_");
+          const rawPhone = row.key
+            .replace("WHATSAPP_USER_SESSION_", "")
+            .replace("WHATSAPP_ADMIN_SESSION_", "");
+          const phone = canonicalConversationPhone(rawPhone);
+          const value = row.value?.trim();
+          if (phone && value && !isAdminSession) sessions.set(phone, value);
+          return sessions;
+        }, new Map<string, string>()),
+      );
+      setAdminSessions(
+        ((sessionsResult.data ?? []) as UserSessionRow[]).reduce((sessions, row) => {
+          if (!row.key.startsWith("WHATSAPP_ADMIN_SESSION_")) return sessions;
+          const phone = canonicalConversationPhone(row.key.replace("WHATSAPP_ADMIN_SESSION_", ""));
           const value = row.value?.trim();
           if (phone && value) sessions.set(phone, value);
           return sessions;
@@ -398,8 +424,17 @@ function ConversasPage() {
   }, []);
 
   const conversations = useMemo(
-    () => buildConversationSummaries({ incoming, outgoing, optimisticMessages, userSessions, users }),
-    [incoming, outgoing, optimisticMessages, userSessions, users],
+    () =>
+      buildConversationSummaries({
+        incoming,
+        outgoing,
+        optimisticMessages,
+        userSessions,
+        adminSessions,
+        adminNumbers,
+        users,
+      }),
+    [incoming, outgoing, optimisticMessages, userSessions, adminSessions, adminNumbers, users],
   );
   const selectedPhone = canonicalConversationPhone(search.phone);
 
