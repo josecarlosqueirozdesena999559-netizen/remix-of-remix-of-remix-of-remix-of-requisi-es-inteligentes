@@ -315,6 +315,13 @@ function AdminLayout() {
               >
                 Conversas
               </Link>
+              <Link
+                to="/admin/whatsapp-usuarios"
+                className={itemCls}
+                activeProps={{ className: `${itemCls} ${activeCls}` }}
+              >
+                Janelas WhatsApp
+              </Link>
 
               <button
                 type="button"

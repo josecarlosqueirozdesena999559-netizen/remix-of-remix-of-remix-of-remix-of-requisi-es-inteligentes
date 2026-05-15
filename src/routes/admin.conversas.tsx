@@ -603,7 +603,7 @@ function ConversasPage() {
                 <div>
                   <CardTitle className="text-base">Conversas</CardTitle>
                   <CardDescription className="mt-1">
-                    Usuarios e ultimas mensagens.
+                    Usuários e últimas mensagens.
                   </CardDescription>
                 </div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00a884] text-white">
@@ -690,14 +690,14 @@ function ConversasPage() {
                         >
                           {selectedConversation.isWindowOpen
                             ? "Janela de 24h aberta para responder e notificar."
-                            : "Sem entrada recente registrada. A API do WhatsApp validara o envio."}
+                            : "Sem entrada recente registrada. A API do WhatsApp validará o envio."}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="text-xs text-muted-foreground">
-                        {selectedConversation.messages.length} mensagem
-                        {selectedConversation.messages.length === 1 ? "" : "ens"}
+                        {selectedConversation.messages.length}{" "}
+                        {selectedConversation.messages.length === 1 ? "mensagem" : "mensagens"}
                       </p>
                     </div>
                   </div>
@@ -719,7 +719,7 @@ function ConversasPage() {
                           }`}
                         >
                           <p className="mb-1 text-[11px] font-medium text-[#667781]">
-                            {message.direction === "outgoing" ? "Admin" : "Usuario"}
+                            {message.direction === "outgoing" ? "Admin" : "Usuário"}
                           </p>
                           <p className="whitespace-pre-wrap break-words">{message.body}</p>
                           <p className="mt-1 text-right text-[11px] text-[#667781]">
@@ -772,8 +772,8 @@ function ConversasPage() {
                   </div>
                   <h3 className="mt-4 text-lg font-medium text-[#111b21]">Selecione uma conversa</h3>
                   <p className="mt-2 text-sm text-[#667781]">
-                    Escolha um usuario na coluna ao lado para visualizar o historico completo e
-                    responder com mais organizacao.
+                    Escolha um usuário na coluna ao lado para visualizar o histórico completo e
+                    responder com mais organização.
                   </p>
                 </div>
               </CardContent>
