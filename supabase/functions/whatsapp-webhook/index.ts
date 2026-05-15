@@ -453,10 +453,25 @@ function extractMessageBody(message: any) {
   return null;
 }
 
+function buildFallbackMessageId(message: any) {
+  const from = String(message?.from || "").replace(/\D/g, "");
+  const timestamp = String(message?.timestamp || "").trim() || String(Date.now());
+  const type = String(message?.type || "unknown").trim() || "unknown";
+  const body = String(extractMessageBody(message) || "").trim().slice(0, 80);
+
+  if (!from) return "";
+
+  return `local_${from}_${timestamp}_${type}_${body}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 180);
+}
+
 function buildMessageAuditRows(messages: any[]): WhatsAppMessageAuditRow[] {
   return messages
     .map((message: any) => {
-      const messageId = String(message?.id || "").trim();
+      const messageId = String(message?.id || "").trim() || buildFallbackMessageId(message);
       if (!messageId) return null;
 
       return {
