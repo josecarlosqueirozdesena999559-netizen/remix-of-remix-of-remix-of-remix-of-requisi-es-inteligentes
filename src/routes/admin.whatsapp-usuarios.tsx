@@ -1,10 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { MessageSquareMore, Smartphone } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { MessageSquareMore } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ListPage, type Column } from "@/components/ListPage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -296,16 +295,6 @@ function WhatsAppUsuariosPage() {
     };
   }, [navigate]);
 
-  const summary = useMemo(
-    () => ({
-      total: rows.length,
-      open: rows.filter((row) => row.status === "open").length,
-      closed: rows.filter((row) => row.status === "closed").length,
-      missing: rows.filter((row) => row.status === "missing").length,
-    }),
-    [rows],
-  );
-
   const columns: Column<WhatsAppUserStatusRow>[] = [
     { key: "nome", label: "Nome" },
     { key: "email", label: "E-mail" },
@@ -333,75 +322,35 @@ function WhatsAppUsuariosPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Admin / WhatsApp</p>
-        <h2 className="text-2xl text-foreground">Usuários e janelas</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Veja quais usuários têm WhatsApp cadastrado e se a janela de 24 horas está aberta para resposta.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center justify-between p-5">
-            <div>
-              <p className="text-sm text-muted-foreground">Total de usuários</p>
-              <p className="text-2xl font-semibold">{summary.total}</p>
-            </div>
-            <Smartphone className="h-5 w-5 text-primary" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Janela aberta</p>
-            <p className="text-2xl font-semibold text-emerald-700">{summary.open}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Janela fechada</p>
-            <p className="text-2xl font-semibold text-amber-700">{summary.closed}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Sem WhatsApp</p>
-            <p className="text-2xl font-semibold text-slate-600">{summary.missing}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <ListPage
-        breadcrumb="Admin / WhatsApp"
-        title="Status dos usuários"
-        description="Priorize os usuários com janela fechada para notificações por template e acompanhe quem já pode receber resposta direta."
-        data={rows}
-        loading={loading}
-        error={error}
-        columns={columns}
-        searchKeys={["nome", "email", "cpf", "whatsapp", "statusLabel", "lastPreview"]}
-        emptyMessage="Nenhum usuário encontrado."
-        actions={(row) =>
-          row.whatsapp ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                navigate({
-                  to: "/admin/conversas",
-                  search: { phone: row.whatsapp },
-                })
-              }
-            >
-              <MessageSquareMore className="h-4 w-4" />
-              Conversa
-            </Button>
-          ) : (
-            <span className="text-xs text-muted-foreground">Sem número</span>
-          )
-        }
-      />
-    </div>
+    <ListPage
+      breadcrumb="Admin / WhatsApp"
+      title="Usuários WhatsApp"
+      description="Veja quem tem WhatsApp cadastrado e quais usuários estão com a janela de 24 horas aberta."
+      data={rows}
+      loading={loading}
+      error={error}
+      columns={columns}
+      searchKeys={["nome", "email", "cpf", "whatsapp", "statusLabel", "lastPreview"]}
+      emptyMessage="Nenhum usuário encontrado."
+      actions={(row) =>
+        row.whatsapp ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              navigate({
+                to: "/admin/conversas",
+                search: { phone: row.whatsapp },
+              })
+            }
+          >
+            <MessageSquareMore className="h-4 w-4" />
+            Conversa
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">Sem número</span>
+        )
+      }
+    />
   );
 }
