@@ -268,9 +268,6 @@ function ConversasPage() {
   const [optimisticMessages, setOptimisticMessages] = useState<ConversationMessage[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
-  const [realtimeStatus, setRealtimeStatus] = useState<"connecting" | "online" | "offline">(
-    "connecting",
-  );
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations() {
@@ -358,19 +355,10 @@ function ConversasPage() {
         { event: "*", schema: "public", table: "whatsapp_outbound_message_audit" },
         () => void loadConversations(),
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setRealtimeStatus("online");
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          setRealtimeStatus("offline");
-        } else {
-          setRealtimeStatus("connecting");
-        }
-      });
+      .subscribe();
 
     return () => {
       active = false;
-      setRealtimeStatus("offline");
       void supabase.removeChannel(channel);
     };
   }, []);
@@ -508,26 +496,10 @@ function ConversasPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
         <div>
           <p className="text-sm text-muted-foreground">Admin / WhatsApp</p>
           <h2 className="text-2xl text-foreground">Conversas</h2>
-        </div>
-        <div className="flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              realtimeStatus === "online"
-                ? "bg-emerald-500"
-                : realtimeStatus === "connecting"
-                  ? "bg-amber-500"
-                  : "bg-slate-400"
-            }`}
-          />
-          {realtimeStatus === "online"
-            ? "WebSocket em tempo real"
-            : realtimeStatus === "connecting"
-              ? "Conectando ao tempo real"
-              : "Tempo real desconectado"}
         </div>
       </div>
 

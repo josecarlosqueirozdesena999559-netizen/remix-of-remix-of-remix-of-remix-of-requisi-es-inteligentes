@@ -587,7 +587,8 @@ Deno.serve(async (request) => {
     if (
       notificationType === "requestCreated" ||
       notificationType === "requestSigned" ||
-      notificationType === "outputAttached"
+      notificationType === "outputAttached" ||
+      notificationType === "readyForPickup"
     ) {
       const adminText = buildAdminNotificationMessage({
         notificationType,
@@ -601,18 +602,6 @@ Deno.serve(async (request) => {
 
       for (const adminNumber of adminNumbers) {
         try {
-          if (!(await hasActiveAdminSession(adminNumber))) {
-            adminNotifications.push({
-              to: normalizeWhatsAppPhoneNumber(adminNumber),
-              ok: false,
-              skipped: true,
-              error:
-                `Janela de ${USER_SESSION_DURATION_HOURS} horas do admin esta fechada. ` +
-                "Peca para ele enviar uma mensagem ao WhatsApp oficial.",
-            });
-            continue;
-          }
-
           const adminMessageId = await sendTextMessage({
             to: adminNumber,
             text: adminText,
