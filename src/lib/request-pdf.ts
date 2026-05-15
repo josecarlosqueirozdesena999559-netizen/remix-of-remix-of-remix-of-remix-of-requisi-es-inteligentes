@@ -1,6 +1,5 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { createRequestQrDataUrl } from "@/lib/request-qr";
 import { formatProgramName } from "@/lib/program-options";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
@@ -297,42 +296,9 @@ function drawSignatureBlock(
   doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 84 });
 }
 
-function drawRequestQrCode(
-  doc: jsPDF,
-  qrDataUrl: string,
-  requestCode: string,
-  centerX: number,
-  topY: number,
-) {
-  const size = 22;
-
-  doc.setDrawColor(190, 198, 210);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(centerX - size / 2 - 2, topY - 2, size + 4, size + 18, 1.5, 1.5);
-  doc.addImage(qrDataUrl, "PNG", centerX - size / 2, topY, size, size);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.8);
-  doc.setTextColor(71, 85, 105);
-  doc.text(toPdfAscii("QR CONFERENCIA"), centerX, topY + size + 5, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.2);
-  doc.text(toPdfAscii("Almoxarifado"), centerX, topY + size + 9, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.2);
-  doc.text(toPdfAscii(`COD: ${requestCode}`), centerX, topY + size + 14, {
-    align: "center",
-    maxWidth: size + 2,
-  });
-  doc.setTextColor(20, 24, 28);
-}
-
 export async function createRequestPdfBlob(request: RequestPdfData) {
   const doc = new jsPDF() as JsPdfWithAutoTable;
   const logoDataUrl = await loadPdfLogoDataUrl();
-  const qrDataUrl = await createRequestQrDataUrl(request);
   const bodyRows = getRequestItemsForPdf(request);
 
   doc.setProperties({
@@ -431,7 +397,6 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     WAREHOUSE_RESPONSIBLE_ROLE,
     false,
   );
-  drawRequestQrCode(doc, qrDataUrl, getRequestCode(request), pageWidth - PDF_MARGIN - 16, footerTopY + 52);
 
   return doc.output("blob");
 }
