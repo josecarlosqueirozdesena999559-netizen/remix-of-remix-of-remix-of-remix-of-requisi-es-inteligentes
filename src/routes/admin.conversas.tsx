@@ -44,6 +44,11 @@ type UserRow = {
   whatsapp: string | null;
 };
 
+type UserSessionRow = {
+  key: string;
+  value: string | null;
+};
+
 type ConversationMessage = {
   id: string;
   phone: string;
@@ -185,6 +190,7 @@ function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
   optimisticMessages?: ConversationMessage[];
+  userSessions?: Map<string, string>;
   users: UserRow[];
 }) {
   const byPhone = new Map<string, ConversationMessage[]>();
@@ -242,6 +248,12 @@ function buildConversationSummaries(input: {
         [...sortedMessages].reverse().find((message) => message.direction === "incoming") || null;
 
       const lastIncomingAt = lastIncomingMessage?.createdAt || lastIncomingMessage?.occurredAt || null;
+      const sessionExpiresAt = input.userSessions?.get(phone) || null;
+      const sessionOpen = Boolean(
+        sessionExpiresAt &&
+          Number.isFinite(Date.parse(sessionExpiresAt)) &&
+          Date.parse(sessionExpiresAt) > Date.now(),
+      );
 
       return {
         phone,
@@ -249,7 +261,7 @@ function buildConversationSummaries(input: {
         preview: lastMessage?.body || "",
         lastAt: lastMessage?.createdAt || lastMessage?.occurredAt || new Date(0).toISOString(),
         lastIncomingAt,
-        isWindowOpen: isWhatsAppWindowOpen(lastIncomingAt),
+        isWindowOpen: sessionOpen || isWhatsAppWindowOpen(lastIncomingAt),
         messages: sortedMessages,
       } satisfies ConversationSummary;
     })
@@ -266,6 +278,7 @@ function ConversasPage() {
   const [incoming, setIncoming] = useState<IncomingMessage[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<ConversationMessage[]>([]);
+  const [userSessions, setUserSessions] = useState<Map<string, string>>(new Map());
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -287,7 +300,7 @@ function ConversasPage() {
         ? (adminNumbersResult as any).numbers.map(String)
         : [];
 
-      const [incomingResult, outgoingResult, usersResult] = await Promise.all([
+      const [incomingResult, outgoingResult, usersResult, sessionsResult] = await Promise.all([
         (supabase as any)
           .from("whatsapp_webhook_message_audit")
           .select("message_id,sender_id,body,message_type,occurred_at,created_at")
@@ -301,13 +314,18 @@ function ConversasPage() {
           .order("created_at", { ascending: false })
           .limit(500),
         supabase.from("usuarios").select("nome,whatsapp").not("whatsapp", "is", null),
+        (supabase as any)
+          .from("app_settings")
+          .select("key,value")
+          .like("key", "WHATSAPP_USER_SESSION_%"),
       ]);
 
-      if (incomingResult.error || outgoingResult.error || usersResult.error) {
+      if (incomingResult.error || outgoingResult.error || usersResult.error || sessionsResult.error) {
         throw new Error(
           incomingResult.error?.message ||
             outgoingResult.error?.message ||
             usersResult.error?.message ||
+            sessionsResult.error?.message ||
             "Erro ao carregar conversas.",
         );
       }
@@ -327,6 +345,14 @@ function ConversasPage() {
         ),
       );
       setUsers((usersResult.data ?? []) as UserRow[]);
+      setUserSessions(
+        ((sessionsResult.data ?? []) as UserSessionRow[]).reduce((sessions, row) => {
+          const phone = canonicalConversationPhone(row.key.replace("WHATSAPP_USER_SESSION_", ""));
+          const value = row.value?.trim();
+          if (phone && value) sessions.set(phone, value);
+          return sessions;
+        }, new Map<string, string>()),
+      );
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Erro ao carregar conversas.");
     }
@@ -364,8 +390,8 @@ function ConversasPage() {
   }, []);
 
   const conversations = useMemo(
-    () => buildConversationSummaries({ incoming, outgoing, optimisticMessages, users }),
-    [incoming, outgoing, optimisticMessages, users],
+    () => buildConversationSummaries({ incoming, outgoing, optimisticMessages, userSessions, users }),
+    [incoming, outgoing, optimisticMessages, userSessions, users],
   );
   const selectedPhone = canonicalConversationPhone(search.phone);
 
