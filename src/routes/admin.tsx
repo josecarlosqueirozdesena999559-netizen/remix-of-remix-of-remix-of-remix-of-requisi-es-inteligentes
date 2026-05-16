@@ -144,8 +144,6 @@ function AdminLayout() {
     !profile?.whatsapp?.trim() &&
     !whatsappConfirmed &&
     pathname !== "/admin/completar-cadastro";
-  const shouldShowWhatsAppNotice =
-    Boolean(profile?.id) && profile?.is_admin === false && pathname !== "/admin/completar-cadastro";
 
   const openWhatsAppActivationReminder = async () => {
     try {
@@ -459,7 +457,7 @@ function AdminLayout() {
         </nav>
       </aside>
       <main className="flex-1 bg-background">
-        {shouldShowWhatsAppNotice ? (
+        {false ? (
           <Alert className="rounded-none border-none bg-sidebar px-8 py-4 text-center text-sidebar-foreground shadow-none">
             <AlertDescription className="text-sm">
               Envie uma mensagem para o WhatsApp oficial do almoxarifado para receber avisos sobre

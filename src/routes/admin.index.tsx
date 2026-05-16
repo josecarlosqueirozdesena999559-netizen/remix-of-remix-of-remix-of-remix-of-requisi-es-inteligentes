@@ -3,16 +3,40 @@ import { ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+} from "@/lib/attachments";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminHome,
 });
 
+type PendingSignatureRequest = {
+  id: string;
+  saida_codigo: string | null;
+  status: string;
+  signed_attachment: unknown;
+};
+
+function getRequestDisplayCode(request: PendingSignatureRequest) {
+  return request.saida_codigo?.trim() || request.id.slice(0, 8);
+}
+
+function needsSignature(request: PendingSignatureRequest) {
+  if (request.status === "aguardando_assinatura_saida") {
+    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  return !getRequestSignedAttachment(request.signed_attachment, request.status);
+}
+
 function AdminHome() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingSignatureCodes, setPendingSignatureCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +52,7 @@ function AdminHome() {
           if (active) {
             setIsAdmin(false);
             setPendingCount(0);
+            setPendingSignatureCodes([]);
           }
           return;
         }
@@ -46,29 +71,36 @@ function AdminHome() {
           if (!active) return;
 
           setPendingCount(count ?? 0);
+          setPendingSignatureCodes([]);
           return;
         }
 
         if (!profile.cpf) {
-          if (active) setPendingCount(0);
+          if (active) {
+            setPendingCount(0);
+            setPendingSignatureCodes([]);
+          }
           return;
         }
 
-        const { count, error } = await supabase
+        const { data, error } = await supabase
           .from("requisicoes")
-          .select("id", { count: "exact", head: true })
+          .select("id,saida_codigo,status,signed_attachment")
           .eq("solicitante_cpf", profile.cpf)
           .in("status", [
             "aguardando_assinatura",
             "aguardando_assinatura_requisicao",
             "aguardando_assinatura_saida",
             "correcao_requisicao",
-          ]);
+          ])
+          .order("updated_at", { ascending: false });
 
         if (error) throw new Error(error.message);
         if (!active) return;
 
-        setPendingCount(count ?? 0);
+        const pendingRequests = ((data ?? []) as PendingSignatureRequest[]).filter(needsSignature);
+        setPendingCount(pendingRequests.length);
+        setPendingSignatureCodes(pendingRequests.map(getRequestDisplayCode));
       } finally {
         if (active) setLoading(false);
       }
@@ -109,11 +141,22 @@ function AdminHome() {
             pendingCount > 0 ? "bg-amber-400" : "bg-emerald-400"
           }`}
         >
-          <span className="min-w-0 flex-1 text-sm font-medium leading-snug sm:text-base">
-            {notificationMessage}{" "}
-            <span className="cursor-pointer whitespace-nowrap underline decoration-1 underline-offset-4">
-              Clique aqui
+          <span className="min-w-0 flex-1 space-y-2 text-sm font-medium leading-snug sm:text-base">
+            <span className="block">
+              {notificationMessage}{" "}
+              <span className="cursor-pointer whitespace-nowrap underline decoration-1 underline-offset-4">
+                Clique aqui
+              </span>
             </span>
+            {!isAdmin && pendingSignatureCodes.length > 0 ? (
+              <span className="block space-y-1 text-sm font-semibold">
+                {pendingSignatureCodes.map((code) => (
+                  <span key={code} className="block">
+                    Requisição {code}
+                  </span>
+                ))}
+              </span>
+            ) : null}
           </span>
           <ChevronRight
             className="size-5 shrink-0 transition-transform group-hover:translate-x-1"
