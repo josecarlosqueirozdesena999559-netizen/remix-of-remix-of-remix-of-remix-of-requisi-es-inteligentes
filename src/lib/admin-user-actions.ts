@@ -7,6 +7,7 @@ import { normalizeProductCategory } from "@/lib/product-options";
 type AdminUserPayload = {
   id?: string | null;
   nome: string;
+  usuario: string;
   email: string;
   cpf?: string | null;
   funcao?: string | null;
@@ -27,9 +28,11 @@ function validateUserPayload(input: unknown): AdminUserPayload {
 
   const data = input as Partial<AdminUserPayload>;
   const nome = cleanString(data.nome);
+  const usuario = cleanString(data.usuario);
   const email = cleanString(data.email).toLowerCase();
 
   if (!nome) throw new Error("Informe o nome do usuário.");
+  if (!usuario) throw new Error("Informe o usuário de acesso.");
   if (!email) throw new Error("Informe o e-mail do usuário.");
 
   const categorias = Array.isArray(data.categorias_permitidas)
@@ -44,6 +47,7 @@ function validateUserPayload(input: unknown): AdminUserPayload {
   return {
     id: cleanString(data.id) || null,
     nome,
+    usuario,
     email,
     cpf: cleanString(data.cpf) || null,
     funcao: cleanString(data.funcao) || null,
@@ -146,8 +150,11 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     await requireAdmin((context as any).userId, (context as any).claims?.email);
 
     const payload = validateUserPayload(data);
-    let currentProfile: { auth_user_id: string | null; is_admin: boolean; role: string | null } | null =
-      null;
+    let currentProfile: {
+      auth_user_id: string | null;
+      is_admin: boolean;
+      role: string | null;
+    } | null = null;
 
     if (payload.id) {
       const { data: profile, error } = await (supabaseAdmin as any)
@@ -161,24 +168,24 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       currentProfile = profile;
     }
 
-    if (payload.nome.toLowerCase() === "admin" && !currentProfile?.is_admin) {
+    if (payload.usuario.toLowerCase() === "admin" && !currentProfile?.is_admin) {
       throw new Error("O login admin é reservado para o administrador.");
     }
 
-    const { data: sameNameProfiles, error: sameNameError } = await (supabaseAdmin as any)
+    const { data: sameUserProfiles, error: sameUserError } = await (supabaseAdmin as any)
       .from("usuarios")
       .select("id")
-      .ilike("nome", payload.nome)
+      .ilike("usuario", payload.usuario)
       .limit(2);
 
-    if (sameNameError) throw new Error(sameNameError.message);
+    if (sameUserError) throw new Error(sameUserError.message);
 
-    const duplicatedName = (sameNameProfiles ?? []).some(
+    const duplicatedUser = (sameUserProfiles ?? []).some(
       (profile: { id: string }) => profile.id !== payload.id,
     );
 
-    if (duplicatedName) {
-      throw new Error("Já existe um usuário com este nome. Informe um nome diferente para o login.");
+    if (duplicatedUser) {
+      throw new Error("Já existe um usuário com este login. Informe outro usuário de acesso.");
     }
 
     const authUserId = await ensureAuthUser(payload, currentProfile?.auth_user_id);
@@ -186,6 +193,7 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     const profilePayload = {
       auth_user_id: authUserId,
       nome: payload.nome,
+      usuario: payload.usuario,
       email: payload.email,
       cpf: payload.cpf,
       funcao: payload.funcao,
@@ -203,11 +211,7 @@ export const saveAdminUser = createServerFn({ method: "POST" })
           .eq("id", payload.id)
           .select("id")
           .single()
-      : await (supabaseAdmin as any)
-          .from("usuarios")
-          .insert(profilePayload)
-          .select("id")
-          .single();
+      : await (supabaseAdmin as any).from("usuarios").insert(profilePayload).select("id").single();
 
     if (result.error) throw new Error(result.error.message);
 

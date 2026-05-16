@@ -35,6 +35,7 @@ export const Route = createFileRoute("/admin/cadastros/usuarios/$usuarioId")({
 interface UsuarioRow {
   id: string;
   nome: string;
+  usuario: string | null;
   email: string;
   cpf: string | null;
   funcao: string | null;
@@ -62,6 +63,7 @@ function UsuarioFormPage() {
   const isNew = usuarioId === "novo";
 
   const [nome, setNome] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
   const [funcao, setFuncao] = useState("");
@@ -93,7 +95,7 @@ function UsuarioFormPage() {
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from("usuarios")
-              .select("id,nome,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
+              .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
               .eq("id", usuarioId)
               .maybeSingle(),
       ]);
@@ -134,6 +136,7 @@ function UsuarioFormPage() {
 
       const usuario = data as UsuarioRow;
       setNome(usuario.nome);
+      setUsuario(usuario.usuario ?? "");
       setEmail(usuario.email);
       setCpf(usuario.cpf ?? "");
       setFuncao(usuario.funcao ?? "");
@@ -162,9 +165,7 @@ function UsuarioFormPage() {
         ? [...current, normalizedCategory]
         : current.filter((item) => item !== normalizedCategory);
 
-      return nextValues.filter(
-        (item, index, values) => item && values.indexOf(item) === index,
-      );
+      return nextValues.filter((item, index, values) => item && values.indexOf(item) === index);
     });
   };
 
@@ -184,10 +185,11 @@ function UsuarioFormPage() {
     setError(null);
 
     const nomeLimpo = nome.trim();
+    const usuarioLimpo = usuario.trim();
     const emailLimpo = email.trim();
 
-    if (!nomeLimpo || !emailLimpo) {
-      setError("Informe nome e e-mail.");
+    if (!nomeLimpo || !usuarioLimpo || !emailLimpo) {
+      setError("Informe nome, usuário e e-mail.");
       setSaving(false);
       return;
     }
@@ -195,6 +197,7 @@ function UsuarioFormPage() {
     const payload = {
       id: isNew ? null : usuarioId,
       nome: nomeLimpo,
+      usuario: usuarioLimpo,
       email: emailLimpo,
       cpf: cpf.trim() || null,
       funcao: funcao.trim() || null,
@@ -269,6 +272,17 @@ function UsuarioFormPage() {
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
                   placeholder="Nome do usuário"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="usuario">Usuário</Label>
+                <Input
+                  id="usuario"
+                  value={usuario}
+                  onChange={(event) => setUsuario(event.target.value)}
+                  placeholder="Ex: Maria Clara"
                   required
                 />
               </div>
@@ -355,7 +369,7 @@ function UsuarioFormPage() {
                 />
                 <p className="text-sm text-muted-foreground">
                   {isNew
-                    ? "O usuário já poderá entrar com este nome e senha."
+                    ? "O usuário já poderá entrar com este usuário e senha."
                     : "Preencha apenas se quiser trocar a senha de acesso."}
                 </p>
               </div>
@@ -415,11 +429,17 @@ function UsuarioFormPage() {
           <DialogHeader>
             <DialogTitle>Excluir usuário</DialogTitle>
             <DialogDescription>
-              Esta ação remove o cadastro e o login do usuário. As requisições já feitas continuam no histórico.
+              Esta ação remove o cadastro e o login do usuário. As requisições já feitas continuam
+              no histórico.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteOpen(false)}
+            >
               Cancelar
             </Button>
             <Button type="button" variant="destructive" disabled={deleting} onClick={handleDelete}>

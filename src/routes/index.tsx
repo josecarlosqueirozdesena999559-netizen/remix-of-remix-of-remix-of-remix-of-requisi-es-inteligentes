@@ -33,13 +33,13 @@ function Index() {
       } else {
         const query = supabase.from("usuarios").select("email").limit(2);
 
-        const { data: users, error: loginError } = await query.ilike("nome", nomeLimpo);
+        const { data: users, error: loginError } = await query.ilike("usuario", nomeLimpo);
 
         if (loginError) throw new Error(loginError.message);
         if (!users?.length) throw new Error("Usuário ou senha inválido");
         if (users.length > 1) {
           throw new Error(
-            "Existe mais de um usuário com este nome. Peça ao admin para ajustar o cadastro.",
+            "Existe mais de um usuário com este login. Peça ao admin para ajustar o cadastro.",
           );
         }
 
@@ -78,13 +78,13 @@ function Index() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="nome" className="font-normal text-slate-700">
-              Nome do usuário
+              Usuário
             </Label>
             <Input
               id="nome"
               type="text"
               autoComplete="username"
-              placeholder="Digite o nome cadastrado"
+              placeholder="Digite seu usuário"
               className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={nome}
               onChange={(e) => setNome(e.target.value)}

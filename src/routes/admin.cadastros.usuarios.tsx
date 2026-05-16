@@ -14,6 +14,7 @@ export const Route = createFileRoute("/admin/cadastros/usuarios")({
 interface Usuario {
   id: string;
   nome: string;
+  usuario: string | null;
   email: string;
   cpf: string | null;
   setor: string | null;
@@ -48,7 +49,7 @@ function UsuariosPage() {
 
   const columns: Column<Usuario>[] = [
     { key: "nome", label: "Nome" },
-    { key: "email", label: "E-mail" },
+    { key: "usuario", label: "Usuário", render: (r) => r.usuario || "—" },
     { key: "cpf", label: "CPF", render: (r) => r.cpf || "—" },
     {
       key: "unidade_nome",
@@ -72,7 +73,7 @@ function UsuariosPage() {
       loading={loading}
       error={error}
       columns={columns}
-      searchKeys={["nome", "email", "cpf"]}
+      searchKeys={["nome", "usuario", "cpf"]}
       newLabel="Novo usuário"
       onNew={() =>
         navigate({

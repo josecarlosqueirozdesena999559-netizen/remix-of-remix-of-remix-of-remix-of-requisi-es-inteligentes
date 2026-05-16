@@ -339,6 +339,7 @@ export type Database = {
           setor: string | null
           unidade_nome: string | null
           updated_at: string
+          usuario: string
           whatsapp: string | null
         }
         Insert: {
@@ -355,6 +356,7 @@ export type Database = {
           setor?: string | null
           unidade_nome?: string | null
           updated_at?: string
+          usuario?: string
           whatsapp?: string | null
         }
         Update: {
@@ -371,6 +373,7 @@ export type Database = {
           setor?: string | null
           unidade_nome?: string | null
           updated_at?: string
+          usuario?: string
           whatsapp?: string | null
         }
         Relationships: []
