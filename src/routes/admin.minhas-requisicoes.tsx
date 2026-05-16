@@ -91,7 +91,7 @@ function MinhasRequisicoesPage() {
         const data = await fetchUserRequests(profile.cpf);
         if (active) setRequests(data);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
       } finally {
         if (active) setLoading(false);
       }
@@ -111,13 +111,13 @@ function MinhasRequisicoesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuario / Requisicoes</p>
-        <h2 className="text-2xl text-foreground">Minhas requisicoes</h2>
+        <p className="text-sm text-muted-foreground">Usuário / Requisições</p>
+        <h2 className="text-2xl text-foreground">Minhas requisições</h2>
       </div>
 
       <Card className="flex flex-wrap items-end justify-between gap-3 p-4">
         <label className="flex min-w-48 flex-col gap-2 text-sm text-muted-foreground">
-          Mes
+          Mês
           <input
             type="month"
             value={selectedMonth}
@@ -126,7 +126,7 @@ function MinhasRequisicoesPage() {
           />
         </label>
         <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-          {filteredRequests.length} com o admin
+          {filteredRequests.length} {filteredRequests.length === 1 ? "requisição" : "requisições"} com o admin
         </div>
       </Card>
 
@@ -137,7 +137,11 @@ function MinhasRequisicoesPage() {
         </div>
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
-      ) : filteredRequests.length === 0 ? null : (
+      ) : filteredRequests.length === 0 ? (
+        <Card className="p-6 text-muted-foreground">
+          Nenhuma requisição com o admin neste mês.
+        </Card>
+      ) : (
         <Card className="p-4">
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
@@ -145,9 +149,9 @@ function MinhasRequisicoesPage() {
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Data</th>
                   <th className="px-3 py-2 text-left font-normal">Local</th>
-                  <th className="px-3 py-2 text-left font-normal">Numero</th>
-                  <th className="px-3 py-2 text-left font-normal">Situacao</th>
-                  <th className="px-3 py-2 text-right font-normal">Acao</th>
+                  <th className="px-3 py-2 text-left font-normal">Número</th>
+                  <th className="px-3 py-2 text-left font-normal">Situação</th>
+                  <th className="px-3 py-2 text-right font-normal">Ação</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,7 +167,7 @@ function MinhasRequisicoesPage() {
                           Com o admin
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Aguardando atendimento e anexo da saida.
+                          Aguardando atendimento e anexo da saída.
                         </p>
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -181,7 +185,7 @@ function MinhasRequisicoesPage() {
                             }
                           >
                             <Eye className="h-4 w-4" />
-                            Ver/Baixar
+                            Ver / Baixar
                           </Button>
                         </div>
                       </td>

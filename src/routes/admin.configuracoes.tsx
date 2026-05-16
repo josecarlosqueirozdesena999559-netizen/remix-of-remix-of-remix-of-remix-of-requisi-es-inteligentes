@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { KeyRound, Loader2, Mail, Save, Smartphone } from "lucide-react";
+import { KeyRound, Loader2, Mail, Save, Smartphone, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,12 @@ function ConfiguracoesPage() {
   const [novoEmail, setNovoEmail] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [nome, setNome] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [funcao, setFuncao] = useState("");
+  const [setor, setSetor] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -99,6 +105,12 @@ function ConfiguracoesPage() {
         const currentEmail = user.email ?? profile?.email ?? "";
         setEmailAtual(currentEmail);
         setNovoEmail(currentEmail);
+        setNome(profile?.nome ?? "");
+        setUsuario(profile?.usuario ?? "");
+        setCpf(profile?.cpf ?? "");
+        setFuncao(profile?.funcao ?? "");
+        setSetor(profile?.setor ?? profile?.unidade_nome ?? "");
+        setWhatsapp(profile?.whatsapp ?? "");
         setIsAdmin(Boolean(profile?.is_admin));
 
         if (profile?.is_admin) {
@@ -149,9 +161,7 @@ function ConfiguracoesPage() {
       if (error) throw new Error(error.message);
 
       setNovoEmail(trimmedEmail);
-      setEmailMessage(
-        "Solicitação enviada. Verifique o novo e-mail para confirmar a alteração.",
-      );
+      setEmailMessage("Solicitação enviada. Verifique o novo e-mail para confirmar a alteração.");
     } catch (error) {
       setEmailError(getErrorMessage(error, "Erro ao alterar e-mail."));
     } finally {
@@ -223,7 +233,7 @@ function ConfiguracoesPage() {
   };
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-4xl space-y-5">
       <div>
         <p className="text-sm text-muted-foreground">Conta</p>
         <h2 className="text-2xl text-foreground">Configurações</h2>
@@ -237,17 +247,59 @@ function ConfiguracoesPage() {
           </div>
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-5">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <UserRound className="h-5 w-5 text-primary" />
+                Dados do usuário
+              </CardTitle>
+              <CardDescription>Informações cadastradas para identificar suas requisições.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <dt className="text-muted-foreground">Nome</dt>
+                  <dd className="mt-1 text-foreground">{nome || "-"}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Usuário</dt>
+                  <dd className="mt-1 text-foreground">{usuario || "-"}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">CPF</dt>
+                  <dd className="mt-1 text-foreground">{cpf || "-"}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Função</dt>
+                  <dd className="mt-1 text-foreground">{funcao || "-"}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Setor</dt>
+                  <dd className="mt-1 text-foreground">{setor || "-"}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">WhatsApp</dt>
+                  <dd className="mt-1 text-foreground">{whatsapp || "-"}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Mail className="h-5 w-5 text-primary" />
-                E-mail
+                Acesso
               </CardTitle>
-              <CardDescription>Atualize o e-mail usado para acessar o sistema.</CardDescription>
+              <CardDescription>Atualize e-mail e senha em um só local.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="grid gap-6 lg:grid-cols-2">
               <form className="space-y-4" onSubmit={handleEmailSubmit}>
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Mail className="h-4 w-4 text-primary" />
+                  E-mail
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="email-atual">E-mail atual</Label>
                   <Input id="email-atual" value={emailAtual} disabled />
@@ -285,19 +337,12 @@ function ConfiguracoesPage() {
                   Salvar e-mail
                 </Button>
               </form>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <KeyRound className="h-5 w-5 text-primary" />
-                Senha
-              </CardTitle>
-              <CardDescription>Defina uma nova senha para sua conta.</CardDescription>
-            </CardHeader>
-            <CardContent>
               <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <KeyRound className="h-4 w-4 text-primary" />
+                  Senha
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="nova-senha">Nova senha</Label>
                   <Input
@@ -346,7 +391,7 @@ function ConfiguracoesPage() {
           </Card>
 
           {isAdmin && (
-            <Card className="lg:col-span-2">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Smartphone className="h-5 w-5 text-primary" />
