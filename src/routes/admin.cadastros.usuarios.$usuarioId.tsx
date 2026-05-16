@@ -186,10 +186,9 @@ function UsuarioFormPage() {
 
     const nomeLimpo = nome.trim();
     const usuarioLimpo = usuario.trim();
-    const emailLimpo = email.trim();
 
-    if (!nomeLimpo || !usuarioLimpo || !emailLimpo) {
-      setError("Informe nome, usuário e e-mail.");
+    if (!nomeLimpo || !usuarioLimpo) {
+      setError("Informe nome e usuário de acesso.");
       setSaving(false);
       return;
     }
@@ -198,7 +197,7 @@ function UsuarioFormPage() {
       id: isNew ? null : usuarioId,
       nome: nomeLimpo,
       usuario: usuarioLimpo,
-      email: emailLimpo,
+      email: email.trim() || null,
       cpf: cpf.trim() || null,
       funcao: funcao.trim() || null,
       setor: setor.trim() || null,
@@ -263,38 +262,61 @@ function UsuarioFormPage() {
             Carregando...
           </div>
         ) : (
-          <form className="max-w-2xl space-y-5" onSubmit={handleSubmit}>
-            <div className="grid gap-4 sm:grid-cols-2">
+          <form className="max-w-4xl space-y-6" onSubmit={handleSubmit}>
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-base font-medium text-foreground">Acesso</h3>
+                <p className="text-sm text-muted-foreground">
+                  O usuario entra no sistema usando somente o usuario de acesso e a senha.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="usuario">Usuario de acesso</Label>
+                  <Input
+                    id="usuario"
+                    value={usuario}
+                    onChange={(event) => setUsuario(event.target.value)}
+                    placeholder="Usuario de acesso"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="senha">{isNew ? "Senha inicial" : "Nova senha"}</Label>
+                  <Input
+                    id="senha"
+                    type="password"
+                    value={senha}
+                    onChange={(event) => setSenha(event.target.value)}
+                    placeholder={isNew ? "Senha inicial" : "Deixe em branco para manter"}
+                    required={isNew}
+                    minLength={isNew || senha ? 6 : undefined}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {isNew
+                      ? "A senha e criada pelo admin e pode ser usada no primeiro acesso."
+                      : "Preencha apenas se quiser trocar a senha de acesso."}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-3 border-t pt-5">
+              <div>
+                <h3 className="text-base font-medium text-foreground">Dados do usuario</h3>
+                <p className="text-sm text-muted-foreground">
+                  Dados usados para identificar requisicoes, assinaturas e permissoes.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="nome">Nome</Label>
                 <Input
                   id="nome"
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
-                  placeholder="Nome do usuário"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="usuario">Usuário</Label>
-                <Input
-                  id="usuario"
-                  value={usuario}
-                  onChange={(event) => setUsuario(event.target.value)}
-                  placeholder="Ex: Maria Clara"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="email@exemplo.com"
+                  placeholder="Nome completo"
                   required
                 />
               </div>
@@ -352,32 +374,15 @@ function UsuarioFormPage() {
                   id="funcao"
                   value={funcao}
                   onChange={(event) => setFuncao(event.target.value)}
-                  placeholder="Função"
+                  placeholder="Cargo ou funcao"
                 />
               </div>
-
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="senha">{isNew ? "Senha inicial" : "Nova senha"}</Label>
-                <Input
-                  id="senha"
-                  type="password"
-                  value={senha}
-                  onChange={(event) => setSenha(event.target.value)}
-                  placeholder={isNew ? "Senha inicial" : "Deixe em branco para manter a senha"}
-                  required={isNew}
-                  minLength={isNew || senha ? 6 : undefined}
-                />
-                <p className="text-sm text-muted-foreground">
-                  {isNew
-                    ? "O usuário já poderá entrar com este usuário e senha."
-                    : "Preencha apenas se quiser trocar a senha de acesso."}
-                </p>
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-3">
+            <section className="space-y-3 border-t pt-5">
               <div>
-                <Label>Tipos que este usuário pode pedir</Label>
+                <h3 className="text-base font-medium text-foreground">Permissoes de produtos</h3>
                 <p className="text-sm text-muted-foreground">
                   Os itens carregam quando o tipo do produto estiver liberado aqui.
                 </p>
@@ -400,7 +405,7 @@ function UsuarioFormPage() {
                   </label>
                 ))}
               </div>
-            </div>
+            </section>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 

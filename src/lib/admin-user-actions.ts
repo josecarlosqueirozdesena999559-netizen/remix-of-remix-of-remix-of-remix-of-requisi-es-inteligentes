@@ -8,7 +8,7 @@ type AdminUserPayload = {
   id?: string | null;
   nome: string;
   usuario: string;
-  email: string;
+  email?: string | null;
   cpf?: string | null;
   funcao?: string | null;
   setor?: string | null;
@@ -21,6 +21,17 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function createInternalEmail(usuario: string) {
+  const slug = usuario
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+
+  return `${slug || "usuario"}@usuarios.solicite.local`;
+}
+
 function validateUserPayload(input: unknown): AdminUserPayload {
   if (!input || typeof input !== "object") {
     throw new Error("Dados do usuário inválidos.");
@@ -29,11 +40,10 @@ function validateUserPayload(input: unknown): AdminUserPayload {
   const data = input as Partial<AdminUserPayload>;
   const nome = cleanString(data.nome);
   const usuario = cleanString(data.usuario);
-  const email = cleanString(data.email).toLowerCase();
+  const email = cleanString(data.email).toLowerCase() || createInternalEmail(usuario);
 
-  if (!nome) throw new Error("Informe o nome do usuário.");
-  if (!usuario) throw new Error("Informe o usuário de acesso.");
-  if (!email) throw new Error("Informe o e-mail do usuário.");
+  if (!nome) throw new Error("Informe o nome do usuario.");
+  if (!usuario) throw new Error("Informe o usuario de acesso.");
 
   const categorias = Array.isArray(data.categorias_permitidas)
     ? data.categorias_permitidas
@@ -105,13 +115,14 @@ async function findAuthUserByEmail(email: string) {
 
 async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: string | null) {
   const authUserId = currentAuthUserId?.trim();
+  const email = payload.email || createInternalEmail(payload.usuario);
   const existingAuthUser = authUserId
     ? { id: authUserId }
-    : await findAuthUserByEmail(payload.email);
+    : await findAuthUserByEmail(email);
 
   if (existingAuthUser?.id) {
     const updatePayload: Record<string, unknown> = {
-      email: payload.email,
+      email,
       email_confirm: true,
       user_metadata: { nome: payload.nome },
     };
@@ -132,7 +143,7 @@ async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: str
   }
 
   const { data, error } = await (supabaseAdmin as any).auth.admin.createUser({
-    email: payload.email,
+    email,
     password: payload.password,
     email_confirm: true,
     user_metadata: { nome: payload.nome },
