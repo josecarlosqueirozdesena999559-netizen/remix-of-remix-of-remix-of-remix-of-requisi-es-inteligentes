@@ -26,23 +26,25 @@ function Index() {
     try {
       const nomeLimpo = nome.trim();
       const isAdminLogin = nomeLimpo.toLowerCase() === "admin";
+      let email = "";
 
-      const query = supabase
-        .from("usuarios")
-        .select("email")
-        .limit(isAdminLogin ? 1 : 2);
+      if (isAdminLogin) {
+        email = "admin@pereiro.ce.gov.br";
+      } else {
+        const query = supabase.from("usuarios").select("email").limit(2);
 
-      const { data: users, error: loginError } = isAdminLogin
-        ? await query.eq("is_admin", true).order("created_at", { ascending: true })
-        : await query.ilike("nome", nomeLimpo);
+        const { data: users, error: loginError } = await query.ilike("nome", nomeLimpo);
 
-      if (loginError) throw new Error(loginError.message);
-      if (!users?.length) throw new Error("Usuário ou senha inválido");
-      if (!isAdminLogin && users.length > 1) {
-        throw new Error("Existe mais de um usuário com este nome. Peça ao admin para ajustar o cadastro.");
+        if (loginError) throw new Error(loginError.message);
+        if (!users?.length) throw new Error("Usuário ou senha inválido");
+        if (users.length > 1) {
+          throw new Error(
+            "Existe mais de um usuário com este nome. Peça ao admin para ajustar o cadastro.",
+          );
+        }
+
+        email = users[0]?.email || "";
       }
-
-      const email = users[0]?.email;
       if (!email) throw new Error("Usuário ou senha inválido");
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
