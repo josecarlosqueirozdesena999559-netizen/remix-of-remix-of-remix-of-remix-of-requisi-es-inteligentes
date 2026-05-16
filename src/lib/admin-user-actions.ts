@@ -146,18 +146,39 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     await requireAdmin((context as any).userId, (context as any).claims?.email);
 
     const payload = validateUserPayload(data);
-    let currentProfile: { auth_user_id: string | null } | null = null;
+    let currentProfile: { auth_user_id: string | null; is_admin: boolean; role: string | null } | null =
+      null;
 
     if (payload.id) {
       const { data: profile, error } = await (supabaseAdmin as any)
         .from("usuarios")
-        .select("auth_user_id")
+        .select("auth_user_id,is_admin,role")
         .eq("id", payload.id)
         .maybeSingle();
 
       if (error) throw new Error(error.message);
       if (!profile) throw new Error("Usuário não encontrado.");
       currentProfile = profile;
+    }
+
+    if (payload.nome.toLowerCase() === "admin" && !currentProfile?.is_admin) {
+      throw new Error("O login admin é reservado para o administrador.");
+    }
+
+    const { data: sameNameProfiles, error: sameNameError } = await (supabaseAdmin as any)
+      .from("usuarios")
+      .select("id")
+      .ilike("nome", payload.nome)
+      .limit(2);
+
+    if (sameNameError) throw new Error(sameNameError.message);
+
+    const duplicatedName = (sameNameProfiles ?? []).some(
+      (profile: { id: string }) => profile.id !== payload.id,
+    );
+
+    if (duplicatedName) {
+      throw new Error("Já existe um usuário com este nome. Informe um nome diferente para o login.");
     }
 
     const authUserId = await ensureAuthUser(payload, currentProfile?.auth_user_id);
@@ -171,8 +192,8 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       setor: payload.setor,
       unidade_nome: payload.unidade_nome,
       categorias_permitidas: payload.categorias_permitidas,
-      is_admin: false,
-      role: "user",
+      is_admin: currentProfile?.is_admin ?? false,
+      role: currentProfile?.role || "user",
     };
 
     const result = payload.id

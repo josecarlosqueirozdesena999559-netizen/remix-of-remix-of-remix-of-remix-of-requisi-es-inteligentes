@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveLoginEmail } from "@/lib/login-actions";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,7 @@ function Index() {
     setError(null);
     setLoading(true);
     try {
+      const { email } = await resolveLoginEmail({ data: { nome } });
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
@@ -54,17 +56,17 @@ function Index() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email" className="font-normal text-slate-700">
-              E-mail
+            <Label htmlFor="nome" className="font-normal text-slate-700">
+              Nome do usuário
             </Label>
             <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="Informe seu e-mail"
+              id="nome"
+              type="text"
+              autoComplete="username"
+              placeholder="Digite o nome cadastrado"
               className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
               required
             />
           </div>

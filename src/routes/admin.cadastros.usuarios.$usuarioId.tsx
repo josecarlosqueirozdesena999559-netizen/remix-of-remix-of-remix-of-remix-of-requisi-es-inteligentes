@@ -355,7 +355,7 @@ function UsuarioFormPage() {
                 />
                 <p className="text-sm text-muted-foreground">
                   {isNew
-                    ? "O usuário já poderá entrar com este e-mail e senha."
+                    ? "O usuário já poderá entrar com este nome e senha."
                     : "Preencha apenas se quiser trocar a senha de acesso."}
                 </p>
               </div>
