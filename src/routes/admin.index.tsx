@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -105,25 +105,18 @@ function AdminHome() {
         <button
           type="button"
           onClick={() => navigate({ to: isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas" })}
-          className={`group flex min-h-28 w-full items-center gap-5 rounded-lg px-6 py-7 text-left text-black shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-32 sm:px-9 md:gap-8 md:px-12 ${
+          className={`group flex min-h-16 w-full max-w-4xl items-center gap-3 rounded-lg px-4 py-4 text-left text-black shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 sm:px-6 md:px-8 ${
             pendingCount > 0 ? "bg-amber-400" : "bg-emerald-400"
           }`}
         >
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] border-black sm:size-14 md:size-16">
-            {pendingCount > 0 ? (
-              <AlertCircle className="size-9 sm:size-10 md:size-12" strokeWidth={2.5} />
-            ) : (
-              <CheckCircle2 className="size-8 sm:size-10 md:size-11" strokeWidth={2.5} />
-            )}
-          </span>
-          <span className="min-w-0 flex-1 text-xl leading-snug sm:text-2xl md:text-3xl">
+          <span className="min-w-0 flex-1 text-base leading-snug sm:text-lg md:text-xl">
             {notificationMessage}{" "}
             <span className="whitespace-nowrap underline decoration-2 underline-offset-4">
               Clique aqui
             </span>
           </span>
           <ChevronRight
-            className="size-8 shrink-0 transition-transform group-hover:translate-x-1 sm:size-10 md:size-12"
+            className="size-6 shrink-0 transition-transform group-hover:translate-x-1 sm:size-7"
             strokeWidth={3}
           />
         </button>

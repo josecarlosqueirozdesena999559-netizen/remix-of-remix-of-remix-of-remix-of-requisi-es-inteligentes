@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { CheckCircle2, Eye, Loader2, Upload, Wrench } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload, Wrench } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -52,6 +52,10 @@ function getStageLabel(status: string) {
 
 function isRequestSignatureStatus(status: string) {
   return status === "aguardando_assinatura" || status === "aguardando_assinatura_requisicao";
+}
+
+function canEditUnsignedRequest(request: Requisicao) {
+  return isRequestSignatureStatus(request.status) && !getRequestSignedAttachment(request.signed_attachment, request.status);
 }
 
 function needsCurrentStageSignature(request: Requisicao) {
@@ -313,6 +317,49 @@ function MinhasAssinaturasPage() {
     void handleUpload(request, event.dataTransfer.files?.[0]);
   };
 
+  const handleDeleteUnsignedRequest = async (request: Requisicao) => {
+    if (!canEditUnsignedRequest(request)) {
+      setError("Esta requisição já foi assinada e não pode ser excluída por aqui.");
+      return;
+    }
+
+    const confirmed = window.confirm("Excluir esta requisição antes da assinatura?");
+    if (!confirmed) return;
+
+    setMessage(null);
+    setError(null);
+
+    try {
+      let { error: deleteError } = await supabase
+        .from("requisicoes")
+        .update({
+          status: "excluida_usuario",
+          return_reason: null,
+          return_target: null,
+          returned_at: null,
+        })
+        .eq("id", request.id)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao"]);
+
+      if (deleteError && isMissingReturnFeedbackColumnError(deleteError.message)) {
+        const fallbackDelete = await supabase
+          .from("requisicoes")
+          .update({ status: "excluida_usuario" })
+          .eq("id", request.id)
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao"]);
+
+        deleteError = fallbackDelete.error;
+      }
+
+      if (deleteError) throw new Error(deleteError.message);
+
+      setRequests((current) => current.filter((item) => item.id !== request.id));
+      setMessage("Requisição excluída antes da assinatura.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir requisição.");
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -399,46 +446,76 @@ function MinhasAssinaturasPage() {
                             Corrigir
                           </Button>
                         ) : (
-                          <div
-                            className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
-                              draggingId === request.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
-                            }`}
-                            onDragEnter={() => setDraggingId(request.id)}
-                            onDragOver={handleDragOver}
-                            onDragLeave={(event) => handleDragLeave(event, request.id)}
-                            onDrop={(event) => handleDrop(event, request)}
-                          >
-                            <input
-                              id={`assinado-${request.id}`}
-                              type="file"
-                              accept="application/pdf,.pdf"
-                              className="hidden"
-                              disabled={uploadingId === request.id}
-                              onChange={(event) => {
-                                void handleUpload(request, event.target.files?.[0]);
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                              disabled={uploadingId === request.id}
-                              onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
-                            >
-                              {uploadingId === request.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Upload className="h-4 w-4" />
-                              )}
-                              Anexar
-                            </Button>
-                            {draggingId === request.id && (
-                              <span className="text-xs font-medium text-emerald-700">
-                                Solte o PDF para enviar agora
-                              </span>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {canEditUnsignedRequest(request) && (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => {
+                                    if (typeof window !== "undefined") {
+                                      window.location.assign(`/admin/requisicao?requisicaoId=${request.id}`);
+                                    }
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  Editar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2 text-destructive"
+                                  onClick={() => void handleDeleteUnsignedRequest(request)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Excluir
+                                </Button>
+                              </>
                             )}
+                            <div
+                              className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
+                                draggingId === request.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
+                              }`}
+                              onDragEnter={() => setDraggingId(request.id)}
+                              onDragOver={handleDragOver}
+                              onDragLeave={(event) => handleDragLeave(event, request.id)}
+                              onDrop={(event) => handleDrop(event, request)}
+                            >
+                              <input
+                                id={`assinado-${request.id}`}
+                                type="file"
+                                accept="application/pdf,.pdf"
+                                className="hidden"
+                                disabled={uploadingId === request.id}
+                                onChange={(event) => {
+                                  void handleUpload(request, event.target.files?.[0]);
+                                  event.currentTarget.value = "";
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
+                                disabled={uploadingId === request.id}
+                                onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
+                              >
+                                {uploadingId === request.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Upload className="h-4 w-4" />
+                                )}
+                                Anexar
+                              </Button>
+                              {draggingId === request.id && (
+                                <span className="text-xs font-medium text-emerald-700">
+                                  Solte o PDF para enviar agora
+                                </span>
+                              )}
+                            </div>
                           </div>
                         )}
                       </td>

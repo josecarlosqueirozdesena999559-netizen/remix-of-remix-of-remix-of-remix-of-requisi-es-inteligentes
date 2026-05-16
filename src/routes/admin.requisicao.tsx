@@ -64,6 +64,7 @@ interface EditableRequestItem {
 interface EditableRequest {
   id: string;
   categoria: string | null;
+  status: string | null;
   items: EditableRequestItem[] | null;
   return_reason: string | null;
 }
@@ -76,8 +77,8 @@ interface RequestSection {
   order: number;
 }
 
-const requestSelectWithFeedback = "id,categoria,items,return_reason";
-const requestSelectFallback = "id,categoria,items";
+const requestSelectWithFeedback = "id,categoria,status,items,return_reason";
+const requestSelectFallback = "id,categoria,status,items";
 
 function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
@@ -92,6 +93,11 @@ function formatToday() {
 function hasRequestedQuantity(value: string | undefined) {
   const quantity = Number(String(value ?? "").trim().replace(",", "."));
   return Number.isFinite(quantity) && quantity > 0;
+}
+
+function canEditRequestBeforeSignature(request: EditableRequest | null) {
+  if (!request) return false;
+  return request.status === "aguardando_assinatura" || request.status === "aguardando_assinatura_requisicao" || request.status === "correcao_requisicao";
 }
 
 function getItemName(item: EditableRequestItem) {
@@ -365,6 +371,7 @@ function CriarRequisicaoPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState("");
+  const [editingRequestStatus, setEditingRequestStatus] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState<string | null>(null);
 
   useEffect(() => {
@@ -431,11 +438,16 @@ function CriarRequisicaoPage() {
           throw new Error(itemsResult.error?.message || requestError?.message || "Erro ao carregar requisição.");
         }
 
+        if (editingRequestId && !canEditRequestBeforeSignature(editableRequest)) {
+          throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
+        }
+
         const categories = getAllowedCategories(profile);
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
 
         setProfile(profile);
         setItems(loadedItems);
+        setEditingRequestStatus(editableRequest?.status || null);
         setReturnReason(editableRequest?.return_reason || null);
 
         const availableSections = buildNormalizedRequestSections(categories);
@@ -477,6 +489,7 @@ function CriarRequisicaoPage() {
 
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
   const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
+  const isCorrectionEdit = editingRequestStatus === "correcao_requisicao";
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) || sections[0] || null,
     [sections, selectedSectionId],
@@ -604,14 +617,19 @@ function CriarRequisicaoPage() {
     let savedRequestId = editingRequestId;
 
     if (editingRequestId) {
-      const updateResult = await supabase.from("requisicoes").update(payload).eq("id", editingRequestId);
+      const updateResult = await supabase
+        .from("requisicoes")
+        .update(payload)
+        .eq("id", editingRequestId)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"]);
       requestError = updateResult.error;
 
       if (requestError && isMissingReturnFeedbackColumnError(requestError.message)) {
         const fallbackResult = await supabase
           .from("requisicoes")
           .update(omitReturnFeedbackFields(payload))
-          .eq("id", editingRequestId);
+          .eq("id", editingRequestId)
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"]);
 
         requestError = fallbackResult.error;
       }
@@ -669,7 +687,7 @@ function CriarRequisicaoPage() {
       <div>
         <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
         <h2 className="text-2xl text-foreground">
-          {editingRequestId ? "Corrigir requisição" : "Criar requisição"}
+          {editingRequestId ? (isCorrectionEdit ? "Corrigir requisição" : "Editar requisição") : "Criar requisição"}
         </h2>
       </div>
 
@@ -786,7 +804,7 @@ function CriarRequisicaoPage() {
 
           <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {editingRequestId ? "Reenviar requisição" : "Enviar requisição"}
+            {editingRequestId ? (isCorrectionEdit ? "Reenviar requisição" : "Salvar alterações") : "Enviar requisição"}
           </Button>
         </>
       )}
