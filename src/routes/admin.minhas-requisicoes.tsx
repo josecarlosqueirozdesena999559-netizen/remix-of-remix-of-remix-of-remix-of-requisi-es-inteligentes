@@ -115,7 +115,7 @@ function MinhasRequisicoesPage() {
         <h2 className="text-2xl text-foreground">Minhas requisições</h2>
       </div>
 
-      <Card className="flex flex-wrap items-end justify-between gap-3 p-4">
+      <Card className="p-4">
         <label className="flex min-w-48 flex-col gap-2 text-sm text-muted-foreground">
           Mês
           <input
@@ -125,9 +125,6 @@ function MinhasRequisicoesPage() {
             className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
           />
         </label>
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-          {filteredRequests.length} {filteredRequests.length === 1 ? "requisição" : "requisições"} com o admin
-        </div>
       </Card>
 
       {loading ? (
@@ -139,7 +136,8 @@ function MinhasRequisicoesPage() {
         <Card className="p-6 text-destructive">{error}</Card>
       ) : filteredRequests.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
-          Nenhuma requisição com o admin neste mês.
+          Acompanhe quais de suas requisições assinadas estão com o almoxarifado para anexo de
+          saída e separação de entrega.
         </Card>
       ) : (
         <Card className="p-4">
