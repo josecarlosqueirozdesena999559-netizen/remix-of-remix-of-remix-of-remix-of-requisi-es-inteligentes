@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, FileSignature, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,13 +81,12 @@ function AdminHome() {
     };
   }, []);
 
-  const notificationTitle = isAdmin ? "Solicitações Pendentes" : "Assinaturas";
   const notificationMessage = isAdmin
     ? pendingCount > 0
-      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "requisição pendente" : "requisições pendentes"}.`
-      : "Você não tem requisições pendentes no momento."
+      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "solicitação pendente" : "solicitações pendentes"}.`
+      : "Você não tem solicitações pendentes no momento."
     : pendingCount > 0
-      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "assinatura pendente" : "assinaturas pendentes"}.`
+      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "assinatura para preencher" : "assinaturas para preencher"}.`
       : "Você não tem assinaturas pendentes no momento.";
 
   return (
@@ -106,29 +105,27 @@ function AdminHome() {
         <button
           type="button"
           onClick={() => navigate({ to: isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas" })}
-          className={`w-full rounded-md border-l-4 p-5 text-left shadow-sm transition-colors hover:brightness-[0.98] ${
-            pendingCount > 0
-              ? "border-amber-500 bg-amber-50 text-amber-950"
-              : "border-emerald-500 bg-emerald-50 text-emerald-950"
+          className={`group flex min-h-28 w-full items-center gap-5 rounded-lg px-6 py-7 text-left text-black shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-32 sm:px-9 md:gap-8 md:px-12 ${
+            pendingCount > 0 ? "bg-amber-400" : "bg-emerald-400"
           }`}
         >
-          <div className="flex items-start gap-3">
-            <span
-              className={`rounded-md p-2 ${
-                pendingCount > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-              }`}
-            >
-              {pendingCount > 0 ? (
-                <FileSignature className="h-5 w-5" />
-              ) : (
-                <CheckCircle2 className="h-5 w-5" />
-              )}
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] border-black sm:size-14 md:size-16">
+            {pendingCount > 0 ? (
+              <AlertCircle className="size-9 sm:size-10 md:size-12" strokeWidth={2.5} />
+            ) : (
+              <CheckCircle2 className="size-8 sm:size-10 md:size-11" strokeWidth={2.5} />
+            )}
+          </span>
+          <span className="min-w-0 flex-1 text-xl leading-snug sm:text-2xl md:text-3xl">
+            {notificationMessage}{" "}
+            <span className="whitespace-nowrap underline decoration-2 underline-offset-4">
+              Clique aqui
             </span>
-            <span>
-              <span className="block text-sm font-medium">{notificationTitle}</span>
-              <span className="mt-1 block text-sm opacity-80">{notificationMessage}</span>
-            </span>
-          </div>
+          </span>
+          <ChevronRight
+            className="size-8 shrink-0 transition-transform group-hover:translate-x-1 sm:size-10 md:size-12"
+            strokeWidth={3}
+          />
         </button>
       )}
     </div>
