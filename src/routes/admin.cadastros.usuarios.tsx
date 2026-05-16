@@ -15,7 +15,6 @@ interface Usuario {
   id: string;
   nome: string;
   usuario: string | null;
-  email: string;
   cpf: string | null;
   setor: string | null;
   unidade_nome: string | null;

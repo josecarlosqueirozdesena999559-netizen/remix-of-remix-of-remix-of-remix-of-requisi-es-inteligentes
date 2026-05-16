@@ -36,7 +36,6 @@ interface UsuarioRow {
   id: string;
   nome: string;
   usuario: string | null;
-  email: string;
   cpf: string | null;
   funcao: string | null;
   setor: string | null;
@@ -64,7 +63,6 @@ function UsuarioFormPage() {
 
   const [nome, setNome] = useState("");
   const [usuario, setUsuario] = useState("");
-  const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
   const [funcao, setFuncao] = useState("");
   const [senha, setSenha] = useState("123456");
@@ -95,7 +93,7 @@ function UsuarioFormPage() {
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from("usuarios")
-              .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
+              .select("id,nome,usuario,cpf,funcao,setor,unidade_nome,categorias_permitidas")
               .eq("id", usuarioId)
               .maybeSingle(),
       ]);
@@ -137,7 +135,6 @@ function UsuarioFormPage() {
       const usuario = data as UsuarioRow;
       setNome(usuario.nome);
       setUsuario(usuario.usuario ?? "");
-      setEmail(usuario.email);
       setCpf(usuario.cpf ?? "");
       setFuncao(usuario.funcao ?? "");
       setSenha("");
@@ -197,7 +194,6 @@ function UsuarioFormPage() {
       id: isNew ? null : usuarioId,
       nome: nomeLimpo,
       usuario: usuarioLimpo,
-      email: email.trim() || null,
       cpf: cpf.trim() || null,
       funcao: funcao.trim() || null,
       setor: setor.trim() || null,
@@ -267,17 +263,17 @@ function UsuarioFormPage() {
               <div>
                 <h3 className="text-base font-medium text-foreground">Acesso</h3>
                 <p className="text-sm text-muted-foreground">
-                  O usuario entra no sistema usando somente o usuario de acesso e a senha.
+                  O usuário entra no sistema usando somente o usuário de acesso e a senha.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="usuario">Usuario de acesso</Label>
+                  <Label htmlFor="usuario">Usuário de acesso</Label>
                   <Input
                     id="usuario"
                     value={usuario}
                     onChange={(event) => setUsuario(event.target.value)}
-                    placeholder="Usuario de acesso"
+                    placeholder="Usuário de acesso"
                     required
                   />
                 </div>
@@ -295,7 +291,7 @@ function UsuarioFormPage() {
                   />
                   <p className="text-sm text-muted-foreground">
                     {isNew
-                      ? "A senha e criada pelo admin e pode ser usada no primeiro acesso."
+                      ? "A senha é criada pelo admin e pode ser usada no primeiro acesso."
                       : "Preencha apenas se quiser trocar a senha de acesso."}
                   </p>
                 </div>
@@ -304,9 +300,9 @@ function UsuarioFormPage() {
 
             <section className="space-y-3 border-t pt-5">
               <div>
-                <h3 className="text-base font-medium text-foreground">Dados do usuario</h3>
+                <h3 className="text-base font-medium text-foreground">Dados do usuário</h3>
                 <p className="text-sm text-muted-foreground">
-                  Dados usados para identificar requisicoes, assinaturas e permissoes.
+                  Dados usados para identificar requisições, assinaturas e permissões.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -374,7 +370,7 @@ function UsuarioFormPage() {
                   id="funcao"
                   value={funcao}
                   onChange={(event) => setFuncao(event.target.value)}
-                  placeholder="Cargo ou funcao"
+                  placeholder="Cargo ou função"
                 />
               </div>
               </div>
@@ -382,7 +378,7 @@ function UsuarioFormPage() {
 
             <section className="space-y-3 border-t pt-5">
               <div>
-                <h3 className="text-base font-medium text-foreground">Permissoes de produtos</h3>
+                <h3 className="text-base font-medium text-foreground">Permissões de produtos</h3>
                 <p className="text-sm text-muted-foreground">
                   Os itens carregam quando o tipo do produto estiver liberado aqui.
                 </p>

@@ -8,7 +8,7 @@ type AdminUserPayload = {
   id?: string | null;
   nome: string;
   usuario: string;
-  email?: string | null;
+  email: string;
   cpf?: string | null;
   funcao?: string | null;
   setor?: string | null;
@@ -40,7 +40,7 @@ function validateUserPayload(input: unknown): AdminUserPayload {
   const data = input as Partial<AdminUserPayload>;
   const nome = cleanString(data.nome);
   const usuario = cleanString(data.usuario);
-  const email = cleanString(data.email).toLowerCase() || createInternalEmail(usuario);
+  const email = createInternalEmail(usuario);
 
   if (!nome) throw new Error("Informe o nome do usuario.");
   if (!usuario) throw new Error("Informe o usuario de acesso.");
@@ -163,6 +163,7 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     const payload = validateUserPayload(data);
     let currentProfile: {
       auth_user_id: string | null;
+      email: string | null;
       is_admin: boolean;
       role: string | null;
     } | null = null;
@@ -170,7 +171,7 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     if (payload.id) {
       const { data: profile, error } = await (supabaseAdmin as any)
         .from("usuarios")
-        .select("auth_user_id,is_admin,role")
+        .select("auth_user_id,email,is_admin,role")
         .eq("id", payload.id)
         .maybeSingle();
 
@@ -199,13 +200,21 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       throw new Error("Já existe um usuário com este login. Informe outro usuário de acesso.");
     }
 
-    const authUserId = await ensureAuthUser(payload, currentProfile?.auth_user_id);
+    const authPayload = {
+      ...payload,
+      email:
+        currentProfile?.is_admin && currentProfile.email
+          ? currentProfile.email
+          : payload.email,
+    };
+
+    const authUserId = await ensureAuthUser(authPayload, currentProfile?.auth_user_id);
 
     const profilePayload = {
       auth_user_id: authUserId,
       nome: payload.nome,
       usuario: payload.usuario,
-      email: payload.email,
+      email: authPayload.email,
       cpf: payload.cpf,
       funcao: payload.funcao,
       setor: payload.setor,
