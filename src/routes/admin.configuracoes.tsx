@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { KeyRound, Loader2, Mail, Save, Smartphone, UserRound } from "lucide-react";
+import { KeyRound, Loader2, Save, Smartphone, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -63,8 +63,6 @@ function getWelcomeNotificationsFromResult(value: unknown) {
 
 function ConfiguracoesPage() {
   const navigate = useNavigate();
-  const [emailAtual, setEmailAtual] = useState("");
-  const [novoEmail, setNovoEmail] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
   const [nome, setNome] = useState("");
@@ -74,10 +72,7 @@ function ConfiguracoesPage() {
   const [setor, setSetor] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [loading, setLoading] = useState(true);
-  const [savingEmail, setSavingEmail] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
-  const [emailMessage, setEmailMessage] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -102,9 +97,6 @@ function ConfiguracoesPage() {
           return;
         }
 
-        const currentEmail = user.email ?? profile?.email ?? "";
-        setEmailAtual(currentEmail);
-        setNovoEmail(currentEmail);
         setNome(profile?.nome ?? "");
         setUsuario(profile?.usuario ?? "");
         setCpf(profile?.cpf ?? "");
@@ -123,7 +115,7 @@ function ConfiguracoesPage() {
         }
       } catch (error) {
         if (active) {
-          setEmailError(getErrorMessage(error, "Erro ao carregar usuário."));
+          setPasswordError(getErrorMessage(error, "Erro ao carregar usuário."));
         }
       } finally {
         if (active) setLoading(false);
@@ -136,38 +128,6 @@ function ConfiguracoesPage() {
       active = false;
     };
   }, [navigate]);
-
-  const handleEmailSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setEmailError(null);
-    setEmailMessage(null);
-
-    const trimmedEmail = novoEmail.trim();
-
-    if (!trimmedEmail) {
-      setEmailError("Informe o novo e-mail.");
-      return;
-    }
-
-    if (trimmedEmail === emailAtual) {
-      setEmailError("Informe um e-mail diferente do atual.");
-      return;
-    }
-
-    setSavingEmail(true);
-
-    try {
-      const { error } = await supabase.auth.updateUser({ email: trimmedEmail });
-      if (error) throw new Error(error.message);
-
-      setNovoEmail(trimmedEmail);
-      setEmailMessage("Solicitação enviada. Verifique o novo e-mail para confirmar a alteração.");
-    } catch (error) {
-      setEmailError(getErrorMessage(error, "Erro ao alterar e-mail."));
-    } finally {
-      setSavingEmail(false);
-    }
-  };
 
   const handlePasswordSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -289,60 +249,18 @@ function ConfiguracoesPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Mail className="h-5 w-5 text-primary" />
+                <KeyRound className="h-5 w-5 text-primary" />
                 Acesso
               </CardTitle>
-              <CardDescription>Atualize e-mail e senha em um só local.</CardDescription>
+              <CardDescription>Confira seu usuário de acesso e altere a senha.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 lg:grid-cols-2">
-              <form className="space-y-4" onSubmit={handleEmailSubmit}>
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Mail className="h-4 w-4 text-primary" />
-                  E-mail
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email-atual">E-mail atual</Label>
-                  <Input id="email-atual" value={emailAtual} disabled />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="novo-email">Novo e-mail</Label>
-                  <Input
-                    id="novo-email"
-                    type="email"
-                    value={novoEmail}
-                    onChange={(event) => setNovoEmail(event.target.value)}
-                    placeholder="novo@email.com"
-                    required
-                  />
-                </div>
-
-                {emailError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{emailError}</AlertDescription>
-                  </Alert>
-                )}
-                {emailMessage && (
-                  <Alert>
-                    <AlertDescription>{emailMessage}</AlertDescription>
-                  </Alert>
-                )}
-
-                <Button type="submit" className="w-full" disabled={savingEmail}>
-                  {savingEmail ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  Salvar e-mail
-                </Button>
-              </form>
+              <div className="space-y-2">
+                <Label htmlFor="usuario-acesso">Usuário de acesso</Label>
+                <Input id="usuario-acesso" value={usuario || "-"} disabled />
+              </div>
 
               <form className="space-y-4" onSubmit={handlePasswordSubmit}>
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <KeyRound className="h-4 w-4 text-primary" />
-                  Senha
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="nova-senha">Nova senha</Label>
                   <Input
