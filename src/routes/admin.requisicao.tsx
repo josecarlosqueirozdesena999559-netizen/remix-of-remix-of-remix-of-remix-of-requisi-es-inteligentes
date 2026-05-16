@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, Search, Send, X } from "lucide-react";
+import { ArrowLeft, Loader2, Search, Send, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -490,6 +490,7 @@ function CriarRequisicaoPage() {
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
   const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
   const isCorrectionEdit = editingRequestStatus === "correcao_requisicao";
+  const returnPath = editingRequestId ? "/admin/minhas-assinaturas" : "/admin";
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) || sections[0] || null,
     [sections, selectedSectionId],
@@ -684,11 +685,23 @@ function CriarRequisicaoPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
-        <h2 className="text-2xl text-foreground">
-          {editingRequestId ? (isCorrectionEdit ? "Corrigir requisição" : "Editar requisição") : "Criar requisição"}
-        </h2>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
+          <h2 className="text-2xl text-foreground">
+            {editingRequestId ? (isCorrectionEdit ? "Corrigir requisição" : "Editar requisição") : "Criar requisição"}
+          </h2>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          disabled={saving}
+          onClick={() => navigate({ to: returnPath })}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </Button>
       </div>
 
       {loading ? (
@@ -802,10 +815,22 @@ function CriarRequisicaoPage() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {editingRequestId ? (isCorrectionEdit ? "Reenviar requisição" : "Salvar alterações") : "Enviar requisição"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {editingRequestId ? (isCorrectionEdit ? "Reenviar requisição" : "Salvar alterações") : "Enviar requisição"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={saving}
+              onClick={() => navigate({ to: returnPath })}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Button>
+          </div>
         </>
       )}
     </div>
