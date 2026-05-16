@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLoginEmail } from "@/lib/login-actions";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -25,7 +24,27 @@ function Index() {
     setError(null);
     setLoading(true);
     try {
-      const { email } = await resolveLoginEmail({ data: { nome } });
+      const nomeLimpo = nome.trim();
+      const isAdminLogin = nomeLimpo.toLowerCase() === "admin";
+
+      const query = supabase
+        .from("usuarios")
+        .select("email")
+        .limit(isAdminLogin ? 1 : 2);
+
+      const { data: users, error: loginError } = isAdminLogin
+        ? await query.eq("is_admin", true).order("created_at", { ascending: true })
+        : await query.ilike("nome", nomeLimpo);
+
+      if (loginError) throw new Error(loginError.message);
+      if (!users?.length) throw new Error("Usuário ou senha inválido");
+      if (!isAdminLogin && users.length > 1) {
+        throw new Error("Existe mais de um usuário com este nome. Peça ao admin para ajustar o cadastro.");
+      }
+
+      const email = users[0]?.email;
+      if (!email) throw new Error("Usuário ou senha inválido");
+
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
