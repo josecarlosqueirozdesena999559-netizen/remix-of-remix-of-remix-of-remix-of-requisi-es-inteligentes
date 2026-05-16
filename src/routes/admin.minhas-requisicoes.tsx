@@ -137,11 +137,7 @@ function MinhasRequisicoesPage() {
         </div>
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
-      ) : filteredRequests.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">
-          Nenhuma requisicao aguardando atendimento do admin neste mes.
-        </Card>
-      ) : (
+      ) : filteredRequests.length === 0 ? null : (
         <Card className="p-4">
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
