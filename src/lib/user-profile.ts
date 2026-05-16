@@ -4,6 +4,7 @@ export interface CurrentUserProfile {
   id: string;
   auth_user_id: string | null;
   nome: string;
+  usuario: string | null;
   email: string;
   cpf: string | null;
   funcao: string | null;
@@ -34,7 +35,7 @@ export async function getCurrentUserProfile() {
   }
 
   const select =
-    "id,auth_user_id,nome,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
+    "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
   const { data: byAuthId, error: authIdError } = await supabase
     .from("usuarios")
     .select(select)
