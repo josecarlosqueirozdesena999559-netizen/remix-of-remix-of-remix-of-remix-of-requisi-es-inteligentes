@@ -48,11 +48,11 @@ function Index() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(135deg,#eef2f7_0%,#dfe7ef_52%,#f8fafc_100%)] px-4 py-8">
-      <Card className="w-full max-w-[420px] rounded-lg border-slate-300/80 bg-white/95 p-8 shadow-xl shadow-slate-400/20">
-        <h1 className="mb-6 text-center text-2xl font-normal text-primary">Acesso ao Sistema</h1>
+    <div className="flex min-h-screen items-center justify-center bg-slate-200 px-4 py-8">
+      <Card className="w-full max-w-sm rounded-md border-slate-300 bg-white p-6 shadow-lg shadow-slate-400/30">
+        <h1 className="mb-6 text-center text-xl font-normal text-primary">Acesso ao Sistema</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email" className="font-normal text-slate-700">
               E-mail
@@ -62,7 +62,7 @@ function Index() {
               type="email"
               autoComplete="email"
               placeholder="Informe seu e-mail"
-              className="h-12 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
+              className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -78,7 +78,7 @@ function Index() {
               type="password"
               autoComplete="current-password"
               placeholder="Informe sua senha"
-              className="h-12 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
+              className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
@@ -91,7 +91,7 @@ function Index() {
             </p>
           )}
 
-          <Button type="submit" className="h-12 w-full rounded-md text-base font-normal">
+          <Button type="submit" className="h-11 w-full rounded-md text-base font-normal">
             Entrar
           </Button>
         </form>
