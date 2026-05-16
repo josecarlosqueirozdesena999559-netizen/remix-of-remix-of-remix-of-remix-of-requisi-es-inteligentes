@@ -149,7 +149,7 @@ function AdminHome() {
               </span>
             </span>
             {!isAdmin && pendingSignatureCodes.length > 0 ? (
-              <span className="block space-y-1 text-sm font-semibold">
+              <span className="block space-y-1 text-sm font-normal">
                 {pendingSignatureCodes.map((code) => (
                   <span key={code} className="block">
                     Requisição {code}
