@@ -40,17 +40,17 @@ function Index() {
         email = typeof resolvedEmail === "string" ? resolvedEmail : "";
       }
 
-      if (!email) throw new Error("Usuario ou senha");
+      if (!email) throw new Error("Usuário ou senha");
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
       });
 
-      if (signInError) throw new Error("Usuario ou senha");
+      if (signInError) throw new Error("Usuário ou senha");
       navigate({ to: "/admin" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Usuario ou senha");
+      setError(err instanceof Error ? err.message : "Usuário ou senha");
       setLoading(false);
     }
   };
@@ -74,13 +74,13 @@ function Index() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="nome" className="font-normal text-slate-700">
-              Usuario
+              Usuário
             </Label>
             <Input
               id="nome"
               type="text"
               autoComplete="username"
-              placeholder="Usuario"
+              placeholder="Usuário"
               className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
