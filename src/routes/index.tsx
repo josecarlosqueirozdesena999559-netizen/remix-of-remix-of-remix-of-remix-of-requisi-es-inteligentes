@@ -36,25 +36,23 @@ function Index() {
         const { data: users, error: loginError } = await query.ilike("usuario", nomeLimpo);
 
         if (loginError) throw new Error(loginError.message);
-        if (!users?.length) throw new Error("Usuário ou senha inválido");
+        if (!users?.length) throw new Error("Usuário ou senha");
         if (users.length > 1) {
-          throw new Error(
-            "Existe mais de um usuário com este login. Peça ao admin para ajustar o cadastro.",
-          );
+          throw new Error("Usuário ou senha");
         }
 
         email = users[0]?.email || "";
       }
-      if (!email) throw new Error("Usuário ou senha inválido");
+      if (!email) throw new Error("Usuário ou senha");
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
       });
-      if (signInError) throw new Error("Usuário ou senha inválido");
+      if (signInError) throw new Error("Usuário ou senha");
       navigate({ to: "/admin" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Usuário ou senha inválido");
+      setError(err instanceof Error ? err.message : "Usuário ou senha");
       setLoading(false);
     }
   };
@@ -84,7 +82,7 @@ function Index() {
               id="nome"
               type="text"
               autoComplete="username"
-              placeholder="Digite seu usuário"
+              placeholder="Usuário"
               className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
@@ -100,7 +98,7 @@ function Index() {
               id="senha"
               type="password"
               autoComplete="current-password"
-              placeholder="Informe sua senha"
+              placeholder="Senha"
               className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
@@ -109,7 +107,7 @@ function Index() {
           </div>
 
           {error && (
-            <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-center text-sm text-destructive">
+            <p className="rounded border border-destructive/20 bg-destructive/5 px-2 py-1 text-center text-xs text-destructive">
               {error}
             </p>
           )}
