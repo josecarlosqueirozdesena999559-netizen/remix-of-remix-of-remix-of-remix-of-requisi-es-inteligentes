@@ -186,6 +186,8 @@ function WhatsAppUsuariosPage() {
             .from("usuarios")
             .select("id,nome,email,cpf,whatsapp,is_admin")
             .eq("is_admin", false)
+            .not("whatsapp", "is", null)
+            .neq("whatsapp", "")
             .order("nome", { ascending: true }),
           (supabase as any)
             .from("whatsapp_webhook_message_audit")
@@ -208,7 +210,9 @@ function WhatsAppUsuariosPage() {
           );
         }
 
-        const users = (usersResult.data ?? []) as UserRow[];
+        const users = ((usersResult.data ?? []) as UserRow[]).filter((user) =>
+          Boolean(canonicalConversationPhone(user.whatsapp)),
+        );
         const latestIncomingByPhone = getLatestIncomingByPhone(
           (messagesResult.data ?? []) as IncomingMessageRow[],
         );
