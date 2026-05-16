@@ -576,28 +576,21 @@ function Solicitacoes() {
           </div>
         </Card>
       ) : (
-        <>
-          <Card className="bg-muted/30 p-6">
-            <p className="text-sm text-muted-foreground">Primeiro passo</p>
-            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs</p>
-          </Card>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {grouped.map(([setor, items]) => (
-              <button
-                key={setor}
-                type="button"
-                onClick={() => setSelected(setor)}
-                className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
-              >
-                <p className="text-foreground">{setor}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {items.length} {items.length === 1 ? "registro" : "registros"}
-                </p>
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {grouped.map(([setor, items]) => (
+            <button
+              key={setor}
+              type="button"
+              onClick={() => setSelected(setor)}
+              className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
+            >
+              <p className="text-foreground">{setor}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {items.length} {items.length === 1 ? "registro" : "registros"}
+              </p>
+            </button>
+          ))}
+        </div>
       )}
 
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>

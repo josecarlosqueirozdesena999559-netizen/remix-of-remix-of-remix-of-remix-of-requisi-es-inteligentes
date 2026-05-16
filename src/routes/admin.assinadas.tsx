@@ -537,28 +537,21 @@ function AssinadasPage() {
           </div>
         </Card>
       ) : (
-        <>
-          <Card className="bg-muted/30 p-6">
-            <p className="text-sm text-muted-foreground">Primeiro passo</p>
-            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mes</p>
-          </Card>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {grouped.map(([local, requests]) => (
-              <button
-                key={local}
-                type="button"
-                onClick={() => setSelected(local)}
-                className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
-              >
-                <p className="text-foreground">{local}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {requests.length} {requests.length === 1 ? "registro" : "registros"}
-                </p>
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {grouped.map(([local, requests]) => (
+            <button
+              key={local}
+              type="button"
+              onClick={() => setSelected(local)}
+              className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
+            >
+              <p className="text-foreground">{local}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {requests.length} {requests.length === 1 ? "registro" : "registros"}
+              </p>
+            </button>
+          ))}
+        </div>
       )}
 
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>

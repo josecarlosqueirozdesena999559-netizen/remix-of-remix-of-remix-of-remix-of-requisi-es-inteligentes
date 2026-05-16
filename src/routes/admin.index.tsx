@@ -105,19 +105,19 @@ function AdminHome() {
         <button
           type="button"
           onClick={() => navigate({ to: isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas" })}
-          className={`group flex min-h-16 w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-4 text-left text-black shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-20 sm:px-6 md:px-8 ${
+          className={`group flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-3 text-left text-black shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-16 sm:px-5 ${
             pendingCount > 0 ? "bg-amber-400" : "bg-emerald-400"
           }`}
         >
-          <span className="min-w-0 flex-1 text-base leading-snug sm:text-lg md:text-xl">
+          <span className="min-w-0 flex-1 text-sm font-medium leading-snug sm:text-base">
             {notificationMessage}{" "}
-            <span className="cursor-pointer whitespace-nowrap underline decoration-2 underline-offset-4">
+            <span className="cursor-pointer whitespace-nowrap underline decoration-1 underline-offset-4">
               Clique aqui
             </span>
           </span>
           <ChevronRight
-            className="size-6 shrink-0 transition-transform group-hover:translate-x-1 sm:size-7"
-            strokeWidth={3}
+            className="size-5 shrink-0 transition-transform group-hover:translate-x-1"
+            strokeWidth={2.5}
           />
         </button>
       )}

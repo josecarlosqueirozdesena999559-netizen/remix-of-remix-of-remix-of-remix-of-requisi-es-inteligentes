@@ -1,12 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveLoginEmail } from "@/lib/login-actions";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -23,6 +23,7 @@ function Index() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
       const nomeLimpo = nome.trim();
       const isAdminLogin = nomeLimpo.toLowerCase() === "admin";
@@ -31,28 +32,21 @@ function Index() {
       if (isAdminLogin) {
         email = "admin@pereiro.ce.gov.br";
       } else {
-        const query = supabase.from("usuarios").select("email").limit(2);
-
-        const { data: users, error: loginError } = await query.ilike("usuario", nomeLimpo);
-
-        if (loginError) throw new Error(loginError.message);
-        if (!users?.length) throw new Error("Usuário ou senha");
-        if (users.length > 1) {
-          throw new Error("Usuário ou senha");
-        }
-
-        email = users[0]?.email || "";
+        const result = await resolveLoginEmail({ data: { login: nomeLimpo } });
+        email = result.email || "";
       }
-      if (!email) throw new Error("Usuário ou senha");
+
+      if (!email) throw new Error("Usuario ou senha");
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
       });
-      if (signInError) throw new Error("Usuário ou senha");
+
+      if (signInError) throw new Error("Usuario ou senha");
       navigate({ to: "/admin" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Usuário ou senha");
+      setError(err instanceof Error ? err.message : "Usuario ou senha");
       setLoading(false);
     }
   };
@@ -76,13 +70,13 @@ function Index() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="nome" className="font-normal text-slate-700">
-              Usuário
+              Usuario
             </Label>
             <Input
               id="nome"
               type="text"
               autoComplete="username"
-              placeholder="Usuário"
+              placeholder="Usuario"
               className="h-11 rounded-md border-slate-300 bg-slate-50 font-normal focus-visible:ring-primary"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
