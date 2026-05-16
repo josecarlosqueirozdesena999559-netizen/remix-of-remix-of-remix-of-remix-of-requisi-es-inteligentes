@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLoginEmail } from "@/lib/login-actions";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -32,8 +31,13 @@ function Index() {
       if (isAdminLogin) {
         email = "admin@pereiro.ce.gov.br";
       } else {
-        const result = await resolveLoginEmail({ data: { login: nomeLimpo } });
-        email = result.email || "";
+        const { data: resolvedEmail, error: resolveError } = await (supabase as any).rpc(
+          "resolve_login_email",
+          { p_usuario: nomeLimpo },
+        );
+
+        if (resolveError) throw new Error(resolveError.message);
+        email = typeof resolvedEmail === "string" ? resolvedEmail : "";
       }
 
       if (!email) throw new Error("Usuario ou senha");
