@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload, Wrench } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -399,18 +399,17 @@ function MinhasAssinaturasPage() {
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                       <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
                       <td className="px-3 py-2 text-foreground">
-                        <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex flex-wrap items-center gap-2">
                           {hasRequestSigned && request.status === "aguardando_assinatura_saida" && (
                             <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                           )}
-                          {request.status === "correcao_requisicao" && (
-                            <Wrench className="h-4 w-4 text-amber-700" />
-                          )}
                           {getStageLabel(request.status)}
+                          {request.return_reason && request.status === "correcao_requisicao" && (
+                            <span className="text-xs text-amber-700">
+                              Motivo da devolução: {request.return_reason}
+                            </span>
+                          )}
                         </span>
-                        {request.return_reason && request.status === "correcao_requisicao" && (
-                          <p className="mt-1 text-xs text-amber-700">{request.return_reason}</p>
-                        )}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <Button
@@ -442,8 +441,7 @@ function MinhasAssinaturasPage() {
                               }
                             }}
                           >
-                            <Wrench className="h-4 w-4" />
-                            Corrigir
+                            Editar
                           </Button>
                         ) : (
                           <div className="flex flex-wrap items-center justify-end gap-2">
