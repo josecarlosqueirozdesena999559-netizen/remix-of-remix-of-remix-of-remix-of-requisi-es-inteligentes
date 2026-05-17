@@ -16,12 +16,28 @@ export const Route = createFileRoute("/admin/")({
 type PendingSignatureRequest = {
   id: string;
   saida_codigo: string | null;
+  solicitante?: string | null;
   status: string;
   signed_attachment: unknown;
 };
 
+type PendingNoticeItem = {
+  key: string;
+  label: string;
+};
+
 function getRequestDisplayCode(request: PendingSignatureRequest) {
   return request.saida_codigo?.trim() || request.id.slice(0, 8);
+}
+
+function buildPendingNoticeItem(request: PendingSignatureRequest, includeRequester = false): PendingNoticeItem {
+  const code = getRequestDisplayCode(request);
+  const requester = request.solicitante?.trim();
+
+  return {
+    key: request.id,
+    label: includeRequester && requester ? `Requisição ${code} - ${requester}` : `Requisição ${code}`,
+  };
 }
 
 function needsSignature(request: PendingSignatureRequest) {
@@ -36,7 +52,7 @@ function AdminHome() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [pendingSignatureCodes, setPendingSignatureCodes] = useState<string[]>([]);
+  const [pendingNoticeItems, setPendingNoticeItems] = useState<PendingNoticeItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,7 +68,7 @@ function AdminHome() {
           if (active) {
             setIsAdmin(false);
             setPendingCount(0);
-            setPendingSignatureCodes([]);
+            setPendingNoticeItems([]);
           }
           return;
         }
@@ -62,23 +78,25 @@ function AdminHome() {
         }
 
         if (profile.is_admin) {
-          const { count, error } = await supabase
+          const { data, count, error } = await supabase
             .from("requisicoes")
-            .select("id", { count: "exact", head: true })
-            .in("status", ["recebido", "requisicao_assinada"]);
+            .select("id,saida_codigo,solicitante,status,signed_attachment", { count: "exact" })
+            .in("status", ["recebido", "requisicao_assinada"])
+            .order("updated_at", { ascending: false });
 
           if (error) throw new Error(error.message);
           if (!active) return;
 
-          setPendingCount(count ?? 0);
-          setPendingSignatureCodes([]);
+          const pendingRequests = count ? ((data ?? []) as PendingSignatureRequest[]) : [];
+          setPendingCount(count ?? pendingRequests.length);
+          setPendingNoticeItems(pendingRequests.map((request) => buildPendingNoticeItem(request, true)));
           return;
         }
 
         if (!profile.cpf) {
           if (active) {
             setPendingCount(0);
-            setPendingSignatureCodes([]);
+            setPendingNoticeItems([]);
           }
           return;
         }
@@ -100,7 +118,7 @@ function AdminHome() {
 
         const pendingRequests = ((data ?? []) as PendingSignatureRequest[]).filter(needsSignature);
         setPendingCount(pendingRequests.length);
-        setPendingSignatureCodes(pendingRequests.map(getRequestDisplayCode));
+        setPendingNoticeItems(pendingRequests.map((request) => buildPendingNoticeItem(request)));
       } finally {
         if (active) setLoading(false);
       }
@@ -118,8 +136,10 @@ function AdminHome() {
       ? `Você tem ${pendingCount} ${pendingCount === 1 ? "solicitação pendente" : "solicitações pendentes"}.`
       : "Você não tem solicitações pendentes no momento."
     : pendingCount > 0
-      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "assinatura para preencher" : "assinaturas para preencher"}.`
-      : "Você não tem assinaturas pendentes no momento.";
+      ? `Você tem ${pendingCount} ${
+          pendingCount === 1 ? "requisição pendente de assinatura" : "requisições pendentes de assinatura"
+        }.`
+      : "Você não tem requisições pendentes de assinatura no momento.";
 
   return (
     <div className="space-y-4">
@@ -148,11 +168,11 @@ function AdminHome() {
                 Clique aqui
               </span>
             </span>
-            {!isAdmin && pendingSignatureCodes.length > 0 ? (
+            {pendingNoticeItems.length > 0 ? (
               <span className="block space-y-1 text-sm font-normal">
-                {pendingSignatureCodes.map((code) => (
-                  <span key={code} className="block">
-                    Requisição {code}
+                {pendingNoticeItems.map((item) => (
+                  <span key={item.key} className="block">
+                    {item.label}
                   </span>
                 ))}
               </span>
