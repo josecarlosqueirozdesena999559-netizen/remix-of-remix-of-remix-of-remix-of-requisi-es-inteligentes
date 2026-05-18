@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, MessageCircle, MessageSquareMore, Send } from "lucide-react";
+import { Loader2, MessageCircle, MessageSquareMore, Paperclip, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ type OutgoingMessage = {
     notificationType?: string | null;
     adminName?: string | null;
     adminEmail?: string | null;
+    stored_media?: AttachmentFile | null;
     sentBy?: {
       name?: string | null;
       email?: string | null;
@@ -296,6 +297,7 @@ function buildConversationSummaries(input: {
       direction: "outgoing",
       senderName: getOutgoingSenderName(message),
       status: input.outgoingStatuses?.get(message.message_id),
+      mediaAttachment: message.raw_payload?.stored_media || null,
     });
     byPhone.set(phone, next);
   });
@@ -368,7 +370,21 @@ function ConversasPage() {
   const [replyText, setReplyText] = useState("");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  async function fileToBase64(file: File) {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        const base64 = result.includes(",") ? result.split(",").pop() || "" : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo de audio."));
+      reader.readAsDataURL(file);
+    });
+  }
 
   async function loadConversations() {
       setError(null);
@@ -711,6 +727,69 @@ function ConversasPage() {
     }
   };
 
+  const handleAudioSelected = async (file: File | null | undefined) => {
+    const phone = selectedConversation?.phone || "";
+    if (!file) return;
+
+    if (!phone) {
+      setError("Selecione uma conversa para enviar audio.");
+      return;
+    }
+
+    if (!file.type.startsWith("audio/")) {
+      setError("Selecione um arquivo de audio valido.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+      const base64 = await fileToBase64(file);
+      const { data: result, error: replyError } = await supabase.functions.invoke(
+        "admin-whatsapp-reply",
+        {
+          body: {
+            to: phone,
+            audio: {
+              fileName: file.name,
+              mimeType: file.type || "audio/ogg",
+              base64,
+            },
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (replyError) {
+        throw new Error(
+          (replyError as any)?.context?.error ||
+            (replyError as any)?.context?.message ||
+            result?.error ||
+            replyError.message,
+        );
+      }
+
+      if (!result?.ok) throw new Error(result?.error || "Erro ao enviar audio.");
+
+      await loadConversations();
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Erro ao enviar audio.");
+    } finally {
+      if (audioInputRef.current) audioInputRef.current.value = "";
+      setSaving(false);
+    }
+  };
+
   const handleReplyKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
@@ -922,6 +1001,25 @@ function ConversasPage() {
 
                   <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
                     <div className="flex items-end gap-3">
+                      <input
+                        ref={audioInputRef}
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                        disabled={saving}
+                        onClick={() => audioInputRef.current?.click()}
+                        title="Enviar audio"
+                        aria-label="Enviar audio"
+                      >
+                        <Paperclip className="h-5 w-5" />
+                      </Button>
                       <Textarea
                         value={replyText}
                         onChange={(event) => setReplyText(event.target.value)}
@@ -934,7 +1032,7 @@ function ConversasPage() {
                         type="button"
                         size="icon"
                         className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
-                        disabled={!replyText.trim()}
+                        disabled={saving || !replyText.trim()}
                         onClick={() => void handleReply()}
                         title="Enviar"
                         aria-label="Enviar mensagem"
