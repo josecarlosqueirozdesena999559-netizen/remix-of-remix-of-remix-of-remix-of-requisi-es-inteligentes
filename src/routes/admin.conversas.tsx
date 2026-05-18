@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, MessageCircle, MessageSquareMore, Paperclip, Send } from "lucide-react";
+import { Loader2, MessageCircle, MessageSquareMore, Mic, Paperclip, Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -386,8 +386,12 @@ function ConversasPage() {
   const [replyText, setReplyText] = useState("");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   async function fileToBase64(file: File) {
     return await new Promise<string>((resolve, reject) => {
@@ -400,6 +404,11 @@ function ConversasPage() {
       reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo de audio."));
       reader.readAsDataURL(file);
     });
+  }
+
+  function stopRecordingTracks() {
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
   }
 
   async function loadConversations() {
@@ -644,6 +653,17 @@ function ConversasPage() {
     };
   }, [selectedConversation]);
 
+  useEffect(() => {
+    return () => {
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        // ignore stop failures during unmount
+      }
+      stopRecordingTracks();
+    };
+  }, []);
+
   const openConversation = (phone: string) => {
     setNotice(null);
     setError(null);
@@ -803,6 +823,81 @@ function ConversasPage() {
     } finally {
       if (audioInputRef.current) audioInputRef.current.value = "";
       setSaving(false);
+    }
+  };
+
+  const handleRecordAudio = async () => {
+    if (recording) {
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        setError("Nao foi possivel finalizar a gravacao.");
+      }
+      return;
+    }
+
+    if (!selectedConversation?.phone) {
+      setError("Selecione uma conversa para gravar audio.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Seu navegador nao suporta gravacao de audio.");
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType =
+        MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+            ? "audio/ogg;codecs=opus"
+            : "";
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+      recordingStreamRef.current = stream;
+      recordingChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        setRecording(false);
+        stopRecordingTracks();
+        setError("Erro ao gravar audio.");
+      };
+
+      recorder.onstop = () => {
+        const chunkType = recorder.mimeType || mimeType || "audio/webm";
+        const extension = chunkType.includes("ogg") ? "ogg" : "webm";
+        const blob = new Blob(recordingChunksRef.current, { type: chunkType });
+        const file = new File([blob], `gravacao-${Date.now()}.${extension}`, { type: chunkType });
+
+        recordingChunksRef.current = [];
+        mediaRecorderRef.current = null;
+        setRecording(false);
+        stopRecordingTracks();
+
+        if (blob.size > 0) {
+          void handleAudioSelected(file);
+        } else {
+          setError("A gravacao ficou vazia.");
+        }
+      };
+
+      recorder.start();
+      setRecording(true);
+      setNotice("Gravando audio... clique no quadrado para enviar.");
+    } catch {
+      stopRecordingTracks();
+      setRecording(false);
+      setError("Nao foi possivel acessar o microfone.");
     }
   };
 
@@ -1028,8 +1123,22 @@ function ConversasPage() {
                         type="button"
                         size="icon"
                         variant="outline"
-                        className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                        className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
+                          recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
+                        }`}
                         disabled={saving}
+                        onClick={() => void handleRecordAudio()}
+                        title={recording ? "Parar gravacao" : "Gravar audio"}
+                        aria-label={recording ? "Parar gravacao" : "Gravar audio"}
+                      >
+                        {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                        disabled={saving || recording}
                         onClick={() => audioInputRef.current?.click()}
                         title="Enviar audio"
                         aria-label="Enviar audio"
