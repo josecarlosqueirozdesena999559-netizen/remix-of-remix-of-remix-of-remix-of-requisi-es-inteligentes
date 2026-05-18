@@ -116,10 +116,11 @@ async function getAuthenticatedUser(request: Request) {
 
 async function requireAdmin(user: SupabaseUser) {
   const rows = (await supabaseFetch(
-    `usuarios?select=id,is_admin,role,email,auth_user_id&auth_user_id=eq.${encodeURIComponent(
+    `usuarios?select=id,nome,is_admin,role,email,auth_user_id&auth_user_id=eq.${encodeURIComponent(
       user.id,
     )}&limit=1`,
   )) as Array<{
+    nome: string | null;
     is_admin: boolean | null;
     role: string | null;
     email: string | null;
@@ -127,15 +128,15 @@ async function requireAdmin(user: SupabaseUser) {
   }>;
 
   const profile = rows[0];
-  if (profile?.is_admin || profile?.role === "admin") return;
+  if (profile?.is_admin || profile?.role === "admin") return profile;
 
   const email = user.email?.trim().toLowerCase();
   if (email) {
     const byEmail = (await supabaseFetch(
-      `usuarios?select=id,is_admin,role&email=ilike.${encodeURIComponent(email)}&limit=1`,
-    )) as Array<{ is_admin: boolean | null; role: string | null }>;
+      `usuarios?select=id,nome,is_admin,role&email=ilike.${encodeURIComponent(email)}&limit=1`,
+    )) as Array<{ nome: string | null; is_admin: boolean | null; role: string | null }>;
 
-    if (byEmail[0]?.is_admin || byEmail[0]?.role === "admin") return;
+    if (byEmail[0]?.is_admin || byEmail[0]?.role === "admin") return byEmail[0];
   }
 
   throw new Error("Apenas administradores podem responder conversas.");
@@ -262,7 +263,7 @@ Deno.serve(async (request) => {
     }
 
     const user = await getAuthenticatedUser(request);
-    await requireAdmin(user);
+    const adminProfile = await requireAdmin(user);
 
     const body = await request.json().catch(() => ({}));
     const to = typeof body.to === "string" ? normalizeWhatsAppPhoneNumber(body.to) : "";
@@ -293,7 +294,11 @@ Deno.serve(async (request) => {
         message_type: "text",
         body: text,
         occurred_at: new Date().toISOString(),
-        raw_payload: payload,
+        raw_payload: {
+          ...payload,
+          responder_name: adminProfile?.nome?.trim() || user.email?.trim() || "Admin",
+          responder_email: user.email?.trim() || null,
+        },
       }),
     });
 

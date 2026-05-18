@@ -1,6 +1,7 @@
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const DEFAULT_GRAPH_API_VERSION = "v25.0";
+const DEFAULT_ADMIN_DAILY_TEMPLATE_NAME = "boas_vindas_almoxarifado";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -84,9 +85,10 @@ async function getWhatsAppSettings() {
   const envAccessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN")?.trim();
   const envPhoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
   const envGraphApiVersion = Deno.env.get("WHATSAPP_GRAPH_API_VERSION")?.trim();
+  const envAdminDailyTemplateName = Deno.env.get("WHATSAPP_ADMIN_DAILY_TEMPLATE_NAME")?.trim();
 
   const rows = (await supabaseFetch(
-    "app_settings?select=key,value&key=in.(WHATSAPP_ACCESS_TOKEN,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_GRAPH_API_VERSION,WHATSAPP_ADMIN_NUMBERS)",
+    "app_settings?select=key,value&key=in.(WHATSAPP_ACCESS_TOKEN,WHATSAPP_PHONE_NUMBER_ID,WHATSAPP_GRAPH_API_VERSION,WHATSAPP_ADMIN_NUMBERS,WHATSAPP_ADMIN_DAILY_TEMPLATE_NAME)",
   )) as AppSetting[];
 
   const settings = new Map(rows.map((row) => [row.key, row.value]));
@@ -97,12 +99,16 @@ async function getWhatsAppSettings() {
     envGraphApiVersion ||
     DEFAULT_GRAPH_API_VERSION;
   const adminNumbers = parseAdminNumbers(settings.get("WHATSAPP_ADMIN_NUMBERS") || "");
+  const templateName =
+    settings.get("WHATSAPP_ADMIN_DAILY_TEMPLATE_NAME")?.trim() ||
+    envAdminDailyTemplateName ||
+    DEFAULT_ADMIN_DAILY_TEMPLATE_NAME;
 
   if (!accessToken || !phoneNumberId) {
     throw new Error("WhatsApp nao configurado.");
   }
 
-  return { accessToken, phoneNumberId, graphApiVersion, adminNumbers };
+  return { accessToken, phoneNumberId, graphApiVersion, adminNumbers, templateName };
 }
 
 async function insertAuditLogs(entries: AuditLogInput[]) {
@@ -140,6 +146,7 @@ async function sendWelcomeTemplate(input: {
   accessToken: string;
   phoneNumberId: string;
   graphApiVersion: string;
+  templateName: string;
 }) {
   const response = await fetch(
     `https://graph.facebook.com/${input.graphApiVersion}/${input.phoneNumberId}/messages`,
@@ -155,7 +162,7 @@ async function sendWelcomeTemplate(input: {
         to: normalizeWhatsAppPhoneNumber(input.to),
         type: "template",
         template: {
-          name: WELCOME_TEMPLATE_NAME,
+          name: input.templateName || WELCOME_TEMPLATE_NAME,
           language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
           components: [
             {
@@ -211,6 +218,7 @@ Deno.serve(async (request) => {
           accessToken: config.accessToken,
           phoneNumberId: config.phoneNumberId,
           graphApiVersion: config.graphApiVersion,
+          templateName: config.templateName,
         }),
       ),
     );
@@ -238,6 +246,7 @@ Deno.serve(async (request) => {
       ok: true,
       runId,
       sentAt: triggeredAt,
+      templateName: config.templateName,
       notifications,
     });
   } catch (error) {

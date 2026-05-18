@@ -40,12 +40,16 @@ type OutgoingMessage = {
     source?: string | null;
     audience?: string | null;
     notificationType?: string | null;
+    responder_name?: string | null;
+    responder_email?: string | null;
   } | null;
 };
 
 type UserRow = {
   nome: string | null;
   whatsapp: string | null;
+  is_admin?: boolean | null;
+  role?: string | null;
 };
 
 type UserSessionRow = {
@@ -63,6 +67,7 @@ type ConversationMessage = {
   direction: "incoming" | "outgoing";
   status?: "sending" | "failed";
   mediaAttachment?: AttachmentFile | null;
+  senderName?: string | null;
 };
 
 type ConversationSummary = {
@@ -175,6 +180,16 @@ function resolveConversationUser(phone: string, users: UserRow[]) {
   return null;
 }
 
+function isAdminUser(user: UserRow | null | undefined) {
+  if (!user) return false;
+  return Boolean(user.is_admin) || user.role === "admin";
+}
+
+function isKnownNonAdminUserPhone(phone: string, users: UserRow[]) {
+  const matchedUser = resolveConversationUser(phone, users);
+  return Boolean(matchedUser) && !isAdminUser(matchedUser);
+}
+
 function getDisplayName(phone: string, users: UserRow[]) {
   const matchedUser = resolveConversationUser(phone, users);
   return matchedUser?.nome?.trim() || formatPhone(phone);
@@ -197,10 +212,17 @@ function getMessagePlaceholder(messageType: string, direction: "incoming" | "out
   return "[mensagem sem texto]";
 }
 
-function getMessageDisplayBody(message: Pick<ConversationMessage, "body" | "messageType" | "direction">) {
+function getMessageDisplayBody(
+  message: Pick<ConversationMessage, "body" | "messageType" | "direction" | "senderName">,
+) {
   const body = message.body?.trim();
-  if (body) return body;
-  return getMessagePlaceholder(message.messageType, message.direction);
+  const baseBody = body || getMessagePlaceholder(message.messageType, message.direction);
+
+  if (message.direction === "outgoing" && message.senderName?.trim()) {
+    return `${message.senderName.trim()}: ${baseBody}`;
+  }
+
+  return baseBody;
 }
 
 function buildConversationSummaries(input: {
@@ -245,6 +267,7 @@ function buildConversationSummaries(input: {
       occurredAt: message.occurred_at || message.created_at,
       createdAt: message.created_at,
       direction: "outgoing",
+      senderName: message.raw_payload?.responder_name?.trim() || "Admin",
     });
     byPhone.set(phone, next);
   });
@@ -259,6 +282,7 @@ function buildConversationSummaries(input: {
   });
 
   return [...byPhone.entries()]
+    .filter(([phone]) => isKnownNonAdminUserPhone(phone, input.users))
     .map(([phone, messages]) => {
       const sortedMessages = [...messages].sort(
         (left, right) => getMessageSortTime(left) - getMessageSortTime(right),
@@ -310,6 +334,7 @@ function ConversasPage() {
   const [adminSessions, setAdminSessions] = useState<Map<string, string>>(new Map());
   const [adminNumbers, setAdminNumbers] = useState<string[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [currentAdminName, setCurrentAdminName] = useState("Admin");
   const [replyText, setReplyText] = useState("");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -325,6 +350,7 @@ function ConversasPage() {
         setUsers([]);
         return;
       }
+      setCurrentAdminName(profile.nome?.trim() || "Admin");
 
       const adminNumbersResult = await getWhatsAppAdminNumbers().catch(() => ({ numbers: [] }));
       const nextAdminNumbers = Array.isArray((adminNumbersResult as any)?.numbers)
@@ -345,7 +371,10 @@ function ConversasPage() {
           .not("recipient_id", "is", null)
           .order("created_at", { ascending: false })
           .limit(500),
-        supabase.from("usuarios").select("nome,whatsapp").not("whatsapp", "is", null),
+        supabase
+          .from("usuarios")
+          .select("nome,whatsapp,is_admin,role")
+          .not("whatsapp", "is", null),
         (supabase as any)
           .from("app_settings")
           .select("key,value")
@@ -570,6 +599,7 @@ function ConversasPage() {
         createdAt: now,
         direction: "outgoing",
         status: "sending",
+        senderName: currentAdminName,
       },
     ]);
 
@@ -784,7 +814,11 @@ function ConversasPage() {
                           </p>
                           {message.messageType === "audio" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
-                              <p className="whitespace-pre-wrap break-words">
+                              <p
+                                className={`whitespace-pre-wrap break-words ${
+                                  message.direction === "outgoing" ? "font-semibold" : ""
+                                }`}
+                              >
                                 {getMessageDisplayBody(message)}
                               </p>
                               <audio controls preload="none" className="max-w-full">
@@ -793,7 +827,11 @@ function ConversasPage() {
                               </audio>
                             </div>
                           ) : (
-                            <p className="whitespace-pre-wrap break-words">
+                            <p
+                              className={`whitespace-pre-wrap break-words ${
+                                message.direction === "outgoing" ? "font-semibold" : ""
+                              }`}
+                            >
                               {getMessageDisplayBody(message)}
                             </p>
                           )}
