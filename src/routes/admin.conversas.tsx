@@ -49,6 +49,14 @@ type OutgoingMessage = {
   } | null;
 };
 
+type OutgoingStatusRow = {
+  message_id: string;
+  recipient_id: string | null;
+  status: string;
+  occurred_at: string | null;
+  created_at: string;
+};
+
 type UserRow = {
   nome: string | null;
   whatsapp: string | null;
@@ -70,7 +78,7 @@ type ConversationMessage = {
   createdAt: string;
   direction: "incoming" | "outgoing";
   senderName?: string | null;
-  status?: "sending" | "failed";
+  status?: "sending" | "failed" | "sent" | "delivered" | "read";
   mediaAttachment?: AttachmentFile | null;
 };
 
@@ -232,9 +240,19 @@ function getMessageDisplayBody(message: Pick<ConversationMessage, "body" | "mess
   return getMessagePlaceholder(message.messageType, message.direction);
 }
 
+function getOutgoingStatusLabel(status?: ConversationMessage["status"]) {
+  if (status === "sending") return "Enviando...";
+  if (status === "failed") return "Falhou ao enviar";
+  if (status === "read") return "Lido";
+  if (status === "delivered") return "Entregue";
+  if (status === "sent") return "Enviado";
+  return null;
+}
+
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
+  outgoingStatuses?: Map<string, ConversationMessage["status"]>;
   optimisticMessages?: ConversationMessage[];
   userSessions?: Map<string, string>;
   adminSessions?: Map<string, string>;
@@ -275,6 +293,7 @@ function buildConversationSummaries(input: {
       createdAt: message.created_at,
       direction: "outgoing",
       senderName: getOutgoingSenderName(message),
+      status: input.outgoingStatuses?.get(message.message_id),
     });
     byPhone.set(phone, next);
   });
@@ -336,6 +355,9 @@ function ConversasPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<IncomingMessage[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
+  const [outgoingStatuses, setOutgoingStatuses] = useState<Map<string, ConversationMessage["status"]>>(
+    new Map(),
+  );
   const [optimisticMessages, setOptimisticMessages] = useState<ConversationMessage[]>([]);
   const [userSessions, setUserSessions] = useState<Map<string, string>>(new Map());
   const [adminSessions, setAdminSessions] = useState<Map<string, string>>(new Map());
@@ -363,7 +385,7 @@ function ConversasPage() {
         : [];
       setAdminNumbers(nextAdminNumbers);
 
-      const [incomingResult, outgoingResult, usersResult, sessionsResult] = await Promise.all([
+      const [incomingResult, outgoingResult, statusResult, usersResult, sessionsResult] = await Promise.all([
         (supabase as any)
           .from("whatsapp_webhook_message_audit")
           .select("message_id,sender_id,body,message_type,occurred_at,created_at,raw_payload")
@@ -376,6 +398,11 @@ function ConversasPage() {
           .not("recipient_id", "is", null)
           .order("created_at", { ascending: false })
           .limit(500),
+        (supabase as any)
+          .from("whatsapp_webhook_status_audit")
+          .select("message_id,recipient_id,status,occurred_at,created_at")
+          .order("created_at", { ascending: false })
+          .limit(1000),
         supabase
           .from("usuarios")
           .select("nome,whatsapp,is_admin,role")
@@ -386,10 +413,17 @@ function ConversasPage() {
           .like("key", "WHATSAPP_%_SESSION_%"),
       ]);
 
-      if (incomingResult.error || outgoingResult.error || usersResult.error || sessionsResult.error) {
+      if (
+        incomingResult.error ||
+        outgoingResult.error ||
+        statusResult.error ||
+        usersResult.error ||
+        sessionsResult.error
+      ) {
         throw new Error(
           incomingResult.error?.message ||
             outgoingResult.error?.message ||
+            statusResult.error?.message ||
             usersResult.error?.message ||
             sessionsResult.error?.message ||
             "Erro ao carregar conversas.",
@@ -409,6 +443,20 @@ function ConversasPage() {
               phonesMatch(adminNumber, message.recipient_id || ""),
             ),
         ),
+      );
+      setOutgoingStatuses(
+        ((statusResult.data ?? []) as OutgoingStatusRow[]).reduce((statuses, row) => {
+          const normalizedStatus = String(row.status || "").trim().toLowerCase();
+          if (
+            normalizedStatus === "sent" ||
+            normalizedStatus === "delivered" ||
+            normalizedStatus === "read" ||
+            normalizedStatus === "failed"
+          ) {
+            statuses.set(row.message_id, normalizedStatus as ConversationMessage["status"]);
+          }
+          return statuses;
+        }, new Map<string, ConversationMessage["status"]>()),
       );
       setUsers((usersResult.data ?? []) as UserRow[]);
       setUserSessions(
@@ -462,6 +510,11 @@ function ConversasPage() {
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_webhook_status_audit" },
+        () => void loadConversations(),
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "app_settings" },
         () => void loadConversations(),
       )
@@ -481,13 +534,14 @@ function ConversasPage() {
       buildConversationSummaries({
         incoming,
         outgoing,
+        outgoingStatuses,
         optimisticMessages,
         userSessions,
         adminSessions,
         adminNumbers,
         users,
       }),
-    [incoming, outgoing, optimisticMessages, userSessions, adminSessions, adminNumbers, users],
+    [incoming, outgoing, outgoingStatuses, optimisticMessages, userSessions, adminSessions, adminNumbers, users],
   );
   const selectedPhone = canonicalConversationPhone(search.phone);
 
@@ -515,17 +569,17 @@ function ConversasPage() {
     let active = true;
 
     async function loadMediaUrls() {
-      const audioMessages = (selectedConversation?.messages || []).filter(
+      const mediaMessages = (selectedConversation?.messages || []).filter(
         (message) =>
-          message.messageType === "audio" &&
+          (message.messageType === "audio" || message.messageType === "image") &&
           message.mediaAttachment?.storageBucket &&
           message.mediaAttachment?.storagePath,
       );
 
-      if (!audioMessages.length) return;
+      if (!mediaMessages.length) return;
 
       const resolvedEntries = await Promise.all(
-        audioMessages.map(async (message) => {
+        mediaMessages.map(async (message) => {
           try {
             const signedUrl = await resolveAttachmentUrl(message.mediaAttachment);
             return [message.id, signedUrl] as const;
@@ -811,7 +865,18 @@ function ConversasPage() {
                               ? message.senderName || "Admin"
                               : "Usuario"}
                           </p>
-                          {message.messageType === "audio" && messageMediaUrls[message.id] ? (
+                          {message.messageType === "image" && messageMediaUrls[message.id] ? (
+                            <div className="space-y-2">
+                              <img
+                                src={messageMediaUrls[message.id]}
+                                alt="Imagem recebida no WhatsApp"
+                                className="max-h-80 max-w-full rounded-md object-contain"
+                              />
+                              <p className="whitespace-pre-wrap break-words">
+                                {getMessageDisplayBody(message)}
+                              </p>
+                            </div>
+                          ) : message.messageType === "audio" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
                               <p className="whitespace-pre-wrap break-words">
                                 {getMessageDisplayBody(message)}
@@ -827,11 +892,8 @@ function ConversasPage() {
                             </p>
                           )}
                           <p className="mt-1 text-right text-[11px] text-[#667781]">
-                            {message.status === "sending"
-                              ? "Enviando..."
-                              : message.status === "failed"
-                                ? "Falhou ao enviar"
-                                : formatDateTime(message.createdAt || message.occurredAt)}
+                            {getOutgoingStatusLabel(message.status) ||
+                              formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
                         </div>
                       </div>
