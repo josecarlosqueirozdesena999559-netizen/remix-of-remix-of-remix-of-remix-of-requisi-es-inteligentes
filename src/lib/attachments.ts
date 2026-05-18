@@ -9,7 +9,7 @@ export interface AttachmentFile {
   signedUrl?: string;
   uploadedAt?: string;
   mimeType?: string;
-  kind?: "request" | "output" | "audio" | "image";
+  kind?: "request" | "output" | "audio" | "image" | "video";
 }
 
 interface SignedAttachmentPayload extends AttachmentFile {
@@ -38,7 +38,8 @@ function toAttachmentFile(value: unknown): AttachmentFile | null {
     value.kind === "request" ||
     value.kind === "output" ||
     value.kind === "audio" ||
-    value.kind === "image"
+    value.kind === "image" ||
+    value.kind === "video"
   ) {
     attachment.kind = value.kind;
   }

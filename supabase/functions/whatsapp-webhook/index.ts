@@ -483,6 +483,7 @@ function extractMessageBody(message: any) {
   }
   if (message?.type === "audio") return "[audio recebido]";
   if (message?.type === "image") return "[imagem recebida]";
+  if (message?.type === "video") return "[video recebido]";
 
   return null;
 }
@@ -549,6 +550,30 @@ async function storeIncomingImageAttachment(message: any) {
   };
 }
 
+async function storeIncomingVideoAttachment(message: any) {
+  const mediaId = String(message?.video?.id || "").trim();
+  if (!mediaId) return null;
+
+  const downloaded = await downloadMedia(mediaId);
+  const extension = getFileExtensionFromMimeType(
+    typeof message?.video?.mime_type === "string" ? message.video.mime_type : downloaded.contentType,
+  );
+  const sender = String(message?.from || "").replace(/\D/g, "") || "unknown";
+  const timestamp = String(message?.timestamp || Date.now()).replace(/\D/g, "") || String(Date.now());
+  const storagePath = `whatsapp-videos/${sender}/${timestamp}-${mediaId}.${extension}`;
+
+  await uploadToStorage(WHATSAPP_MEDIA_BUCKET, storagePath, downloaded.bytes, downloaded.contentType);
+
+  return {
+    fileName: `video-${timestamp}.${extension}`,
+    storageBucket: WHATSAPP_MEDIA_BUCKET,
+    storagePath,
+    uploadedAt: new Date().toISOString(),
+    mimeType: downloaded.contentType,
+    kind: "video",
+  };
+}
+
 function buildFallbackMessageId(message: any) {
   const from = String(message?.from || "").replace(/\D/g, "");
   const timestamp = String(message?.timestamp || "").trim() || String(Date.now());
@@ -585,6 +610,13 @@ async function buildMessageAuditRows(messages: any[]): Promise<WhatsAppMessageAu
           rawPayload = storedMedia ? { ...message, stored_media: storedMedia } : message;
         } catch (error) {
           console.error("Could not store incoming WhatsApp image.", error);
+        }
+      } else if (message?.type === "video" && message?.video?.id) {
+        try {
+          const storedMedia = await storeIncomingVideoAttachment(message);
+          rawPayload = storedMedia ? { ...message, stored_media: storedMedia } : message;
+        } catch (error) {
+          console.error("Could not store incoming WhatsApp video.", error);
         }
       }
 

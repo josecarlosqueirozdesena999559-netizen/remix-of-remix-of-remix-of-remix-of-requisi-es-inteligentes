@@ -232,6 +232,7 @@ function getInitials(name: string) {
 function getMessagePlaceholder(messageType: string, direction: "incoming" | "outgoing") {
   if (messageType === "audio") return direction === "incoming" ? "[audio recebido]" : "[audio enviado]";
   if (messageType === "image") return "[imagem]";
+  if (messageType === "video") return direction === "incoming" ? "[video recebido]" : "[video enviado]";
   return "[mensagem sem texto]";
 }
 
@@ -573,7 +574,9 @@ function ConversasPage() {
     async function loadMediaUrls() {
       const mediaMessages = (selectedConversation?.messages || []).filter(
         (message) =>
-          (message.messageType === "audio" || message.messageType === "image") &&
+          (message.messageType === "audio" ||
+            message.messageType === "image" ||
+            message.messageType === "video") &&
           message.mediaAttachment?.storageBucket &&
           message.mediaAttachment?.storagePath,
       );
@@ -878,6 +881,16 @@ function ConversasPage() {
                                   className="max-h-80 max-w-full rounded-md object-contain"
                                 />
                               </button>
+                              <p className="whitespace-pre-wrap break-words">
+                                {getMessageDisplayBody(message)}
+                              </p>
+                            </div>
+                          ) : message.messageType === "video" && messageMediaUrls[message.id] ? (
+                            <div className="space-y-2">
+                              <video controls preload="metadata" className="max-h-80 max-w-full rounded-md">
+                                <source src={messageMediaUrls[message.id]} />
+                                Seu navegador não suporta vídeo.
+                              </video>
                               <p className="whitespace-pre-wrap break-words">
                                 {getMessageDisplayBody(message)}
                               </p>
