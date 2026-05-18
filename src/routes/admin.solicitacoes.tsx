@@ -67,6 +67,18 @@ function hasOutputDocument(request: Requisicao) {
   );
 }
 
+function normalizeRequestedQuantity(item: RequestPdfItem) {
+  const raw = String(item.need ?? item.qtdNecessaria ?? item.quantidade_solicitada ?? "")
+    .trim()
+    .replace(",", ".");
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function hasRequestItems(request: Requisicao) {
+  return Array.isArray(request.items) && request.items.some((item) => normalizeRequestedQuantity(item) > 0);
+}
+
 function needsAdminOutput(request: Requisicao) {
   return !hasOutputDocument(request) && (
     request.status === "recebido" ||
@@ -212,6 +224,11 @@ function Solicitacoes() {
     if (!file) return;
 
     setUploadMessage(null);
+
+    if (!hasRequestItems(request)) {
+      setUploadMessage("Esta requisicao esta sem itens e nao pode seguir para a saida. Devolva para ser refeita com os itens corretos.");
+      return;
+    }
 
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       setUploadMessage("Envie apenas arquivo PDF.");
@@ -467,6 +484,7 @@ function Solicitacoes() {
               <tbody>
                 {selectedRequests.map((r) => {
                   const code = r.saida_codigo || codeByRequestId.get(r.id) || "-";
+                  const missingItems = !hasRequestItems(r);
                   return (
                     <tr key={r.id} className="border-t">
                       <td className="px-3 py-2 text-foreground">{r.solicitante || "-"}</td>
@@ -490,12 +508,17 @@ function Solicitacoes() {
                           ) : (
                             <span className="text-xs text-muted-foreground">Pendente</span>
                           )}
+                          {missingItems && (
+                            <span className="text-xs text-destructive">
+                              Requisicao sem itens
+                            </span>
+                          )}
                           <input
                             id={`saida-${r.id}`}
                             type="file"
                             accept="application/pdf,.pdf"
                             className="hidden"
-                            disabled={uploadingId === r.id}
+                            disabled={uploadingId === r.id || missingItems}
                             onChange={(event) => {
                               void handleOutputUpload(r, event.target.files?.[0]);
                               event.currentTarget.value = "";
@@ -506,7 +529,7 @@ function Solicitacoes() {
                             variant="outline"
                             size="sm"
                             className={`gap-2 ${draggingId === r.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                            disabled={uploadingId === r.id}
+                            disabled={uploadingId === r.id || missingItems}
                             onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
                           >
                             {uploadingId === r.id ? (

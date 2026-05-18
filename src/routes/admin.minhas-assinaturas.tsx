@@ -16,6 +16,7 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import type { RequestPdfItem } from "@/lib/request-pdf";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
@@ -35,6 +36,7 @@ interface Requisicao {
   data: string | null;
   created_at: string;
   status: string;
+  items: RequestPdfItem[] | null;
   signed_attachment: unknown;
   admin_attachment: unknown;
   return_reason: string | null;
@@ -42,7 +44,7 @@ interface Requisicao {
 }
 
 const baseSelect =
-  "id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,signed_attachment,admin_attachment";
+  "id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
 
 function getStageLabel(status: string) {
   if (status === "aguardando_assinatura_saida") return "Assinar saída";
@@ -99,6 +101,18 @@ function dedupeRequests(requests: Requisicao[]) {
     seen.add(key);
     return true;
   });
+}
+
+function normalizeRequestedQuantity(item: RequestPdfItem) {
+  const raw = String(item.need ?? item.qtdNecessaria ?? item.quantidade_solicitada ?? "")
+    .trim()
+    .replace(",", ".");
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function hasRequestItems(request: Requisicao) {
+  return Array.isArray(request.items) && request.items.some((item) => normalizeRequestedQuantity(item) > 0);
 }
 
 async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
@@ -206,6 +220,11 @@ function MinhasAssinaturasPage() {
 
     setMessage(null);
     setError(null);
+
+    if (!hasRequestItems(request)) {
+      setError("Esta requisicao esta sem itens e nao pode ser assinada. Refaça a requisicao com os itens corretos.");
+      return;
+    }
 
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
       setError("Envie apenas arquivo PDF.");
@@ -394,6 +413,7 @@ function MinhasAssinaturasPage() {
               <tbody>
                 {requests.map((request) => {
                   const hasRequestSigned = Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
+                  const missingItems = !hasRequestItems(request);
                   return (
                     <tr key={request.id} className="border-t">
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
@@ -404,6 +424,11 @@ function MinhasAssinaturasPage() {
                             <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                           )}
                           {getStageLabel(request.status)}
+                          {missingItems && (
+                            <span className="text-xs text-destructive">
+                              Requisicao sem itens. Refaça antes de assinar.
+                            </span>
+                          )}
                           {request.return_reason && request.status === "correcao_requisicao" && (
                             <span className="text-xs text-amber-700">
                               Motivo da devolução: {request.return_reason}
@@ -487,7 +512,7 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
-                                disabled={uploadingId === request.id}
+                                disabled={uploadingId === request.id || missingItems}
                                 onChange={(event) => {
                                   void handleUpload(request, event.target.files?.[0]);
                                   event.currentTarget.value = "";
@@ -498,7 +523,7 @@ function MinhasAssinaturasPage() {
                                 variant="outline"
                                 size="sm"
                                 className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                                disabled={uploadingId === request.id}
+                                disabled={uploadingId === request.id || missingItems}
                                 onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
                               >
                                 {uploadingId === request.id ? (
