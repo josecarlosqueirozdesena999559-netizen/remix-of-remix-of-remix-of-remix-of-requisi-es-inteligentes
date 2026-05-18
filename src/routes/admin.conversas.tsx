@@ -268,6 +268,31 @@ function getOutgoingStatusLabel(status?: ConversationMessage["status"]) {
   return null;
 }
 
+function getMicrophoneAccessMessage(error: unknown) {
+  const maybeError = error as { name?: string; message?: string } | null | undefined;
+  const errorName = String(maybeError?.name || "").trim();
+  const errorMessage = String(maybeError?.message || "").trim();
+
+  if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+    return "O acesso ao microfone foi bloqueado. Libere a permissao do site no navegador e tente novamente.";
+  }
+
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return "Nenhum microfone foi encontrado neste dispositivo.";
+  }
+
+  if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+    return "O microfone esta em uso por outro aplicativo. Feche o outro app e tente novamente.";
+  }
+
+  if (errorName === "SecurityError") {
+    return "O navegador bloqueou o microfone nesta pagina. Verifique as permissoes do site.";
+  }
+
+  if (errorMessage) return errorMessage;
+  return "Nao foi possivel acessar o microfone.";
+}
+
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
@@ -841,8 +866,18 @@ function ConversasPage() {
       return;
     }
 
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setError("O microfone so funciona em conexao segura (HTTPS).");
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Seu navegador nao suporta gravacao de audio.");
+      setError("Seu navegador nao suporta gravacao de audio. Use o clipe para enviar um arquivo.");
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined") {
+      setError("Seu navegador nao suporta gravacao direta. Use o clipe para enviar um arquivo.");
       return;
     }
 
@@ -850,6 +885,17 @@ function ConversasPage() {
     setNotice(null);
 
     try {
+      if (navigator.permissions?.query) {
+        const permissionStatus = await navigator.permissions
+          .query({ name: "microphone" as PermissionName })
+          .catch(() => null);
+
+        if (permissionStatus?.state === "denied") {
+          setError("O microfone esta bloqueado no navegador. Libere a permissao do site e tente novamente.");
+          return;
+        }
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType =
         MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -894,10 +940,10 @@ function ConversasPage() {
       recorder.start();
       setRecording(true);
       setNotice("Gravando audio... clique no quadrado para enviar.");
-    } catch {
+    } catch (error) {
       stopRecordingTracks();
       setRecording(false);
-      setError("Nao foi possivel acessar o microfone.");
+      setError(getMicrophoneAccessMessage(error));
     }
   };
 
