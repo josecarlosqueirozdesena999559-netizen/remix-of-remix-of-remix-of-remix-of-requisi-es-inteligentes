@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
@@ -365,6 +366,7 @@ function ConversasPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
+  const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations() {
@@ -861,17 +863,21 @@ function ConversasPage() {
                           }`}
                         >
                           <p className="mb-1 text-[11px] font-medium text-[#667781]">
-                            {message.direction === "outgoing"
-                              ? message.senderName || "Admin"
-                              : "Usuario"}
+                            {message.direction === "outgoing" ? "Admin" : "Usuario"}
                           </p>
                           {message.messageType === "image" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
-                              <img
-                                src={messageMediaUrls[message.id]}
-                                alt="Imagem recebida no WhatsApp"
-                                className="max-h-80 max-w-full rounded-md object-contain"
-                              />
+                              <button
+                                type="button"
+                                className="block"
+                                onClick={() => setExpandedImageUrl(messageMediaUrls[message.id] || null)}
+                              >
+                                <img
+                                  src={messageMediaUrls[message.id]}
+                                  alt="Imagem recebida no WhatsApp"
+                                  className="max-h-80 max-w-full rounded-md object-contain"
+                                />
+                              </button>
                               <p className="whitespace-pre-wrap break-words">
                                 {getMessageDisplayBody(message)}
                               </p>
@@ -947,6 +953,18 @@ function ConversasPage() {
           </Card>
         </div>
       )}
+
+      <Dialog open={Boolean(expandedImageUrl)} onOpenChange={(open) => !open && setExpandedImageUrl(null)}>
+        <DialogContent className="max-w-5xl border-0 bg-black/95 p-2 shadow-2xl">
+          {expandedImageUrl ? (
+            <img
+              src={expandedImageUrl}
+              alt="Imagem ampliada da conversa"
+              className="max-h-[88vh] w-full rounded-md object-contain"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
