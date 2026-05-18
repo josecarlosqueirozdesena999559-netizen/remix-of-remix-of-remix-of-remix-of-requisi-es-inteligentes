@@ -352,9 +352,7 @@ function getInitialSectionId(sections: RequestSection[], categoria: string | nul
 function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
   return (
     sections.find((section) => {
-      if (!productHasCategory(item.categoria, section.baseCategory)) return false;
-      if (section.matchesItem && !section.matchesItem(item)) return false;
-      return true;
+      return itemMatchesSection(item, section) && (!section.matchesItem || section.matchesItem(item));
     }) || null
   );
 }
