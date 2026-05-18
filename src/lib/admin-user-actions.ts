@@ -21,20 +21,28 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function createInternalEmail(usuario: string) {
-  const slug = usuario
+function normalizeInternalLoginSlug(usuario: string) {
+  return usuario
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ".")
     .replace(/^\.+|\.+$/g, "");
+}
+
+function createCompactLoginKey(usuario: string) {
+  return usuario.toLowerCase().replace(/\s+/g, "");
+}
+
+function createInternalEmail(usuario: string) {
+  const slug = normalizeInternalLoginSlug(usuario);
 
   return `${slug || "usuario"}@usuarios.solicite.local`;
 }
 
 function validateUserPayload(input: unknown): AdminUserPayload {
   if (!input || typeof input !== "object") {
-    throw new Error("Dados do usuário inválidos.");
+    throw new Error("Dados do usuario invalidos.");
   }
 
   const data = input as Partial<AdminUserPayload>;
@@ -90,7 +98,7 @@ async function requireAdmin(userId: string, email?: string | null) {
     if (profileByEmail?.is_admin) return;
   }
 
-  throw new Error("Apenas administradores podem gerenciar usuários.");
+  throw new Error("Apenas administradores podem gerenciar usuarios.");
 }
 
 async function findAuthUserByEmail(email: string) {
@@ -150,7 +158,7 @@ async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: str
   });
 
   if (error) throw new Error(error.message);
-  if (!data.user?.id) throw new Error("Não foi possível criar o login do usuário.");
+  if (!data.user?.id) throw new Error("Nao foi possivel criar o login do usuario.");
 
   return data.user.id;
 }
@@ -177,12 +185,12 @@ export const saveAdminUser = createServerFn({ method: "POST" })
         .maybeSingle();
 
       if (error) throw new Error(error.message);
-      if (!profile) throw new Error("Usuário não encontrado.");
+      if (!profile) throw new Error("Usuario nao encontrado.");
       currentProfile = profile;
     }
 
     if (payload.usuario.toLowerCase() === "admin" && !currentProfile?.is_admin) {
-      throw new Error("O login admin é reservado para o administrador.");
+      throw new Error("O login admin e reservado para o administrador.");
     }
 
     const { data: sameUserProfiles, error: sameUserError } = await (supabaseAdmin as any)
@@ -198,7 +206,46 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     );
 
     if (duplicatedUser) {
-      throw new Error("Já existe um usuário com este login. Informe outro usuário de acesso.");
+      throw new Error("Ja existe um usuario com este login. Informe outro usuario de acesso.");
+    }
+
+    const compactLoginKey = createCompactLoginKey(payload.usuario);
+    const { data: compactMatches, error: compactMatchesError } = await (supabaseAdmin as any)
+      .from("usuarios")
+      .select("id,usuario")
+      .limit(200);
+
+    if (compactMatchesError) throw new Error(compactMatchesError.message);
+
+    const ambiguousCompactLogin = (compactMatches ?? []).find(
+      (profile: { id: string; usuario: string | null }) =>
+        profile.id !== payload.id &&
+        createCompactLoginKey(profile.usuario || "") === compactLoginKey,
+    );
+
+    if (ambiguousCompactLogin) {
+      throw new Error(
+        `Ja existe um usuario com login equivalente (${ambiguousCompactLogin.usuario}). Use outro usuario sem variar apenas espacos.`,
+      );
+    }
+
+    const { data: sameEmailProfiles, error: sameEmailError } = await (supabaseAdmin as any)
+      .from("usuarios")
+      .select("id,usuario,email")
+      .ilike("email", payload.email)
+      .limit(2);
+
+    if (sameEmailError) throw new Error(sameEmailError.message);
+
+    const duplicatedInternalEmail = (sameEmailProfiles ?? []).find(
+      (profile: { id: string; usuario: string | null; email: string | null }) =>
+        profile.id !== payload.id,
+    );
+
+    if (duplicatedInternalEmail) {
+      throw new Error(
+        `O usuario de acesso informado gera o mesmo login interno de ${duplicatedInternalEmail.usuario}. Escolha outro usuario de acesso.`,
+      );
     }
 
     // Preserve the existing auth email for edits. The app authenticates by
@@ -224,7 +271,7 @@ export const saveAdminUser = createServerFn({ method: "POST" })
         ? currentProfile.categorias_permitidas
         : payload.categorias_permitidas,
       is_admin: currentProfile?.is_admin ?? false,
-      role: currentProfile?.role || "user",
+      role: currentProfile?.role || "usuario",
     };
 
     const result = payload.id
@@ -247,7 +294,7 @@ export const deleteAdminUser = createServerFn({ method: "POST" })
     await requireAdmin((context as any).userId, (context as any).claims?.email);
 
     const id = cleanString((data as { id?: string } | undefined)?.id);
-    if (!id) throw new Error("Usuário não informado.");
+    if (!id) throw new Error("Usuario nao informado.");
 
     const { data: profile, error } = await (supabaseAdmin as any)
       .from("usuarios")
@@ -256,8 +303,8 @@ export const deleteAdminUser = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (error) throw new Error(error.message);
-    if (!profile) throw new Error("Usuário não encontrado.");
-    if (profile.is_admin) throw new Error("Não é possível excluir um administrador por aqui.");
+    if (!profile) throw new Error("Usuario nao encontrado.");
+    if (profile.is_admin) throw new Error("Nao e possivel excluir um administrador por aqui.");
 
     const authUserId =
       profile.auth_user_id || (await findAuthUserByEmail(profile.email))?.id || null;
