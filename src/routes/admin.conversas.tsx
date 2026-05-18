@@ -52,6 +52,8 @@ type OutgoingMessage = {
 type UserRow = {
   nome: string | null;
   whatsapp: string | null;
+  is_admin?: boolean | null;
+  role?: string | null;
 };
 
 type UserSessionRow = {
@@ -192,6 +194,16 @@ function resolveConversationUser(phone: string, users: UserRow[]) {
   return null;
 }
 
+function isAdminUser(user: UserRow | null | undefined) {
+  if (!user) return false;
+  return Boolean(user.is_admin) || user.role === "admin";
+}
+
+function isKnownNonAdminUserPhone(phone: string, users: UserRow[]) {
+  const matchedUser = resolveConversationUser(phone, users);
+  return Boolean(matchedUser) && !isAdminUser(matchedUser);
+}
+
 function getDisplayName(phone: string, users: UserRow[]) {
   const matchedUser = resolveConversationUser(phone, users);
   return matchedUser?.nome?.trim() || formatPhone(phone);
@@ -277,6 +289,7 @@ function buildConversationSummaries(input: {
   });
 
   return [...byPhone.entries()]
+    .filter(([phone]) => isKnownNonAdminUserPhone(phone, input.users))
     .map(([phone, messages]) => {
       const sortedMessages = [...messages].sort(
         (left, right) => getMessageSortTime(left) - getMessageSortTime(right),
@@ -363,7 +376,10 @@ function ConversasPage() {
           .not("recipient_id", "is", null)
           .order("created_at", { ascending: false })
           .limit(500),
-        supabase.from("usuarios").select("nome,whatsapp").not("whatsapp", "is", null),
+        supabase
+          .from("usuarios")
+          .select("nome,whatsapp,is_admin,role")
+          .not("whatsapp", "is", null),
         (supabase as any)
           .from("app_settings")
           .select("key,value")
