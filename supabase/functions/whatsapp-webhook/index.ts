@@ -481,6 +481,9 @@ function extractMessageBody(message: any) {
   if (typeof message?.interactive?.button_reply?.id === "string") {
     return message.interactive.button_reply.id;
   }
+  if (typeof message?.reaction?.emoji === "string") {
+    return `Reagiu ${message.reaction.emoji}`;
+  }
   if (message?.type === "audio") return "[audio recebido]";
   if (message?.type === "image") return "[imagem recebida]";
   if (message?.type === "video") return "[video recebido]";

@@ -26,6 +26,10 @@ type IncomingMessage = {
   occurred_at: string | null;
   created_at: string;
   raw_payload?: {
+    type?: string | null;
+    reaction?: {
+      emoji?: string | null;
+    } | null;
     stored_media?: AttachmentFile | null;
   } | null;
 };
@@ -234,6 +238,7 @@ function getMessagePlaceholder(messageType: string, direction: "incoming" | "out
   if (messageType === "audio") return direction === "incoming" ? "[audio recebido]" : "[audio enviado]";
   if (messageType === "image") return "[imagem]";
   if (messageType === "video") return direction === "incoming" ? "[video recebido]" : "[video enviado]";
+  if (messageType === "reaction") return "[reacao]";
   return "[mensagem sem texto]";
 }
 
@@ -241,6 +246,17 @@ function getMessageDisplayBody(message: Pick<ConversationMessage, "body" | "mess
   const body = message.body?.trim();
   if (body) return body;
   return getMessagePlaceholder(message.messageType, message.direction);
+}
+
+function getIncomingMessageDisplayBody(message: IncomingMessage) {
+  const body = message.body?.trim();
+  if (body) return body;
+
+  const reactionEmoji = message.raw_payload?.reaction?.emoji?.trim();
+  if (reactionEmoji) return `Reagiu com ${reactionEmoji}`;
+
+  const messageType = message.message_type?.trim() || message.raw_payload?.type?.trim() || "";
+  return getMessagePlaceholder(messageType, "incoming");
 }
 
 function getOutgoingStatusLabel(status?: ConversationMessage["status"]) {
@@ -272,7 +288,7 @@ function buildConversationSummaries(input: {
     next.push({
       id: message.message_id,
       phone,
-      body: message.body?.trim() || getMessagePlaceholder(message.message_type?.trim() || "", "incoming"),
+      body: getIncomingMessageDisplayBody(message),
       messageType: message.message_type?.trim() || "desconhecida",
       occurredAt: message.occurred_at || message.created_at,
       createdAt: message.created_at,
