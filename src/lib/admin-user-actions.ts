@@ -200,12 +200,12 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       throw new Error("Já existe um usuário com este login. Informe outro usuário de acesso.");
     }
 
+    // Preserve the existing auth email for edits. The app authenticates by
+    // `usuario` via `resolve_login_email`, so changing profile fields should
+    // not force an auth email rotation.
     const authPayload = {
       ...payload,
-      email:
-        currentProfile?.is_admin && currentProfile.email
-          ? currentProfile.email
-          : payload.email,
+      email: currentProfile?.email || payload.email,
     };
 
     const authUserId = await ensureAuthUser(authPayload, currentProfile?.auth_user_id);
