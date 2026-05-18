@@ -166,12 +166,13 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       email: string | null;
       is_admin: boolean;
       role: string | null;
+      categorias_permitidas: unknown;
     } | null = null;
 
     if (payload.id) {
       const { data: profile, error } = await (supabaseAdmin as any)
         .from("usuarios")
-        .select("auth_user_id,email,is_admin,role")
+        .select("auth_user_id,email,is_admin,role,categorias_permitidas")
         .eq("id", payload.id)
         .maybeSingle();
 
@@ -219,7 +220,9 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       funcao: payload.funcao,
       setor: payload.setor,
       unidade_nome: payload.unidade_nome,
-      categorias_permitidas: payload.categorias_permitidas,
+      categorias_permitidas: currentProfile?.is_admin
+        ? currentProfile.categorias_permitidas
+        : payload.categorias_permitidas,
       is_admin: currentProfile?.is_admin ?? false,
       role: currentProfile?.role || "user",
     };
