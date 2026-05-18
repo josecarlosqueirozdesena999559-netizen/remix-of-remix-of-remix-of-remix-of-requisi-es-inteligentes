@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
@@ -19,6 +19,8 @@ interface Setor {
 
 function LocaisPage() {
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isChildRoute = pathname !== "/admin/cadastros/locais";
   const { data, loading, error } = useSupabaseList<Setor>("setores");
 
   const columns: Column<Setor>[] = [
@@ -27,6 +29,10 @@ function LocaisPage() {
     { key: "programa", label: "Programa", render: (r) => formatProgramName(r.programa) || "—" },
     { key: "descricao", label: "Descrição", render: (r) => r.descricao || "—" },
   ];
+
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   return (
     <ListPage

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
@@ -18,11 +18,17 @@ interface Programa {
 
 function ProgramasPage() {
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isChildRoute = pathname !== "/admin/cadastros/programas";
   const { data, loading, error } = useSupabaseList<Programa>("programas");
 
   const columns: Column<Programa>[] = [
     { key: "nome", label: "Nome", render: (programa) => formatProgramName(programa.nome) },
   ];
+
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   return (
     <ListPage
