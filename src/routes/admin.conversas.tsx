@@ -1190,7 +1190,9 @@ function ConversasPage() {
                           }`}
                         >
                           <p className="mb-1 text-[11px] font-medium text-[#667781]">
-                            {message.direction === "outgoing" ? "Admin" : "Usuario"}
+                            {message.direction === "outgoing"
+                              ? message.senderName?.trim() || "Admin"
+                              : selectedConversation.displayName}
                           </p>
                           {message.messageType === "image" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
