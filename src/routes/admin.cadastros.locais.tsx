@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
 import { formatProgramName } from "@/lib/program-options";
@@ -35,9 +37,31 @@ function LocaisPage() {
       loading={loading}
       error={error}
       columns={columns}
+      actions={(local) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() =>
+            navigate({
+              to: "/admin/cadastros/locais/$localId",
+              params: { localId: String(local.id) },
+            })
+          }
+        >
+          <Pencil className="h-4 w-4" />
+          Editar
+        </Button>
+      )}
       searchKeys={["nome", "responsavel", "programa"]}
       newLabel="Novo local"
-      onNew={() => navigate({ to: "/admin/cadastros/locais/novo" })}
+      onNew={() =>
+        navigate({
+          to: "/admin/cadastros/locais/$localId",
+          params: { localId: "novo" },
+        })
+      }
     />
   );
 }
