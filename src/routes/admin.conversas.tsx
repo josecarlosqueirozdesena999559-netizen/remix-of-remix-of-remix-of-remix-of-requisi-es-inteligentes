@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, MessageCircle, MessageSquareMore, Mic, Paperclip, Send, Square } from "lucide-react";
+import { Bell, BellOff, Loader2, MessageCircle, MessageSquareMore, Mic, Paperclip, Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -412,11 +412,16 @@ function ConversasPage() {
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification === "undefined" ? "denied" : Notification.permission,
+  );
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const latestIncomingMessageIdsRef = useRef<Map<string, string>>(new Map());
+  const notificationsBootstrappedRef = useRef(false);
 
   async function fileToBase64(file: File) {
     return await new Promise<string>((resolve, reject) => {
@@ -615,6 +620,51 @@ function ConversasPage() {
   const selectedPhone = canonicalConversationPhone(search.phone);
 
   useEffect(() => {
+    if (typeof Notification === "undefined") return;
+    setNotificationPermission(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    if (!conversations.length) return;
+
+    const latestIncomingByPhone = new Map<string, ConversationMessage>();
+    conversations.forEach((conversation) => {
+      const latestIncoming =
+        [...conversation.messages].reverse().find((message) => message.direction === "incoming") || null;
+      if (latestIncoming) latestIncomingByPhone.set(conversation.phone, latestIncoming);
+    });
+
+    if (!notificationsBootstrappedRef.current) {
+      latestIncomingMessageIdsRef.current = new Map(
+        [...latestIncomingByPhone.entries()].map(([phone, message]) => [phone, message.id]),
+      );
+      notificationsBootstrappedRef.current = true;
+      return;
+    }
+
+    latestIncomingByPhone.forEach((message, phone) => {
+      const previousMessageId = latestIncomingMessageIdsRef.current.get(phone);
+      if (previousMessageId === message.id) return;
+
+      latestIncomingMessageIdsRef.current.set(phone, message.id);
+
+      if (notificationPermission !== "granted" || typeof Notification === "undefined") return;
+
+      const conversation = conversations.find((item) => item.phone === phone);
+      const notification = new Notification(conversation?.displayName || "Nova mensagem", {
+        body: getMessageDisplayBody(message),
+        tag: `whatsapp-${phone}`,
+      });
+
+      notification.onclick = () => {
+        window.focus();
+        openConversation(phone);
+        notification.close();
+      };
+    });
+  }, [conversations, notificationPermission]);
+
+  useEffect(() => {
     if (
       selectedPhone &&
       !conversations.some((conversation) => conversation.phone === selectedPhone)
@@ -786,6 +836,30 @@ function ConversasPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEnableNotifications = async () => {
+    if (typeof Notification === "undefined") {
+      setError("Seu navegador nao suporta notificacoes.");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      setNotice("As notificacoes ja estao ativadas.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+
+    if (permission === "granted") {
+      setError(null);
+      setNotice("Notificacoes ativadas para novas mensagens.");
+      return;
+    }
+
+    setNotice(null);
+    setError("Permita as notificacoes do site no navegador para receber alertas de novas mensagens.");
   };
 
   const handleAudioSelected = async (file: File | null | undefined) => {
@@ -1078,6 +1152,20 @@ function ConversasPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => void handleEnableNotifications()}
+                      >
+                        {notificationPermission === "granted" ? (
+                          <Bell className="h-4 w-4" />
+                        ) : (
+                          <BellOff className="h-4 w-4" />
+                        )}
+                        {notificationPermission === "granted" ? "Alertas ligados" : "Ativar alertas"}
+                      </Button>
                       <p className="text-xs text-muted-foreground">
                         {selectedConversation.messages.length}{" "}
                         {selectedConversation.messages.length === 1 ? "mensagem" : "mensagens"}
