@@ -86,24 +86,24 @@ export function ListPage<T>({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground">{breadcrumb}</p>
           <h2 className="text-2xl text-foreground">{title}</h2>
           {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
         </div>
         {onNew && (
-          <Button onClick={onNew} className="gap-2">
+          <Button onClick={onNew} className="w-full gap-2 sm:w-auto">
             <Plus className="h-4 w-4" />
             {newLabel}
           </Button>
         )}
       </div>
 
-      <Card className="p-4 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <Card className="space-y-4 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           {searchKeys && searchKeys.length > 0 && (
-            <div className="relative max-w-sm flex-1">
+            <div className="relative w-full sm:max-w-sm sm:flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar..."
@@ -113,10 +113,10 @@ export function ListPage<T>({
               />
             </div>
           )}
-          {bulkActions}
+          {bulkActions ? <div className="w-full sm:w-auto">{bulkActions}</div> : null}
         </div>
 
-        <div className="rounded-md border overflow-x-auto">
+        <div className="overflow-x-auto rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
