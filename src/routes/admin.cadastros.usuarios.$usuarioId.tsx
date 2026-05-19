@@ -172,7 +172,7 @@ function UsuarioFormPage() {
 
     const local = locais.find((item) => item.nome === nextLocal);
     if (local?.programa) {
-      setSetor(formatProgramName(local.programa));
+      setSetor(local.programa);
     }
   };
 

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { ADMIN_SECTIONS } from "@/lib/admin-sections";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { normalizeProductCategory } from "@/lib/product-options";
@@ -19,6 +20,10 @@ type AdminUserPayload = {
 
 function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isAdminSection(value: string) {
+  return (ADMIN_SECTIONS as readonly string[]).includes(value);
 }
 
 function normalizeInternalLoginSlug(usuario: string) {
@@ -258,6 +263,14 @@ export const saveAdminUser = createServerFn({ method: "POST" })
 
     const authUserId = await ensureAuthUser(authPayload, currentProfile?.auth_user_id);
 
+    const preservedAdminSections =
+      currentProfile?.is_admin && Array.isArray(currentProfile.categorias_permitidas)
+        ? currentProfile.categorias_permitidas
+            .map(String)
+            .map((value) => value.trim())
+            .filter(isAdminSection)
+        : [];
+
     const profilePayload = {
       auth_user_id: authUserId,
       nome: payload.nome,
@@ -268,7 +281,7 @@ export const saveAdminUser = createServerFn({ method: "POST" })
       setor: payload.setor,
       unidade_nome: payload.unidade_nome,
       categorias_permitidas: currentProfile?.is_admin
-        ? currentProfile.categorias_permitidas
+        ? [...preservedAdminSections, ...(payload.categorias_permitidas ?? [])]
         : payload.categorias_permitidas,
       is_admin: currentProfile?.is_admin ?? false,
       role: currentProfile?.role || "usuario",
