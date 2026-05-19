@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   buildWelcomeTemplateParameters,
@@ -10,6 +9,16 @@ import {
 import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp.server";
 
 const WHATSAPP_ADMIN_NUMBERS_KEY = "WHATSAPP_ADMIN_NUMBERS";
+
+type ServerFnAuthPayload = {
+  accessToken?: string | null;
+};
+
+function getAccessToken(input: unknown) {
+  if (!input || typeof input !== "object") return "";
+  const value = (input as ServerFnAuthPayload).accessToken;
+  return typeof value === "string" ? value.trim() : "";
+}
 
 function normalizeWhatsAppPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "");
@@ -79,6 +88,19 @@ async function requireAdmin(userId: string, email?: string | null) {
   throw new Error("Apenas administradores podem alterar esta configuracao.");
 }
 
+async function requireAdminFromAccessToken(input: unknown) {
+  const accessToken = getAccessToken(input);
+  if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+  const { data, error } = await (supabaseAdmin as any).auth.getUser(accessToken);
+  if (error) throw new Error(error.message);
+
+  const user = data.user;
+  if (!user?.id) throw new Error("Sessao expirada. Entre novamente.");
+
+  await requireAdmin(user.id, user.email);
+}
+
 async function getSavedAdminNumbers() {
   const { data, error } = await (supabaseAdmin as any)
     .from("app_settings")
@@ -114,20 +136,16 @@ async function sendAdminWelcomeNotifications(
   }));
 }
 
-export const getWhatsAppAdminNumbers = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    await requireAdmin((context as any).userId, (context as any).claims?.email);
+export const getWhatsAppAdminNumbers = createServerFn({ method: "POST" }).handler(async ({ data }) => {
+    await requireAdminFromAccessToken(data);
 
     return {
       numbers: await getSavedAdminNumbers(),
     };
   });
 
-export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ data, context }) => {
-    await requireAdmin((context as any).userId, (context as any).claims?.email);
+export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" }).handler(async ({ data }) => {
+    await requireAdminFromAccessToken(data);
 
     const rawNumbers =
       data && typeof data === "object" && typeof (data as any).numbers === "string"

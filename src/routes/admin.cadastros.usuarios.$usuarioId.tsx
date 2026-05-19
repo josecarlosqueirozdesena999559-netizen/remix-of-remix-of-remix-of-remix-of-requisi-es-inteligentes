@@ -207,7 +207,13 @@ function UsuarioFormPage() {
     };
 
     try {
-      await saveAdminUser({ data: payload });
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      await saveAdminUser({ data: { ...payload, accessToken } });
       setSaving(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
@@ -223,7 +229,13 @@ function UsuarioFormPage() {
     setError(null);
 
     try {
-      await deleteAdminUser({ data: { id: usuarioId } });
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      await deleteAdminUser({ data: { id: usuarioId, accessToken } });
       setDeleteOpen(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {

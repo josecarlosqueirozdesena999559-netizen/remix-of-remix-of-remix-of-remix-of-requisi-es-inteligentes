@@ -107,7 +107,13 @@ function ConfiguracoesPage() {
 
         if (profile?.is_admin) {
           try {
-            const result = await getWhatsAppAdminNumbers();
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw new Error(sessionError.message);
+
+            const accessToken = sessionData.session?.access_token;
+            if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+            const result = await getWhatsAppAdminNumbers({ data: { accessToken } });
             setAdminNumbers(getAdminNumbersFromResult(result).join("\n"));
           } catch (error) {
             setAdminNumbersError(getErrorMessage(error, "Erro ao carregar números."));
@@ -167,7 +173,15 @@ function ConfiguracoesPage() {
     setSavingAdminNumbers(true);
 
     try {
-      const result = await saveWhatsAppAdminNumbers({ data: { numbers: adminNumbers } });
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      const result = await saveWhatsAppAdminNumbers({
+        data: { numbers: adminNumbers, accessToken },
+      });
       const numbers = getAdminNumbersFromResult(result);
       const welcomeNotifications = getWelcomeNotificationsFromResult(result);
       const failedWelcomes = welcomeNotifications.filter((item) => !item.ok);

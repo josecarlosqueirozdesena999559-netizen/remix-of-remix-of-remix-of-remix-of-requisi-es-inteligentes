@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { ADMIN_SECTIONS } from "@/lib/admin-sections";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { normalizeProductCategory } from "@/lib/product-options";
 
@@ -18,12 +17,21 @@ type AdminUserPayload = {
   password?: string | null;
 };
 
+type ServerFnAuthPayload = {
+  accessToken?: string | null;
+};
+
 function cleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
 function isAdminSection(value: string) {
   return (ADMIN_SECTIONS as readonly string[]).includes(value);
+}
+
+function getAccessToken(input: unknown) {
+  if (!input || typeof input !== "object") return "";
+  return cleanString((input as ServerFnAuthPayload).accessToken);
 }
 
 function normalizeInternalLoginSlug(usuario: string) {
@@ -106,6 +114,19 @@ async function requireAdmin(userId: string, email?: string | null) {
   throw new Error("Apenas administradores podem gerenciar usuarios.");
 }
 
+async function requireAdminFromAccessToken(input: unknown) {
+  const accessToken = getAccessToken(input);
+  if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+  const { data, error } = await (supabaseAdmin as any).auth.getUser(accessToken);
+  if (error) throw new Error(error.message);
+
+  const user = data.user;
+  if (!user?.id) throw new Error("Sessao expirada. Entre novamente.");
+
+  await requireAdmin(user.id, user.email);
+}
+
 async function findAuthUserByEmail(email: string) {
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await (supabaseAdmin as any).auth.admin.listUsers({
@@ -168,10 +189,8 @@ async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: str
   return data.user.id;
 }
 
-export const saveAdminUser = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ data, context }) => {
-    await requireAdmin((context as any).userId, (context as any).claims?.email);
+export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({ data }) => {
+    await requireAdminFromAccessToken(data);
 
     const payload = validateUserPayload(data);
     let currentProfile: {
@@ -301,10 +320,8 @@ export const saveAdminUser = createServerFn({ method: "POST" })
     return { id: result.data.id };
   });
 
-export const deleteAdminUser = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ data, context }) => {
-    await requireAdmin((context as any).userId, (context as any).claims?.email);
+export const deleteAdminUser = createServerFn({ method: "POST" }).handler(async ({ data }) => {
+    await requireAdminFromAccessToken(data);
 
     const id = cleanString((data as { id?: string } | undefined)?.id);
     if (!id) throw new Error("Usuario nao informado.");

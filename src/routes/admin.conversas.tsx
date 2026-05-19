@@ -453,7 +453,15 @@ function ConversasPage() {
         return;
       }
 
-      const adminNumbersResult = await getWhatsAppAdminNumbers().catch(() => ({ numbers: [] }));
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      const adminNumbersResult = await getWhatsAppAdminNumbers({
+        data: { accessToken },
+      }).catch(() => ({ numbers: [] }));
       const nextAdminNumbers = Array.isArray((adminNumbersResult as any)?.numbers)
         ? (adminNumbersResult as any).numbers.map(String)
         : [];
