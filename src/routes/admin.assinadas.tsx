@@ -558,18 +558,18 @@ function AssinadasPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reviewMode === "devolver" ? "Devolver requisicao" : "Excluir requisicao"}
+              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
             </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
-                ? "Escolha se o erro esta na requisicao ou na saida para enviar o fluxo de volta ao ponto correto."
-                : "A requisicao saira da fila, mas o historico e o motivo ficam registrados no banco."}
+                ? "Escolha se o erro está na requisição ou na saída para devolver o fluxo ao ponto correto."
+                : "A requisição sairá da fila, mas o histórico e o motivo ficarão registrados no sistema."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Onde esta o erro?</p>
+              <p className="text-sm text-muted-foreground">Onde está o erro?</p>
               <RadioGroup
                 value={reviewTarget}
                 onValueChange={(value) => setReviewTarget(value as ReviewTarget)}
@@ -578,18 +578,18 @@ function AssinadasPage() {
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="requisicao" id="review-target-requisicao" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-requisicao">Erro na requisicao</Label>
+                    <Label htmlFor="review-target-requisicao">Erro na requisição</Label>
                     <span className="block text-xs text-muted-foreground">
-                      O usuario recebe a mesma requisicao com os itens para corrigir e reenviar.
+                      O usuário recebe a mesma requisição com os itens para corrigir e reenviar.
                     </span>
                   </span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="saida" id="review-target-saida" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-saida">Erro na saida</Label>
+                    <Label htmlFor="review-target-saida">Erro na saída</Label>
                     <span className="block text-xs text-muted-foreground">
-                      A saida volta para pendente e a requisicao assinada continua preservada.
+                      A saída volta para pendente, e a requisição assinada continua preservada.
                     </span>
                   </span>
                 </label>
@@ -613,7 +613,7 @@ function AssinadasPage() {
             </Button>
             <Button type="button" onClick={() => void submitReview()} disabled={reviewSaving}>
               {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {reviewMode === "devolver" ? "Confirmar devolucao" : "Excluir"}
+              {reviewMode === "devolver" ? "Confirmar devolução" : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>
