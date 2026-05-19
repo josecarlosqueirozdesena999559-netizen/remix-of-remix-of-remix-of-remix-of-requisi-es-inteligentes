@@ -422,6 +422,7 @@ function ConversasPage() {
   const recordingStreamRef = useRef<MediaStream | null>(null);
   const latestIncomingMessageIdsRef = useRef<Map<string, string>>(new Map());
   const notificationsBootstrappedRef = useRef(false);
+  const notificationRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   async function fileToBase64(file: File) {
     return await new Promise<string>((resolve, reject) => {
@@ -633,6 +634,68 @@ function ConversasPage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    let active = true;
+
+    async function registerNotificationWorker() {
+      try {
+        const registration = await navigator.serviceWorker.register("/notification-sw.js");
+        if (!active) return;
+        notificationRegistrationRef.current = registration;
+      } catch {
+        notificationRegistrationRef.current = null;
+      }
+    }
+
+    void registerNotificationWorker();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function showIncomingMessageNotification(
+    phone: string,
+    title: string,
+    body: string,
+  ) {
+    if (notificationPermission !== "granted" || typeof Notification === "undefined") return;
+
+    const notificationUrl =
+      typeof window === "undefined"
+        ? `/admin/conversas?phone=${encodeURIComponent(phone)}`
+        : `${window.location.origin}/admin/conversas?phone=${encodeURIComponent(phone)}`;
+
+    try {
+      if (notificationRegistrationRef.current) {
+        await notificationRegistrationRef.current.showNotification(title, {
+          body,
+          tag: `whatsapp-${phone}`,
+          renotify: true,
+          data: {
+            url: notificationUrl,
+          },
+        });
+        return;
+      }
+    } catch {
+      notificationRegistrationRef.current = null;
+    }
+
+    const notification = new Notification(title, {
+      body,
+      tag: `whatsapp-${phone}`,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      openConversation(phone);
+      notification.close();
+    };
+  }
+
+  useEffect(() => {
     if (!conversations.length) return;
 
     const latestIncomingByPhone = new Map<string, ConversationMessage>();
@@ -656,19 +719,12 @@ function ConversasPage() {
 
       latestIncomingMessageIdsRef.current.set(phone, message.id);
 
-      if (notificationPermission !== "granted" || typeof Notification === "undefined") return;
-
       const conversation = conversations.find((item) => item.phone === phone);
-      const notification = new Notification(conversation?.displayName || "Nova mensagem", {
-        body: getMessageDisplayBody(message),
-        tag: `whatsapp-${phone}`,
-      });
-
-      notification.onclick = () => {
-        window.focus();
-        openConversation(phone);
-        notification.close();
-      };
+      void showIncomingMessageNotification(
+        phone,
+        conversation?.displayName || "Nova mensagem",
+        getMessageDisplayBody(message),
+      );
     });
   }, [conversations, notificationPermission]);
 
