@@ -1,9 +1,9 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { CheckCircle, ChevronDown, ExternalLink, Loader2, QrCode, Send } from "lucide-react";
+import { ChevronDown, ExternalLink, Loader2, QrCode, Send } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -31,45 +31,10 @@ const ALMOXARIFADO_WHATSAPP_MESSAGE =
 const ALMOXARIFADO_WHATSAPP_LINK = `https://wa.me/${ALMOXARIFADO_WHATSAPP_NUMBER}?text=${encodeURIComponent(
   ALMOXARIFADO_WHATSAPP_MESSAGE,
 )}`;
-const WHATSAPP_REMINDER_HOUR = 7;
-const WHATSAPP_REMINDER_TIME_ZONE = "America/Fortaleza";
 
 export const Route = createFileRoute("/admin")({
   component: AdminLayout,
 });
-
-function getFortalezaDateParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: WHATSAPP_REMINDER_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
-    .formatToParts(date)
-    .reduce<Record<string, string>>((current, part) => {
-      if (part.type !== "literal") current[part.type] = part.value;
-      return current;
-    }, {});
-
-  return {
-    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
-    hour: Number(parts.hour),
-    minute: Number(parts.minute),
-  };
-}
-
-function getMillisecondsUntilFortalezaReminder(date = new Date()) {
-  const fortaleza = getFortalezaDateParts(date);
-  const minutesNow = fortaleza.hour * 60 + fortaleza.minute;
-  const reminderMinutes = WHATSAPP_REMINDER_HOUR * 60;
-
-  if (minutesNow >= reminderMinutes) return 0;
-
-  return (reminderMinutes - minutesNow) * 60 * 1000;
-}
 
 function AdminLayout() {
   const navigate = useNavigate();
@@ -80,7 +45,6 @@ function AdminLayout() {
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
   const [whatsappNotice, setWhatsappNotice] = useState<string | null>(null);
-  const [whatsappConfirmed, setWhatsappConfirmed] = useState(false);
   const [whatsappReminderOpen, setWhatsappReminderOpen] = useState(false);
   const [whatsappQrCode, setWhatsappQrCode] = useState<string | null>(null);
 
@@ -106,7 +70,6 @@ function AdminLayout() {
 
         setProfile(profile);
         setWhatsapp(profile?.whatsapp ?? "");
-        setWhatsappConfirmed(Boolean(profile?.whatsapp?.trim()));
 
         if (isUserProfileIncomplete(profile)) {
           navigate({ to: "/admin/completar-cadastro" });
@@ -138,11 +101,11 @@ function AdminLayout() {
   const activeCls = "bg-sidebar-accent text-sidebar-foreground";
   const isAdmin = profile?.is_admin !== false;
   const limitedAdmin = isLimitedAdmin(profile);
+  const showWhatsAppQrNotice = Boolean(profile?.id) && !profile?.is_admin;
   const mustRegisterWhatsApp =
     Boolean(profile?.id) &&
     !profile?.is_admin &&
     !profile?.whatsapp?.trim() &&
-    !whatsappConfirmed &&
     pathname !== "/admin/completar-cadastro";
 
   const openWhatsAppActivationReminder = async () => {
@@ -159,51 +122,6 @@ function AdminLayout() {
       setWhatsappReminderOpen(true);
     }
   };
-
-  useEffect(() => {
-    if (!profile?.id || profile.is_admin || pathname === "/admin/completar-cadastro" || mustRegisterWhatsApp) {
-      setWhatsappReminderOpen(false);
-      return;
-    }
-
-    const todayKey = getFortalezaDateParts().dateKey;
-    const millisecondsUntilReminder = getMillisecondsUntilFortalezaReminder();
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let active = true;
-
-    const showReminder = async () => {
-      if (!active) return;
-
-      try {
-        const { data: acknowledgement, error: acknowledgementError } = await supabase
-          .from("user_whatsapp_reminder_ack")
-          .select("id")
-          .eq("user_id", profile.id)
-          .eq("reminder_date", todayKey)
-          .maybeSingle();
-
-        if (!active) return;
-        if (acknowledgementError) throw new Error(acknowledgementError.message);
-        if (acknowledgement) return;
-
-        if (!active) return;
-        await openWhatsAppActivationReminder();
-      } catch {
-        if (active) setWhatsappReminderOpen(true);
-      }
-    };
-
-    if (millisecondsUntilReminder === 0) {
-      void showReminder();
-    } else {
-      timeoutId = window.setTimeout(() => void showReminder(), millisecondsUntilReminder);
-    }
-
-    return () => {
-      active = false;
-      if (timeoutId) window.clearTimeout(timeoutId);
-    };
-  }, [mustRegisterWhatsApp, pathname, profile?.id, profile?.is_admin]);
 
   const handleSaveWhatsApp = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -248,17 +166,13 @@ function AdminLayout() {
       }
 
       const savedWhatsApp = result.whatsapp || normalized;
-      setWhatsappConfirmed(true);
       setProfile((current) => (current ? { ...current, whatsapp: savedWhatsApp } : current));
       setWhatsapp(savedWhatsApp);
       setWhatsappNotice(
         result.welcomeError
-          ? "WhatsApp salvo, mas a mensagem de boas-vindas nao foi entregue agora."
+          ? "WhatsApp salvo, mas a mensagem de boas-vindas não foi entregue agora."
           : "WhatsApp salvo com sucesso.",
       );
-      if (result.welcomeError) {
-        await openWhatsAppActivationReminder();
-      }
     } catch (err) {
       setWhatsappError(
         err instanceof Error ? err.message : "Erro ao salvar WhatsApp. Tente novamente.",
@@ -268,27 +182,10 @@ function AdminLayout() {
     }
   };
 
-  const handleConfirmWhatsAppReminder = async () => {
-    if (profile?.id) {
-      await supabase
-        .from("user_whatsapp_reminder_ack")
-        .upsert(
-          {
-            user_id: profile.id,
-            reminder_date: getFortalezaDateParts().dateKey,
-          },
-          { onConflict: "user_id,reminder_date" },
-        );
-    }
-    setWhatsappReminderOpen(false);
-  };
-
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="w-64 bg-sidebar p-4 text-sidebar-foreground flex flex-col">
-        <div className="mb-4 border-b border-sidebar-border px-3 py-4 text-xl">
-          Almoxarifado
-        </div>
+      <aside className="flex w-64 flex-col bg-sidebar p-4 text-sidebar-foreground">
+        <div className="mb-4 border-b border-sidebar-border px-3 py-4 text-xl">Almoxarifado</div>
         <nav className="flex-1 space-y-1">
           <Link
             to="/admin"
@@ -457,11 +354,18 @@ function AdminLayout() {
         </nav>
       </aside>
       <main className="flex-1 bg-background">
-        {false ? (
-          <Alert className="rounded-none border-none bg-sidebar px-8 py-4 text-center text-sidebar-foreground shadow-none">
-            <AlertDescription className="text-sm">
-              Envie uma mensagem para o WhatsApp oficial do almoxarifado para receber avisos sobre
-              o acompanhamento das suas requisições e entregas.
+        {showWhatsAppQrNotice ? (
+          <Alert className="rounded-none border-none bg-primary px-4 py-2 text-center text-primary-foreground shadow-none">
+            <AlertDescription className="text-xs font-medium tracking-[0.01em] sm:text-sm">
+              Contato do almoxarifado: {ALMOXARIFADO_WHATSAPP_NUMBER}.{" "}
+              <button
+                type="button"
+                onClick={() => void openWhatsAppActivationReminder()}
+                className="underline decoration-1 underline-offset-4 hover:opacity-90"
+              >
+                Clique aqui
+              </button>{" "}
+              para abrir o QR Code e enviar a mensagem no WhatsApp.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -472,10 +376,9 @@ function AdminLayout() {
       <Dialog open={whatsappReminderOpen} onOpenChange={setWhatsappReminderOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ative os avisos pelo WhatsApp</DialogTitle>
+            <DialogTitle>Fale com o almoxarifado pelo WhatsApp</DialogTitle>
             <DialogDescription>
-              Envie uma mensagem para o WhatsApp oficial do almoxarifado para receber avisos sobre
-              suas requisições e entregas.
+              Aponte a câmera para o QR Code ou abra o link abaixo para enviar a mensagem.
             </DialogDescription>
           </DialogHeader>
 
@@ -492,7 +395,7 @@ function AdminLayout() {
               )}
             </div>
             <p className="text-center text-sm text-muted-foreground">
-              Aponte a câmera para o QR Code ou abra o link abaixo e envie a mensagem no WhatsApp.
+              Número do almoxarifado: {ALMOXARIFADO_WHATSAPP_NUMBER}
             </p>
           </div>
 
@@ -503,9 +406,8 @@ function AdminLayout() {
                 Abrir WhatsApp
               </a>
             </Button>
-            <Button type="button" className="gap-2" onClick={handleConfirmWhatsAppReminder}>
-              <CheckCircle className="h-4 w-4" />
-              Já mandei mensagem
+            <Button type="button" className="gap-2" onClick={() => setWhatsappReminderOpen(false)}>
+              Fechar
             </Button>
           </div>
         </DialogContent>
