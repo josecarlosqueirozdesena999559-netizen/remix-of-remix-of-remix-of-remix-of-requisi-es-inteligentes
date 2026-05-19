@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CircleAlert, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -71,17 +70,6 @@ function Index() {
     <div className="flex min-h-screen items-center justify-center bg-slate-200 px-4 py-8">
       <Card className="w-full max-w-sm rounded-md border-slate-300 bg-white p-6 shadow-lg shadow-slate-400/30">
         <h1 className="mb-6 text-center text-xl font-normal text-primary">Acesso ao Sistema</h1>
-
-        <Alert className="mb-6 border-slate-200 bg-slate-50 text-slate-900">
-          <CircleAlert className="h-4 w-4 text-slate-900" />
-          <AlertDescription className="space-y-1 text-sm leading-5 text-slate-900">
-            <p>Entre com seu e-mail e senha para acessar o painel.</p>
-            <p>
-              O acesso é feito somente para usuários já cadastrados pela operação. Esta tela não
-              possui fluxo de criação de conta e o usuário não consegue criar novas requisições.
-            </p>
-          </AlertDescription>
-        </Alert>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
