@@ -8,7 +8,8 @@ SELECT n FROM (VALUES
   ('CASA DE APOIO'),
   ('SESB'),
   ('ODONTOLOGICO'),
-  ('FISIOTERAPIA')
+  ('FISIOTERAPIA'),
+  ('SAMU')
 ) AS v(n)
 WHERE NOT EXISTS (
   SELECT 1 FROM public.programas p WHERE p.nome = v.n

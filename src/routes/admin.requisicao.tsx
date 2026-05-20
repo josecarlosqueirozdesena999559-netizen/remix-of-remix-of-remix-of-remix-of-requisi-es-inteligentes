@@ -6,6 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+} from "@/lib/attachments";
+import {
   isCleaningProduct,
   isMedicationProduct,
   normalizeProductSearchValue,
@@ -19,7 +23,7 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
-import { normalizeProgramKey } from "@/lib/program-options";
+import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
@@ -69,6 +73,12 @@ interface EditableRequest {
   return_reason: string | null;
 }
 
+interface PendingSignatureRequest {
+  id: string;
+  status: string;
+  signed_attachment: unknown;
+}
+
 interface RequestSection {
   id: string;
   label: string;
@@ -98,6 +108,14 @@ function hasRequestedQuantity(value: string | undefined) {
 function canEditRequestBeforeSignature(request: EditableRequest | null) {
   if (!request) return false;
   return request.status === "aguardando_assinatura" || request.status === "aguardando_assinatura_requisicao" || request.status === "correcao_requisicao";
+}
+
+function needsSignature(request: PendingSignatureRequest) {
+  if (request.status === "aguardando_assinatura_saida") {
+    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  return !getRequestSignedAttachment(request.signed_attachment, request.status);
 }
 
 function getItemName(item: EditableRequestItem) {
@@ -175,6 +193,10 @@ function getProgramMatchKey(value: string | null | undefined) {
   return normalizeProgramKey(value);
 }
 
+function getComparableProgramKeys(value: string | null | undefined) {
+  return getRelatedProgramKeys(value);
+}
+
 function getItemProgramKeys(item: ItemRow) {
   return (item.programa_produtos ?? [])
     .map((link) => getProgramMatchKey(link.programas?.nome))
@@ -184,10 +206,10 @@ function getItemProgramKeys(item: ItemRow) {
 function itemMatchesSection(item: ItemRow, section: RequestSection) {
   if (productHasCategory(item.categoria, section.baseCategory)) return true;
 
-  const sectionProgram = getProgramMatchKey(section.baseCategory);
-  if (!sectionProgram) return false;
+  const sectionPrograms = getComparableProgramKeys(section.baseCategory);
+  if (sectionPrograms.length === 0) return false;
 
-  return getItemProgramKeys(item).includes(sectionProgram);
+  return getItemProgramKeys(item).some((programKey) => sectionPrograms.includes(programKey));
 }
 
 function isItemAllowedForProfileProgram(
@@ -202,12 +224,11 @@ function isItemAllowedForProfileProgram(
 
   if (linkedPrograms.length === 0) return false;
 
-  const sectionProgram = getProgramMatchKey(section.baseCategory);
-  if (sectionProgram && linkedPrograms.includes(sectionProgram)) return true;
+  const sectionPrograms = getComparableProgramKeys(section.baseCategory);
+  if (sectionPrograms.some((programKey) => linkedPrograms.includes(programKey))) return true;
 
   const profilePrograms = [profile?.setor, profile?.unidade_nome]
-    .map((value) => getProgramMatchKey(value))
-    .filter(Boolean);
+    .flatMap((value) => getComparableProgramKeys(value));
 
   if (profilePrograms.length === 0) return false;
 
@@ -438,6 +459,30 @@ function CriarRequisicaoPage() {
 
         if (editingRequestId && !canEditRequestBeforeSignature(editableRequest)) {
           throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
+        }
+
+        if (!editingRequestId && profile?.cpf) {
+          const { data: pendingData, error: pendingError } = await supabase
+            .from("requisicoes")
+            .select("id,status,signed_attachment")
+            .eq("solicitante_cpf", profile.cpf)
+            .in("status", [
+              "aguardando_assinatura",
+              "aguardando_assinatura_requisicao",
+              "aguardando_assinatura_saida",
+              "correcao_requisicao",
+            ])
+            .order("updated_at", { ascending: false });
+
+          if (pendingError) throw new Error(pendingError.message);
+
+          const hasPendingSignature = ((pendingData ?? []) as PendingSignatureRequest[]).some(
+            needsSignature,
+          );
+
+          if (hasPendingSignature) {
+            throw new Error("VocÃª precisa assinar suas requisiÃ§Ãµes pendentes antes de pedir novamente.");
+          }
         }
 
         const categories = getAllowedCategories(profile);
