@@ -2,6 +2,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const DEFAULT_GRAPH_API_VERSION = "v25.0";
+const ADMIN_OUTSIDE_WINDOW_TEMPLATE_NAME = "mensagem_admin_almoxarifado";
+const ADMIN_OUTSIDE_WINDOW_TEMPLATE_PREVIEW = "Oi";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -314,6 +316,70 @@ async function sendTextMessage(input: { to: string; text: string }) {
   };
 }
 
+async function sendTemplateMessage(input: {
+  to: string;
+  templateName: string;
+  languageCode?: string;
+  bodyParameters?: Array<string | number | null | undefined>;
+}) {
+  const config = await getWhatsAppSettings();
+  const parameters = (input.bodyParameters || []).map((value) => ({
+    type: "text",
+    text: String(value ?? "-"),
+  }));
+  const response = await fetch(
+    `https://graph.facebook.com/${config.graphApiVersion}/${config.phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizeWhatsAppPhoneNumber(input.to),
+        type: "template",
+        template: {
+          name: input.templateName,
+          language: {
+            code: input.languageCode || "pt_BR",
+          },
+          ...(parameters.length
+            ? {
+                components: [
+                  {
+                    type: "body",
+                    parameters,
+                  },
+                ],
+              }
+            : {}),
+        },
+      }),
+    },
+  );
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = payload?.error;
+    throw new Error(
+      [
+        error?.message || `Erro ${response.status} ao enviar template WhatsApp.`,
+        error?.code ? `code=${error.code}` : "",
+        error?.error_subcode ? `subcode=${error.error_subcode}` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
+  return payload as {
+    contacts?: Array<{ wa_id?: string }>;
+    messages?: Array<{ id?: string }>;
+  };
+}
+
 async function uploadWhatsAppMedia(input: { bytes: Uint8Array; fileName: string; mimeType: string }) {
   const config = await getWhatsAppSettings();
   const formData = new FormData();
@@ -413,15 +479,18 @@ Deno.serve(async (request) => {
     const body = await request.json().catch(() => ({}));
     const to = typeof body.to === "string" ? normalizeWhatsAppPhoneNumber(body.to) : "";
     const text = typeof body.text === "string" ? body.text.trim() : "";
+    const mode = typeof body.mode === "string" ? body.mode.trim().toLowerCase() : "";
     const audio =
       body.audio && typeof body.audio === "object"
         ? (body.audio as Partial<OutboundAudioInput>)
         : null;
+    const sendTemplateOnly = mode === "template";
 
     if (!to) throw new Error("Numero do destinatario nao informado.");
-    if (!text && !audio) throw new Error("Digite uma mensagem ou envie um audio.");
+    if (!sendTemplateOnly && !text && !audio) throw new Error("Digite uma mensagem ou envie um audio.");
 
-    const canSendFreeform = (await hasActiveUserSession(to)) || (await hasRecentInboundMessage(to));
+    const canSendFreeform =
+      sendTemplateOnly || (await hasActiveUserSession(to)) || (await hasRecentInboundMessage(to));
     if (!canSendFreeform) {
       throw new Error(
         "Sem entrada recente registrada para este usuario. Aguarde uma mensagem dele ou envie uma notificacao por template.",
@@ -435,11 +504,16 @@ Deno.serve(async (request) => {
           messages?: Array<{ id?: string }>;
         }
       | null = null;
-    let messageType = "text";
-    let messageBody = text;
+    let messageType = sendTemplateOnly ? "template" : "text";
+    let messageBody = sendTemplateOnly ? ADMIN_OUTSIDE_WINDOW_TEMPLATE_PREVIEW : text;
     let storedMedia: Record<string, unknown> | null = null;
 
-    if (audio) {
+    if (sendTemplateOnly) {
+      payload = await sendTemplateMessage({
+        to,
+        templateName: ADMIN_OUTSIDE_WINDOW_TEMPLATE_NAME,
+      });
+    } else if (audio) {
       const fileName = sanitizeFileName(String(audio.fileName || "").trim()) || "audio.ogg";
       const mimeType = String(audio.mimeType || "").trim() || "audio/ogg";
       const bytes = decodeBase64(String(audio.base64 || ""));
@@ -489,7 +563,15 @@ Deno.serve(async (request) => {
           ...payload,
           adminName: adminProfile.nome,
           adminEmail: adminProfile.email || user.email || null,
-          outboundBody: text ? `*${adminDisplayName}:*\n${text}` : null,
+          outboundBody: sendTemplateOnly
+            ? ADMIN_OUTSIDE_WINDOW_TEMPLATE_PREVIEW
+            : text
+              ? `*${adminDisplayName}:*\n${text}`
+              : null,
+          source: sendTemplateOnly ? "admin-whatsapp-template" : "admin-whatsapp-reply",
+          audience: "user",
+          notificationType: sendTemplateOnly ? "adminOutsideWindow" : null,
+          templateName: sendTemplateOnly ? ADMIN_OUTSIDE_WINDOW_TEMPLATE_NAME : null,
           stored_media: storedMedia,
           sentBy: {
             id: adminProfile.id,

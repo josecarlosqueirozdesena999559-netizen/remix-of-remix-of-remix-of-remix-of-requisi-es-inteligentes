@@ -13,6 +13,7 @@ export const WHATSAPP_TEMPLATE_NAMES = {
   requestSigned: "requisicao_assinada",
   outputAttached: "saida_anexada_pedido",
   readyForPickup: "pedido_pronto_retirada",
+  adminOutsideWindow: "mensagem_admin_almoxarifado",
 } as const;
 
 function valueOrDash(value: string | null | undefined) {

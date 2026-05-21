@@ -902,6 +902,57 @@ function ConversasPage() {
     }
   };
 
+  const handleSendTemplate = async () => {
+    const phone = selectedConversation?.phone || "";
+
+    if (!phone) {
+      setError("Selecione uma conversa para enviar o template.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+      const { data: result, error: replyError } = await supabase.functions.invoke(
+        "admin-whatsapp-reply",
+        {
+          body: {
+            to: phone,
+            mode: "template",
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (replyError) {
+        throw new Error(
+          (replyError as any)?.context?.error ||
+            (replyError as any)?.context?.message ||
+            result?.error ||
+            replyError.message,
+        );
+      }
+      if (!result?.ok) throw new Error(result?.error || "Erro ao enviar template.");
+
+      setNotice("Oi enviado ao usuario por template.");
+      await loadConversations();
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Erro ao enviar template.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleEnableNotifications = async () => {
     if (typeof Notification === "undefined") {
       setError("Seu navegador nao suporta notificacoes.");
@@ -1211,7 +1262,7 @@ function ConversasPage() {
                         >
                           {selectedConversation.isWindowOpen
                             ? "Janela de 24h aberta para responder e notificar."
-                            : "Sem entrada recente registrada. A API do WhatsApp validará o envio."}
+                            : "Janela fechada. Fora das 24h o admin envia somente um oi por template."}
                         </p>
                       </div>
                     </div>
@@ -1311,64 +1362,85 @@ function ConversasPage() {
                   </div>
 
                   <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
-                    <div className="flex items-end gap-3">
-                      <input
-                        ref={audioInputRef}
-                        type="file"
-                        accept="audio/*"
-                        className="hidden"
-                        onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
-                          recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
-                        }`}
-                        disabled={saving}
-                        onClick={() => void handleRecordAudio()}
-                        title={recording ? "Parar gravacao" : "Gravar audio"}
-                        aria-label={recording ? "Parar gravacao" : "Gravar audio"}
-                      >
-                        {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
-                        disabled={saving || recording}
-                        onClick={() => audioInputRef.current?.click()}
-                        title="Enviar audio"
-                        aria-label="Enviar audio"
-                      >
-                        <Paperclip className="h-5 w-5" />
-                      </Button>
-                      <Textarea
-                        value={replyText}
-                        onChange={(event) => setReplyText(event.target.value)}
-                        onKeyDown={handleReplyKeyDown}
-                        placeholder="Mensagem"
-                        rows={1}
-                        className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
-                        disabled={saving || !replyText.trim()}
-                        onClick={() => void handleReply()}
-                        title="Enviar"
-                        aria-label="Enviar mensagem"
-                      >
-                        {saving ? (
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                        ) : (
-                          <Send className="h-5 w-5" />
-                        )}
-                      </Button>
-                    </div>
+                    {selectedConversation.isWindowOpen ? (
+                      <div className="flex items-end gap-3">
+                        <input
+                          ref={audioInputRef}
+                          type="file"
+                          accept="audio/*"
+                          className="hidden"
+                          onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
+                            recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
+                          }`}
+                          disabled={saving}
+                          onClick={() => void handleRecordAudio()}
+                          title={recording ? "Parar gravacao" : "Gravar audio"}
+                          aria-label={recording ? "Parar gravacao" : "Gravar audio"}
+                        >
+                          {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                          disabled={saving || recording}
+                          onClick={() => audioInputRef.current?.click()}
+                          title="Enviar audio"
+                          aria-label="Enviar audio"
+                        >
+                          <Paperclip className="h-5 w-5" />
+                        </Button>
+                        <Textarea
+                          value={replyText}
+                          onChange={(event) => setReplyText(event.target.value)}
+                          onKeyDown={handleReplyKeyDown}
+                          placeholder="Mensagem"
+                          rows={1}
+                          className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
+                          disabled={saving || !replyText.trim()}
+                          onClick={() => void handleReply()}
+                          title="Enviar"
+                          aria-label="Enviar mensagem"
+                        >
+                          {saving ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Send className="h-5 w-5" />
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-[#54656f]">
+                          Fora da janela de 24h, o admin pode enviar somente um oi por template.
+                        </p>
+                        <Button
+                          type="button"
+                          className="bg-[#00a884] text-white hover:bg-[#008f72]"
+                          disabled={saving}
+                          onClick={() => void handleSendTemplate()}
+                        >
+                          {saving ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                          )}
+                          Enviar oi
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </>
