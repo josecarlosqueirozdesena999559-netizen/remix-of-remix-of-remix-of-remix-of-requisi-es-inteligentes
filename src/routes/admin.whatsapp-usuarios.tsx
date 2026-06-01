@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { MessageSquareMore } from "lucide-react";
+import { Loader2, MessageSquareMore } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ListPage, type Column } from "@/components/ListPage";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -154,11 +155,51 @@ function getStatusBadge(status: WhatsAppUserStatusRow["status"], label: string) 
   return <Badge variant="secondary">{label}</Badge>;
 }
 
+async function getFunctionInvokeErrorMessage(error: unknown, fallback?: string | null) {
+  if (fallback?.trim()) return fallback.trim();
+
+  const maybeError = error as
+    | {
+        message?: string;
+        context?: {
+          json?: () => Promise<unknown>;
+          text?: () => Promise<string>;
+        };
+      }
+    | null
+    | undefined;
+
+  if (typeof maybeError?.context?.json === "function") {
+    try {
+      const payload = await maybeError.context.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        const message = String((payload as { error?: unknown }).error || "").trim();
+        if (message) return message;
+      }
+    } catch {
+      // ignore JSON parse failures from function responses
+    }
+  }
+
+  if (typeof maybeError?.context?.text === "function") {
+    try {
+      const text = (await maybeError.context.text())?.trim();
+      if (text) return text;
+    } catch {
+      // ignore raw text read failures from function responses
+    }
+  }
+
+  return maybeError?.message?.trim() || "Nao foi possivel abrir a conversa do WhatsApp.";
+}
+
 function WhatsAppUsuariosPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [rows, setRows] = useState<WhatsAppUserStatusRow[]>([]);
+  const [openingPhone, setOpeningPhone] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -299,6 +340,57 @@ function WhatsAppUsuariosPage() {
     };
   }, [navigate]);
 
+  const openConversation = async (row: WhatsAppUserStatusRow) => {
+    if (!row.whatsapp) return;
+
+    setActionError(null);
+    setOpeningPhone(row.whatsapp);
+
+    try {
+      if (row.status === "closed") {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw new Error(sessionError.message);
+
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+        const { data: result, error: replyError } = await supabase.functions.invoke(
+          "admin-whatsapp-reply",
+          {
+            body: {
+              to: row.whatsapp,
+              mode: "template",
+            },
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        if (replyError) {
+          throw new Error(await getFunctionInvokeErrorMessage(replyError, result?.error || null));
+        }
+
+        if (!result?.ok) {
+          throw new Error(result?.error || "Erro ao enviar o template do WhatsApp.");
+        }
+      }
+
+      await navigate({
+        to: "/admin/conversas",
+        search: { phone: row.whatsapp },
+      });
+    } catch (openError) {
+      setActionError(
+        openError instanceof Error
+          ? openError.message
+          : "Nao foi possivel abrir a conversa do WhatsApp.",
+      );
+    } finally {
+      setOpeningPhone((current) => (current === row.whatsapp ? null : current));
+    }
+  };
+
   const columns: Column<WhatsAppUserStatusRow>[] = [
     { key: "nome", label: "Nome" },
     { key: "email", label: "E-mail" },
@@ -326,7 +418,14 @@ function WhatsAppUsuariosPage() {
   ];
 
   return (
-    <ListPage
+    <div className="space-y-4">
+      {actionError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <ListPage
       breadcrumb="Admin / WhatsApp"
       title="Usuários WhatsApp"
       description="Veja quem tem WhatsApp cadastrado e quais usuários estão com a janela de 24 horas aberta."
@@ -341,20 +440,21 @@ function WhatsAppUsuariosPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() =>
-              navigate({
-                to: "/admin/conversas",
-                search: { phone: row.whatsapp },
-              })
-            }
+            disabled={openingPhone === row.whatsapp}
+            onClick={() => void openConversation(row)}
           >
-            <MessageSquareMore className="h-4 w-4" />
-            Conversa
+            {openingPhone === row.whatsapp ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MessageSquareMore className="h-4 w-4" />
+            )}
+            {openingPhone === row.whatsapp ? "Abrindo..." : "Conversa"}
           </Button>
         ) : (
           <span className="text-xs text-muted-foreground">Sem número</span>
         )
       }
-    />
+      />
+    </div>
   );
 }
