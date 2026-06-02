@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, Eye, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Eye, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/request-return-feedback";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
+import { downloadSignedRequestsMonthlyPdf } from "@/lib/signed-requests-monthly-pdf";
 
 export const Route = createFileRoute("/admin/assinadas")({
   component: AssinadasPage,
@@ -131,6 +132,7 @@ function AssinadasPage() {
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
+  const [downloadingMonthlyPdf, setDownloadingMonthlyPdf] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -198,6 +200,31 @@ function AssinadasPage() {
   const selectedRequests = selected
     ? (grouped.find(([local]) => local === selected)?.[1] ?? [])
     : [];
+
+  const downloadMonthlyPdf = async () => {
+    if (filteredData.length === 0) return;
+
+    setDownloadingMonthlyPdf(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      await downloadSignedRequestsMonthlyPdf(
+        selectedMonth,
+        filteredData.map((request) => ({
+          code: request.saida_codigo || codeByRequestId.get(request.id) || "-",
+          requester: request.solicitante || "-",
+          location: request.setor || "Sem local",
+          requestDate: request.data || "-",
+        })),
+      );
+      setMessage("PDF mensal gerado com sucesso.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar PDF mensal.");
+    } finally {
+      setDownloadingMonthlyPdf(false);
+    }
+  };
 
   const openReview = (request: RequisicaoAssinada, mode: ReviewMode) => {
     setReviewingRequest(request);
@@ -387,18 +414,35 @@ function AssinadasPage() {
       </div>
 
       <Card className="p-4">
-        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-          Mes
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => {
-              setSelectedMonth(event.target.value || getCurrentMonth());
-              setSelected(null);
-            }}
-            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
-          />
-        </label>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+            Mes
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => {
+                setSelectedMonth(event.target.value || getCurrentMonth());
+                setSelected(null);
+              }}
+              className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            disabled={loading || filteredData.length === 0 || downloadingMonthlyPdf}
+            onClick={() => void downloadMonthlyPdf()}
+          >
+            {downloadingMonthlyPdf ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Baixar PDF do mes
+          </Button>
+        </div>
       </Card>
 
       {message && <Card className="p-4 text-sm text-muted-foreground">{message}</Card>}

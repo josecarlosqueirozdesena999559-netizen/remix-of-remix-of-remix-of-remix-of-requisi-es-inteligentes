@@ -182,6 +182,26 @@ Variaveis:
 {{3}} = data da requisicao
 ```
 
+## Template para reabrir conversa fora da janela
+
+Quando o administrador precisa falar com o usuario fora da janela de 24 horas, a tela de conversas envia o template:
+
+```txt
+mensagem_admin_almoxarifado
+```
+
+Idioma:
+
+```txt
+pt_BR
+```
+
+Corpo sugerido no Meta Business:
+
+```txt
+Oi
+```
+
 ## Webhook para leitura do QR pelo WhatsApp
 
 Tambem existe o fluxo por WhatsApp:
