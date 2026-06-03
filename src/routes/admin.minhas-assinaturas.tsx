@@ -115,6 +115,10 @@ function hasRequestItems(request: Requisicao) {
   return Array.isArray(request.items) && request.items.some((item) => normalizeRequestedQuantity(item) > 0);
 }
 
+function shouldBlockSignatureUpload(request: Requisicao) {
+  return request.status !== "aguardando_assinatura_saida" && !hasRequestItems(request);
+}
+
 async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
   try {
     await removeAttachmentFile(attachment);
@@ -221,7 +225,7 @@ function MinhasAssinaturasPage() {
     setMessage(null);
     setError(null);
 
-    if (!hasRequestItems(request)) {
+    if (shouldBlockSignatureUpload(request)) {
       setError("Esta requisicao esta sem itens e nao pode ser assinada. Refaça a requisicao com os itens corretos.");
       return;
     }
@@ -414,6 +418,7 @@ function MinhasAssinaturasPage() {
                 {requests.map((request) => {
                   const hasRequestSigned = Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
                   const missingItems = !hasRequestItems(request);
+                  const uploadBlocked = shouldBlockSignatureUpload(request);
                   return (
                     <tr key={request.id} className="border-t">
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
@@ -512,7 +517,7 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
-                                disabled={uploadingId === request.id || missingItems}
+                                disabled={uploadingId === request.id || uploadBlocked}
                                 onChange={(event) => {
                                   void handleUpload(request, event.target.files?.[0]);
                                   event.currentTarget.value = "";
@@ -523,7 +528,7 @@ function MinhasAssinaturasPage() {
                                 variant="outline"
                                 size="sm"
                                 className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                                disabled={uploadingId === request.id || missingItems}
+                                disabled={uploadingId === request.id || uploadBlocked}
                                 onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
                               >
                                 {uploadingId === request.id ? (
