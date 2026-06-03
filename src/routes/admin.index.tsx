@@ -30,7 +30,10 @@ function getRequestDisplayCode(request: PendingSignatureRequest) {
   return request.saida_codigo?.trim() || request.id.slice(0, 8);
 }
 
-function buildPendingNoticeItem(request: PendingSignatureRequest, includeRequester = false): PendingNoticeItem {
+function buildPendingNoticeItem(
+  request: PendingSignatureRequest,
+  includeRequester = false,
+): PendingNoticeItem {
   const code = getRequestDisplayCode(request);
   const requester = request.solicitante?.trim();
 
@@ -136,9 +139,7 @@ function AdminHome() {
       ? `Você tem ${pendingCount} ${pendingCount === 1 ? "solicitação pendente" : "solicitações pendentes"}.`
       : "Você não tem solicitações pendentes no momento."
     : pendingCount > 0
-      ? `Você tem ${pendingCount} ${
-          pendingCount === 1 ? "requisição pendente de assinatura" : "requisições pendentes de assinatura"
-        }.`
+      ? "Atenção, você precisa assinar suas requisições para pedir."
       : "Você não tem requisições pendentes de assinatura no momento.";
 
   return (
