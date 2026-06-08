@@ -77,19 +77,8 @@ function needsCurrentStageSignature(request: Requisicao) {
 }
 
 function buildRequestDedupKey(request: Requisicao) {
-  const code = request.saida_codigo?.trim();
-  if (code) {
-    return `code:${code}|status:${request.status}`;
-  }
-
-  return [
-    request.status,
-    request.solicitante_cpf?.trim() || "",
-    request.setor?.trim() || "",
-    request.data?.trim() || "",
-    request.return_target?.trim() || "",
-    request.return_reason?.trim() || "",
-  ].join("|");
+  // Each request must remain visible for signature even before it receives a saída code.
+  return request.id;
 }
 
 function dedupeRequests(requests: Requisicao[]) {
