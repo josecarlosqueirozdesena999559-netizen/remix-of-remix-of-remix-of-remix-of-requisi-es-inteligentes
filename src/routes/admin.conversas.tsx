@@ -326,7 +326,7 @@ const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
   {
     id: "cobrar-assinatura",
     label: "Cobrar assinatura",
-    description: "Busca todas as assinaturas pendentes do usuario e monta uma cobranca profissional.",
+    description: "Busca todas as assinaturas pendentes do usuário e monta uma cobrança profissional.",
     action: "charge-pending-signatures",
   },
   {
@@ -354,15 +354,15 @@ type PendingSignatureReminderRequest = {
 };
 
 function getPendingSignatureLabel(status: string) {
-  if (status === "aguardando_assinatura_saida") return "assinatura da saida";
-  if (status === "correcao_requisicao") return "correcao e reenvio da requisicao";
-  return "assinatura da requisicao";
+  if (status === "aguardando_assinatura_saida") return "assinatura da saída";
+  if (status === "correcao_requisicao") return "correção e reenvio da requisição";
+  return "assinatura da requisição";
 }
 
 async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[]) {
   const matchedUser = resolveConversationUser(phone, users);
   if (!matchedUser) {
-    throw new Error("Nao foi possivel identificar o usuario desta conversa para buscar as assinaturas pendentes.");
+    throw new Error("Não foi possível identificar o usuário desta conversa para buscar as assinaturas pendentes.");
   }
 
   const cpf = matchedUser.cpf?.trim() || "";
@@ -385,7 +385,7 @@ async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[
   } else if (nome && location) {
     query = query.eq("solicitante", nome).eq("setor", location);
   } else {
-    throw new Error("Este usuario nao possui identificacao suficiente para localizar as assinaturas pendentes.");
+    throw new Error("Este usuário não possui identificação suficiente para localizar as assinaturas pendentes.");
   }
 
   const { data, error } = await query;
@@ -394,9 +394,9 @@ async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[
   const pendingRequests = ((data ?? []) as PendingSignatureReminderRequest[]).filter(requestNeedsSignature);
   if (pendingRequests.length === 0) {
     return [
-      `Ola, ${getFirstName(nome)}.`,
-      "No momento nao identificamos assinaturas pendentes vinculadas ao seu cadastro.",
-      "Se precisar de apoio, ficamos a disposicao.",
+      `Olá, ${getFirstName(nome)}.`,
+      "No momento não identificamos assinaturas pendentes vinculadas ao seu cadastro.",
+      "Se precisar de apoio, ficamos à disposição.",
     ].join("\n\n");
   }
 
@@ -408,13 +408,13 @@ async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[
   });
 
   return [
-    `Ola, ${getFirstName(nome)}.`,
-    "Identificamos pendencias de assinatura em seu nome no sistema do almoxarifado.",
-    "No momento constam os seguintes documentos aguardando regularizacao:",
+    `Olá, ${getFirstName(nome)}.`,
+    "Identificamos pendências de assinatura em seu nome no sistema do almoxarifado.",
+    "No momento constam os seguintes documentos aguardando regularização:",
     requestLines.join("\n"),
-    "Por gentileza, acesse o sistema e conclua as assinaturas pendentes para dar continuidade ao atendimento da sua solicitacao.",
-    "Se alguma pendencia ja tiver sido regularizada, desconsidere esta mensagem.",
-    "Ficamos a disposicao.",
+    "Por gentileza, acesse o sistema e conclua as assinaturas pendentes para dar continuidade ao atendimento da sua solicitação.",
+    "Se alguma pendência já tiver sido regularizada, desconsidere esta mensagem.",
+    "Ficamos à disposição.",
   ].join("\n\n");
 }
 
@@ -870,6 +870,8 @@ function ConversasPage() {
   const selectedConversation =
     conversations.find((conversation) => conversation.phone === selectedPhone) || null;
   const selectedConversationFirstName = getFirstName(selectedConversation?.displayName || "");
+  const replyLineCount = replyText ? replyText.split(/\r?\n/).length : 1;
+  const hasLongReplyDraft = replyText.length > 140 || replyLineCount > 4;
   const slashQuery = replyText.trimStart().startsWith("/") ? replyText.trimStart().slice(1).toLowerCase() : "";
   const filteredStandardMessages = useMemo(
     () =>
@@ -885,6 +887,15 @@ function ConversasPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [selectedConversation?.phone, selectedConversation?.messages.length]);
+
+  useEffect(() => {
+    const textarea = replyTextareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(textarea.scrollHeight, 220);
+    textarea.style.height = `${Math.max(nextHeight, 44)}px`;
+  }, [replyText]);
 
   useEffect(() => {
     let active = true;
@@ -1589,7 +1600,11 @@ function ConversasPage() {
                               onKeyDown={handleReplyKeyDown}
                               placeholder="Digite uma mensagem"
                               rows={1}
-                              className="max-h-40 min-h-11 resize-none rounded-3xl border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
+                              className={`resize-none border-0 bg-white px-4 py-3 leading-6 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884] ${
+                                hasLongReplyDraft
+                                  ? "max-h-[220px] min-h-[120px] rounded-2xl"
+                                  : "max-h-40 min-h-11 rounded-3xl"
+                              }`}
                             />
                             {isSlashMenuOpen ? (
                               <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 rounded-2xl border border-[#d1d7db] bg-white p-2 shadow-lg">
@@ -1626,6 +1641,12 @@ function ConversasPage() {
                                 </div>
                               </div>
                             ) : null}
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-[#667781]">
+                              <p>Enter envia. Shift+Enter quebra linha.</p>
+                              <p>
+                                {replyLineCount} {replyLineCount === 1 ? "linha" : "linhas"} • {replyText.length} caracteres
+                              </p>
+                            </div>
                           </div>
                           <Button
                             type="button"
