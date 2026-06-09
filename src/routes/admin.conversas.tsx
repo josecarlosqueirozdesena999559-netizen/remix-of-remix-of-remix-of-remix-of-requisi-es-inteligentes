@@ -20,6 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
 import { getWhatsAppAdminNumbers } from "@/lib/app-settings-actions";
+import { requestNeedsSignature } from "@/lib/pending-request-signatures";
+import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/conversas")({
@@ -77,6 +79,9 @@ type OutgoingStatusRow = {
 type UserRow = {
   nome: string | null;
   whatsapp: string | null;
+  cpf?: string | null;
+  setor?: string | null;
+  unidade_nome?: string | null;
   is_admin?: boolean | null;
   role?: string | null;
 };
@@ -113,7 +118,8 @@ type StandardMessagePreset = {
   id: string;
   label: string;
   description: string;
-  buildMessage: (userName: string) => string;
+  buildMessage?: (userName: string) => string;
+  action?: "charge-pending-signatures";
 };
 
 function normalizePhone(value: string | null | undefined) {
@@ -318,6 +324,12 @@ function getMicrophoneAccessMessage(error: unknown) {
 
 const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
   {
+    id: "cobrar-assinatura",
+    label: "Cobrar assinatura",
+    description: "Busca todas as assinaturas pendentes do usuario e monta uma cobranca profissional.",
+    action: "charge-pending-signatures",
+  },
+  {
     id: "pedido-separado",
     label: "Pedido separado e aguardando assinaturas",
     description: "Avisa que o pedido esta separado e lembra sobre assinatura e retirada.",
@@ -331,6 +343,80 @@ const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
       ].join(" "),
   },
 ];
+
+type PendingSignatureReminderRequest = {
+  id: string;
+  saida_codigo: string | null;
+  data: string | null;
+  created_at: string;
+  status: string;
+  signed_attachment: unknown;
+};
+
+function getPendingSignatureLabel(status: string) {
+  if (status === "aguardando_assinatura_saida") return "assinatura da saida";
+  if (status === "correcao_requisicao") return "correcao e reenvio da requisicao";
+  return "assinatura da requisicao";
+}
+
+async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[]) {
+  const matchedUser = resolveConversationUser(phone, users);
+  if (!matchedUser) {
+    throw new Error("Nao foi possivel identificar o usuario desta conversa para buscar as assinaturas pendentes.");
+  }
+
+  const cpf = matchedUser.cpf?.trim() || "";
+  const nome = matchedUser.nome?.trim() || "usuario";
+  const location = matchedUser.unidade_nome?.trim() || matchedUser.setor?.trim() || "";
+
+  let query = supabase
+    .from("requisicoes")
+    .select("id,saida_codigo,data,created_at,status,signed_attachment")
+    .in("status", [
+      "aguardando_assinatura",
+      "aguardando_assinatura_requisicao",
+      "aguardando_assinatura_saida",
+      "correcao_requisicao",
+    ])
+    .order("updated_at", { ascending: false });
+
+  if (cpf) {
+    query = query.eq("solicitante_cpf", cpf);
+  } else if (nome && location) {
+    query = query.eq("solicitante", nome).eq("setor", location);
+  } else {
+    throw new Error("Este usuario nao possui identificacao suficiente para localizar as assinaturas pendentes.");
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const pendingRequests = ((data ?? []) as PendingSignatureReminderRequest[]).filter(requestNeedsSignature);
+  if (pendingRequests.length === 0) {
+    return [
+      `Ola, ${getFirstName(nome)}.`,
+      "No momento nao identificamos assinaturas pendentes vinculadas ao seu cadastro.",
+      "Se precisar de apoio, ficamos a disposicao.",
+    ].join("\n\n");
+  }
+
+  const codeByRequestId = buildGlobalRequestCodes(pendingRequests);
+  const requestLines = pendingRequests.map((request, index) => {
+    const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
+    const requestDate = request.data?.trim() || "-";
+    return `${index + 1}. ${code} (${requestDate}) - ${getPendingSignatureLabel(request.status)}.`;
+  });
+
+  return [
+    `Ola, ${getFirstName(nome)}.`,
+    "Identificamos pendencias de assinatura em seu nome no sistema do almoxarifado.",
+    "No momento constam os seguintes documentos aguardando regularizacao:",
+    requestLines.join("\n"),
+    "Por gentileza, acesse o sistema e conclua as assinaturas pendentes para dar continuidade ao atendimento da sua solicitacao.",
+    "Se alguma pendencia ja tiver sido regularizada, desconsidere esta mensagem.",
+    "Ficamos a disposicao.",
+  ].join("\n\n");
+}
 
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
@@ -528,7 +614,7 @@ function ConversasPage() {
           .limit(1000),
         supabase
           .from("usuarios")
-          .select("nome,whatsapp,is_admin,role")
+          .select("nome,whatsapp,cpf,setor,unidade_nome,is_admin,role")
           .not("whatsapp", "is", null),
         (supabase as any)
           .from("app_settings")
@@ -874,19 +960,36 @@ function ConversasPage() {
     });
   };
 
-  const applyStandardMessagePreset = (preset: StandardMessagePreset) => {
-    const nextMessage = preset.buildMessage(selectedConversationFirstName);
-    setReplyText(nextMessage);
-    setError(null);
-
+  const focusReplyWithMarker = (message: string) => {
     window.setTimeout(() => {
       replyTextareaRef.current?.focus();
       const manualMarker = "[DIGITE AQUI MANUALMENTE]";
-      const markerIndex = nextMessage.indexOf(manualMarker);
+      const markerIndex = message.indexOf(manualMarker);
       if (markerIndex >= 0) {
         replyTextareaRef.current?.setSelectionRange(markerIndex, markerIndex + manualMarker.length);
       }
     }, 0);
+  };
+
+  const applyStandardMessagePreset = async (preset: StandardMessagePreset) => {
+    setError(null);
+    setNotice(null);
+
+    try {
+      const nextMessage =
+        preset.action === "charge-pending-signatures"
+          ? await buildPendingSignatureChargeMessage(selectedConversation?.phone || "", users)
+          : preset.buildMessage?.(selectedConversationFirstName) || "";
+
+      setReplyText(nextMessage);
+      focusReplyWithMarker(nextMessage);
+    } catch (presetError) {
+      setError(
+        presetError instanceof Error
+          ? presetError.message
+          : "Nao foi possivel montar a mensagem padrao.",
+      );
+    }
   };
 
   const handleReply = async () => {

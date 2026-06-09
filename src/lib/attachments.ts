@@ -8,6 +8,7 @@ export interface AttachmentFile {
   publicUrl?: string;
   signedUrl?: string;
   uploadedAt?: string;
+  sourceUploadedAt?: string;
   mimeType?: string;
   kind?: "request" | "output" | "audio" | "image" | "video";
 }
@@ -33,6 +34,7 @@ function toAttachmentFile(value: unknown): AttachmentFile | null {
   if (typeof value.publicUrl === "string") attachment.publicUrl = value.publicUrl;
   if (typeof value.signedUrl === "string") attachment.signedUrl = value.signedUrl;
   if (typeof value.uploadedAt === "string") attachment.uploadedAt = value.uploadedAt;
+  if (typeof value.sourceUploadedAt === "string") attachment.sourceUploadedAt = value.sourceUploadedAt;
   if (typeof value.mimeType === "string") attachment.mimeType = value.mimeType;
   if (
     value.kind === "request" ||

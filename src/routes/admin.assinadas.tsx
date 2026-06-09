@@ -32,6 +32,7 @@ import {
 } from "@/lib/request-return-feedback";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
+import { getRequestArchiveMonth } from "@/lib/request-archive-month";
 import { downloadSignedRequestsMonthlyPdf } from "@/lib/signed-requests-monthly-pdf";
 
 export const Route = createFileRoute("/admin/assinadas")({
@@ -57,20 +58,6 @@ type ReviewTarget = "requisicao" | "saida";
 function getCurrentMonth() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function getRequestMonth(request: Pick<RequisicaoAssinada, "data" | "created_at">) {
-  const displayDate = request.data?.trim();
-
-  if (displayDate) {
-    const brDate = displayDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (brDate) return `${brDate[3]}-${brDate[2].padStart(2, "0")}`;
-
-    const isoDate = displayDate.match(/^(\d{4})-(\d{2})/);
-    if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
-  }
-
-  return String(request.created_at || "").slice(0, 7);
 }
 
 function getStatusLabel(status: string) {
@@ -185,7 +172,7 @@ function AssinadasPage() {
     const codeQuery = codigoFilter.trim().toLowerCase();
 
     return (data ?? []).filter((request) => {
-      if (getRequestMonth(request) !== selectedMonth) return false;
+      if (getRequestArchiveMonth(request) !== selectedMonth) return false;
       if (!codeQuery) return true;
 
       const code = (request.saida_codigo || codeByRequestId.get(request.id) || "-").toLowerCase();

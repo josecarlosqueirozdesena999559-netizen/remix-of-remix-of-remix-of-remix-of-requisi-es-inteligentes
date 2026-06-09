@@ -250,6 +250,9 @@ function MinhasAssinaturasPage() {
       storageBucket: REQUISICOES_BUCKET,
       storagePath,
       uploadedAt: new Date().toISOString(),
+      sourceUploadedAt: isOutputStage
+        ? ((request.admin_attachment as AttachmentFile | null)?.uploadedAt || new Date().toISOString())
+        : undefined,
       kind: isOutputStage ? "output" as const : "request" as const,
     };
 
