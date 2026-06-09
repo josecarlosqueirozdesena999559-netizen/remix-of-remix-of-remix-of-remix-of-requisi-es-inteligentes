@@ -1,10 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, BellOff, Loader2, MessageCircle, MessageSquareMore, Mic, Paperclip, Send, Square } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  Check,
+  Loader2,
+  MessageCircle,
+  MessageSquareMore,
+  Mic,
+  Paperclip,
+  Send,
+  Square,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
@@ -96,6 +108,13 @@ type ConversationSummary = {
   lastIncomingAt: string | null;
   isWindowOpen: boolean;
   messages: ConversationMessage[];
+};
+
+type StandardMessagePreset = {
+  id: string;
+  label: string;
+  description: string;
+  buildMessage: (userName: string) => string;
 };
 
 function normalizePhone(value: string | null | undefined) {
@@ -234,6 +253,11 @@ function getInitials(name: string) {
   return parts.map((part) => part[0]?.toUpperCase() || "").join("");
 }
 
+function getFirstName(name: string) {
+  const firstName = name.trim().split(/\s+/).filter(Boolean)[0];
+  return firstName || "usuario";
+}
+
 function getMessagePlaceholder(messageType: string, direction: "incoming" | "outgoing") {
   if (messageType === "audio") return direction === "incoming" ? "[audio recebido]" : "[audio enviado]";
   if (messageType === "image") return "[imagem]";
@@ -292,6 +316,26 @@ function getMicrophoneAccessMessage(error: unknown) {
   if (errorMessage) return errorMessage;
   return "Nao foi possivel acessar o microfone.";
 }
+
+const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
+  {
+    id: "pedido-separado",
+    label: "Pedido separado",
+    description: "Lembra o usuario de assinar a requisicao e informa que o pedido foi separado.",
+    buildMessage: (userName) =>
+      [
+        `Ola ${userName}.`,
+        "",
+        "O seu pedido [DIGITE AQUI MANUALMENTE] esta separado.",
+        "",
+        "Por gentileza, assinar suas requisicoes e fazer a retirada.",
+        "",
+        "Importante lembrar que todos os pedidos so sao entregues apos todas as assinaturas estarem concluidas.",
+        "",
+        "Obrigado!",
+      ].join("\n"),
+  },
+];
 
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
@@ -409,6 +453,7 @@ function ConversasPage() {
   const [adminNumbers, setAdminNumbers] = useState<string[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
+  const [composerTab, setComposerTab] = useState("mensagem");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -423,6 +468,7 @@ function ConversasPage() {
   const latestIncomingMessageIdsRef = useRef<Map<string, string>>(new Map());
   const notificationsBootstrappedRef = useRef(false);
   const notificationRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function fileToBase64(file: File) {
     return await new Promise<string>((resolve, reject) => {
@@ -743,6 +789,18 @@ function ConversasPage() {
 
   const selectedConversation =
     conversations.find((conversation) => conversation.phone === selectedPhone) || null;
+  const selectedConversationFirstName = getFirstName(selectedConversation?.displayName || "");
+  const slashQuery = replyText.trimStart().startsWith("/") ? replyText.trimStart().slice(1).toLowerCase() : "";
+  const filteredStandardMessages = useMemo(
+    () =>
+      STANDARD_MESSAGE_PRESETS.filter((preset) => {
+        if (!slashQuery) return true;
+        const haystack = `${preset.label} ${preset.description}`.toLowerCase();
+        return haystack.includes(slashQuery);
+      }),
+    [slashQuery],
+  );
+  const isSlashMenuOpen = selectedConversation?.isWindowOpen && replyText.trimStart().startsWith("/");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
@@ -814,12 +872,30 @@ function ConversasPage() {
 
   const closeConversation = () => {
     setReplyText("");
+    setComposerTab("mensagem");
     setNotice(null);
     setError(null);
     void navigate({
       to: "/admin/conversas",
       search: {},
     });
+  };
+
+  const applyStandardMessagePreset = (preset: StandardMessagePreset) => {
+    const nextMessage = preset.buildMessage(selectedConversationFirstName);
+    setReplyText(nextMessage);
+    setComposerTab("padronizadas");
+    setError(null);
+    setNotice(`Mensagem padronizada "${preset.label}" pronta para envio.`);
+
+    window.setTimeout(() => {
+      replyTextareaRef.current?.focus();
+      const manualMarker = "[DIGITE AQUI MANUALMENTE]";
+      const markerIndex = nextMessage.indexOf(manualMarker);
+      if (markerIndex >= 0) {
+        replyTextareaRef.current?.setSelectionRange(markerIndex, markerIndex + manualMarker.length);
+      }
+    }, 0);
   };
 
   const handleReply = async () => {
@@ -1137,6 +1213,13 @@ function ConversasPage() {
   };
 
   const handleReplyKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isSlashMenuOpen && event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const firstPreset = filteredStandardMessages[0];
+      if (firstPreset) applyStandardMessagePreset(firstPreset);
+      return;
+    }
+
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     void handleReply();
@@ -1363,63 +1446,146 @@ function ConversasPage() {
 
                   <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
                     {selectedConversation.isWindowOpen ? (
-                      <div className="flex items-end gap-3">
-                        <input
-                          ref={audioInputRef}
-                          type="file"
-                          accept="audio/*"
-                          className="hidden"
-                          onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
-                            recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
-                          }`}
-                          disabled={saving}
-                          onClick={() => void handleRecordAudio()}
-                          title={recording ? "Parar gravacao" : "Gravar audio"}
-                          aria-label={recording ? "Parar gravacao" : "Gravar audio"}
-                        >
-                          {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
-                          disabled={saving || recording}
-                          onClick={() => audioInputRef.current?.click()}
-                          title="Enviar audio"
-                          aria-label="Enviar audio"
-                        >
-                          <Paperclip className="h-5 w-5" />
-                        </Button>
-                        <Textarea
-                          value={replyText}
-                          onChange={(event) => setReplyText(event.target.value)}
-                          onKeyDown={handleReplyKeyDown}
-                          placeholder="Mensagem"
-                          rows={1}
-                          className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
-                          disabled={saving || !replyText.trim()}
-                          onClick={() => void handleReply()}
-                          title="Enviar"
-                          aria-label="Enviar mensagem"
-                        >
-                          {saving ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
-                            <Send className="h-5 w-5" />
-                          )}
-                        </Button>
+                      <div className="space-y-3">
+                        <Tabs value={composerTab} onValueChange={setComposerTab}>
+                          <div className="flex items-center justify-between gap-3">
+                            <TabsList className="bg-white">
+                              <TabsTrigger value="mensagem">Mensagem</TabsTrigger>
+                              <TabsTrigger value="padronizadas">Padronizadas</TabsTrigger>
+                            </TabsList>
+                            <p className="text-xs text-[#667781]">
+                              Digite <span className="font-medium">/</span> para abrir o menu rapido.
+                            </p>
+                          </div>
+
+                          <TabsContent value="mensagem" className="mt-3">
+                            <p className="text-xs text-[#667781]">
+                              Use a mensagem livre para respostas normais ou digite <span className="font-medium">/</span> no
+                              campo abaixo para inserir uma mensagem padronizada.
+                            </p>
+                          </TabsContent>
+
+                          <TabsContent value="padronizadas" className="mt-3">
+                            <div className="rounded-2xl border border-[#d1d7db] bg-white p-3">
+                              <p className="text-sm font-medium text-[#111b21]">Mensagens padronizadas</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {STANDARD_MESSAGE_PRESETS.map((preset) => (
+                                  <Button
+                                    key={preset.id}
+                                    type="button"
+                                    variant="outline"
+                                    className="justify-start rounded-full border-[#d1d7db] bg-white text-[#111b21] hover:bg-[#f5f6f6]"
+                                    onClick={() => applyStandardMessagePreset(preset)}
+                                  >
+                                    {preset.label}
+                                  </Button>
+                                ))}
+                              </div>
+                              <p className="mt-3 text-xs text-[#667781]">
+                                A mensagem de pedido deixa o trecho do pedido separado para voce digitar manualmente.
+                              </p>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+
+                        <div className="flex items-end gap-3">
+                          <input
+                            ref={audioInputRef}
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
+                              recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
+                            }`}
+                            disabled={saving}
+                            onClick={() => void handleRecordAudio()}
+                            title={recording ? "Parar gravacao" : "Gravar audio"}
+                            aria-label={recording ? "Parar gravacao" : "Gravar audio"}
+                          >
+                            {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                            disabled={saving || recording}
+                            onClick={() => audioInputRef.current?.click()}
+                            title="Enviar audio"
+                            aria-label="Enviar audio"
+                          >
+                            <Paperclip className="h-5 w-5" />
+                          </Button>
+                          <div className="relative flex-1">
+                            <Textarea
+                              ref={replyTextareaRef}
+                              value={replyText}
+                              onChange={(event) => setReplyText(event.target.value)}
+                              onKeyDown={handleReplyKeyDown}
+                              placeholder="Mensagem"
+                              rows={1}
+                              className="max-h-40 min-h-11 resize-none rounded-3xl border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
+                            />
+                            {isSlashMenuOpen ? (
+                              <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 rounded-2xl border border-[#d1d7db] bg-white p-2 shadow-lg">
+                                <p className="px-2 pb-2 text-xs text-[#667781]">
+                                  Selecione uma mensagem padronizada
+                                </p>
+                                <div className="space-y-1">
+                                  {filteredStandardMessages.length ? (
+                                    filteredStandardMessages.map((preset, index) => (
+                                      <button
+                                        key={preset.id}
+                                        type="button"
+                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left hover:bg-[#f5f6f6]"
+                                        onClick={() => applyStandardMessagePreset(preset)}
+                                      >
+                                        <Check
+                                          className={`mt-0.5 h-4 w-4 shrink-0 ${
+                                            index === 0 ? "text-[#00a884]" : "text-transparent"
+                                          }`}
+                                        />
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block text-sm font-medium text-[#111b21]">
+                                            {preset.label}
+                                          </span>
+                                          <span className="block text-xs text-[#667781]">
+                                            {preset.description}
+                                          </span>
+                                        </span>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <p className="px-3 py-2 text-sm text-[#667781]">
+                                      Nenhuma mensagem padronizada encontrada.
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                          <Button
+                            type="button"
+                            size="icon"
+                            className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
+                            disabled={saving || !replyText.trim()}
+                            onClick={() => void handleReply()}
+                            title="Enviar"
+                            aria-label="Enviar mensagem"
+                          >
+                            {saving ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Send className="h-5 w-5" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

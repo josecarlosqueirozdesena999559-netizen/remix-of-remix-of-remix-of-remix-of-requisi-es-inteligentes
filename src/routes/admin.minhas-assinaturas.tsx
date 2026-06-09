@@ -13,6 +13,10 @@ import {
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import {
+  getRequestOwnerCpf,
+  getRequestOwnerLocation,
+} from "@/lib/request-owner";
+import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
@@ -142,19 +146,38 @@ function MinhasAssinaturasPage() {
     try {
       const { profile } = await getCurrentUserProfile();
 
-      if (!profile?.cpf) {
+      const cpf = getRequestOwnerCpf(profile);
+      const location = getRequestOwnerLocation(profile);
+      const name = profile?.nome?.trim() || "";
+
+      if (!cpf && !(name && location)) {
         setRequests([]);
         return;
       }
 
+      const requestsQuery = supabase
+        .from("requisicoes")
+        .select(`${baseSelect},return_reason,return_target`)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
+        .order("updated_at", { ascending: false });
+
+      const fallbackRequestsQuery = supabase
+        .from("requisicoes")
+        .select(baseSelect)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
+        .order("updated_at", { ascending: false });
+
+      const scopedRequestsQuery = cpf
+        ? requestsQuery.eq("solicitante_cpf", cpf)
+        : requestsQuery.eq("solicitante", name).eq("setor", location);
+
+      const scopedFallbackQuery = cpf
+        ? fallbackRequestsQuery.eq("solicitante_cpf", cpf)
+        : fallbackRequestsQuery.eq("solicitante", name).eq("setor", location);
+
       const [{ data: setoresData, error: setoresError }, requestsResult] = await Promise.all([
         supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
-        supabase
-          .from("requisicoes")
-          .select(`${baseSelect},return_reason,return_target`)
-          .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
-          .order("updated_at", { ascending: false }),
+        scopedRequestsQuery,
       ]);
 
       let { data, error } = requestsResult;
@@ -166,12 +189,7 @@ function MinhasAssinaturasPage() {
       const locationOptions = (setoresData ?? []) as LocationOption[];
 
       if (error && isMissingReturnFeedbackColumnError(error.message)) {
-        const fallbackResult = await supabase
-          .from("requisicoes")
-          .select(baseSelect)
-          .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
-          .order("updated_at", { ascending: false });
+        const fallbackResult = await scopedFallbackQuery;
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,

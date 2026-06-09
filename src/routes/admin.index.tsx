@@ -7,6 +7,10 @@ import {
   getOutputSignedAttachment,
   getRequestSignedAttachment,
 } from "@/lib/attachments";
+import {
+  getRequestOwnerCpf,
+  getRequestOwnerLocation,
+} from "@/lib/request-owner";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
@@ -96,7 +100,11 @@ function AdminHome() {
           return;
         }
 
-        if (!profile.cpf) {
+        const cpf = getRequestOwnerCpf(profile);
+        const location = getRequestOwnerLocation(profile);
+        const name = profile.nome?.trim() || "";
+
+        if (!cpf && !(name && location)) {
           if (active) {
             setPendingCount(0);
             setPendingNoticeItems([]);
@@ -104,10 +112,9 @@ function AdminHome() {
           return;
         }
 
-        const { data, error } = await supabase
+        let query = supabase
           .from("requisicoes")
           .select("id,saida_codigo,status,signed_attachment")
-          .eq("solicitante_cpf", profile.cpf)
           .in("status", [
             "aguardando_assinatura",
             "aguardando_assinatura_requisicao",
@@ -115,6 +122,14 @@ function AdminHome() {
             "correcao_requisicao",
           ])
           .order("updated_at", { ascending: false });
+
+        if (cpf) {
+          query = query.eq("solicitante_cpf", cpf);
+        } else {
+          query = query.eq("solicitante", name).eq("setor", location);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw new Error(error.message);
         if (!active) return;
