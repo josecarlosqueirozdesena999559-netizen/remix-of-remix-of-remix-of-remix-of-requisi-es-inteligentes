@@ -73,6 +73,7 @@ function ControleAssinaturasPage() {
   const [selectedSetor, setSelectedSetor] = useState<string | null>(null);
   const [localidadeFilter, setLocalidadeFilter] = useState("");
   const [nomeFilter, setNomeFilter] = useState("");
+  const [codigoFilter, setCodigoFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -191,6 +192,8 @@ function ControleAssinaturasPage() {
   }, []);
 
   const filteredSetores = useMemo(() => {
+    const codeQuery = codigoFilter.trim().toLowerCase();
+
     return data
       .map((setor) => ({
         ...setor,
@@ -201,7 +204,9 @@ function ControleAssinaturasPage() {
           const nomeMatch =
             !nomeFilter.trim() ||
             request.usuarioNome.toLowerCase().includes(nomeFilter.trim().toLowerCase());
-          return localidadeMatch && nomeMatch;
+          const code = (request.saida_codigo || codeByRequestId.get(request.id) || request.id).toLowerCase();
+          const codigoMatch = !codeQuery || code.includes(codeQuery);
+          return localidadeMatch && nomeMatch && codigoMatch;
         }),
       }))
       .filter((setor) => setor.requests.length > 0)
@@ -209,17 +214,14 @@ function ControleAssinaturasPage() {
         ...setor,
         pendencias: setor.requests.length,
       }));
-  }, [data, localidadeFilter, nomeFilter]);
+  }, [codeByRequestId, codigoFilter, data, localidadeFilter, nomeFilter]);
 
   const totalPendencias = useMemo(
     () => data.reduce((total, setor) => total + setor.pendencias, 0),
     [data],
   );
 
-  const selectedSetorData =
-    filteredSetores.find((setor) => setor.nome === selectedSetor) ||
-    data.find((setor) => setor.nome === selectedSetor) ||
-    null;
+  const selectedSetorData = filteredSetores.find((setor) => setor.nome === selectedSetor) || null;
 
   return (
     <div className="space-y-6">
@@ -243,7 +245,7 @@ function ControleAssinaturasPage() {
           <Search className="h-4 w-4 text-primary" />
           Filtros
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="space-y-2 text-sm text-muted-foreground">
             Setor
             <Input
@@ -258,6 +260,14 @@ function ControleAssinaturasPage() {
               value={nomeFilter}
               onChange={(event) => setNomeFilter(event.target.value)}
               placeholder="Filtrar por usuário"
+            />
+          </label>
+          <label className="space-y-2 text-sm text-muted-foreground">
+            Codigo da requisicao
+            <Input
+              value={codigoFilter}
+              onChange={(event) => setCodigoFilter(event.target.value)}
+              placeholder="Filtrar por codigo"
             />
           </label>
         </div>

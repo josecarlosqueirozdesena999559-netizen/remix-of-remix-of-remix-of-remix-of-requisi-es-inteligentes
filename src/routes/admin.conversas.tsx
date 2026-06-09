@@ -16,7 +16,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
@@ -320,20 +319,16 @@ function getMicrophoneAccessMessage(error: unknown) {
 const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
   {
     id: "pedido-separado",
-    label: "Pedido separado",
-    description: "Lembra o usuario de assinar a requisicao e informa que o pedido foi separado.",
+    label: "Pedido separado e aguardando assinaturas",
+    description: "Avisa que o pedido esta separado e lembra sobre assinatura e retirada.",
     buildMessage: (userName) =>
       [
-        `Ola ${userName}.`,
-        "",
-        "O seu pedido [DIGITE AQUI MANUALMENTE] esta separado.",
-        "",
-        "Por gentileza, assinar suas requisicoes e fazer a retirada.",
-        "",
-        "Importante lembrar que todos os pedidos so sao entregues apos todas as assinaturas estarem concluidas.",
-        "",
+        `Ola, ${userName}.`,
+        "Seu pedido [DIGITE AQUI MANUALMENTE] esta separado.",
+        "Por gentileza, assine suas requisicoes e realize a retirada.",
+        "Lembramos que os pedidos so sao entregues apos a conclusao de todas as assinaturas.",
         "Obrigado!",
-      ].join("\n"),
+      ].join(" "),
   },
 ];
 
@@ -453,7 +448,6 @@ function ConversasPage() {
   const [adminNumbers, setAdminNumbers] = useState<string[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [replyText, setReplyText] = useState("");
-  const [composerTab, setComposerTab] = useState("mensagem");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -872,7 +866,6 @@ function ConversasPage() {
 
   const closeConversation = () => {
     setReplyText("");
-    setComposerTab("mensagem");
     setNotice(null);
     setError(null);
     void navigate({
@@ -884,9 +877,7 @@ function ConversasPage() {
   const applyStandardMessagePreset = (preset: StandardMessagePreset) => {
     const nextMessage = preset.buildMessage(selectedConversationFirstName);
     setReplyText(nextMessage);
-    setComposerTab("padronizadas");
     setError(null);
-    setNotice(`Mensagem padronizada "${preset.label}" pronta para envio.`);
 
     window.setTimeout(() => {
       replyTextareaRef.current?.focus();
@@ -1251,7 +1242,7 @@ function ConversasPage() {
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,34vh)_minmax(0,1fr)] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:grid-cols-[360px_minmax(0,1fr)] xl:grid-rows-1 2xl:grid-cols-[400px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,34vh)_minmax(0,1fr)] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:grid-cols-[340px_minmax(0,1fr)] xl:grid-rows-1 2xl:grid-cols-[380px_minmax(0,1fr)]">
           <Card className="flex min-h-0 flex-col overflow-hidden rounded-none border-0 border-b bg-white shadow-none xl:h-full xl:border-b-0 xl:border-r">
             <CardHeader className="shrink-0 border-b bg-[#f0f2f5] px-4 py-4">
               <div className="flex items-center justify-between gap-3">
@@ -1372,7 +1363,7 @@ function ConversasPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
+                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-5 sm:px-5 xl:px-10">
                     {selectedConversation.messages.map((message) => (
                       <div
                         key={message.id}
@@ -1381,13 +1372,13 @@ function ConversasPage() {
                         }`}
                       >
                         <div
-                          className={`relative max-w-[min(92%,720px)] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[min(78%,760px)] lg:max-w-[min(68%,760px)] ${
+                          className={`relative max-w-[92%] rounded-2xl px-4 py-3 text-[14px] leading-6 shadow-sm sm:max-w-[80%] lg:max-w-[72%] xl:max-w-[66%] 2xl:max-w-[60%] ${
                             message.direction === "outgoing"
                               ? "bg-[#d9fdd3] text-[#111b21]"
                               : "bg-white text-[#111b21]"
                           }`}
                         >
-                          <p className="mb-1 text-[11px] font-medium text-[#667781]">
+                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.02em] text-[#667781]">
                             {message.direction === "outgoing"
                               ? message.senderName?.trim() || "Admin"
                               : selectedConversation.displayName}
@@ -1405,7 +1396,7 @@ function ConversasPage() {
                                   className="max-h-80 max-w-full rounded-md object-contain"
                                 />
                               </button>
-                              <p className="whitespace-pre-wrap break-words">
+                              <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
                                 {getMessageDisplayBody(message)}
                               </p>
                             </div>
@@ -1415,13 +1406,13 @@ function ConversasPage() {
                                 <source src={messageMediaUrls[message.id]} />
                                 Seu navegador não suporta vídeo.
                               </video>
-                              <p className="whitespace-pre-wrap break-words">
+                              <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
                                 {getMessageDisplayBody(message)}
                               </p>
                             </div>
                           ) : message.messageType === "audio" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
-                              <p className="whitespace-pre-wrap break-words">
+                              <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
                                 {getMessageDisplayBody(message)}
                               </p>
                               <audio controls preload="none" className="max-w-full">
@@ -1430,11 +1421,11 @@ function ConversasPage() {
                               </audio>
                             </div>
                           ) : (
-                            <p className="whitespace-pre-wrap break-words">
+                            <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
                               {getMessageDisplayBody(message)}
                             </p>
                           )}
-                          <p className="mt-1 text-right text-[11px] text-[#667781]">
+                          <p className="mt-2 text-right text-[11px] text-[#667781]">
                             {getOutgoingStatusLabel(message.status) ||
                               formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
@@ -1447,46 +1438,11 @@ function ConversasPage() {
                   <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
                     {selectedConversation.isWindowOpen ? (
                       <div className="space-y-3">
-                        <Tabs value={composerTab} onValueChange={setComposerTab}>
-                          <div className="flex items-center justify-between gap-3">
-                            <TabsList className="bg-white">
-                              <TabsTrigger value="mensagem">Mensagem</TabsTrigger>
-                              <TabsTrigger value="padronizadas">Padronizadas</TabsTrigger>
-                            </TabsList>
-                            <p className="text-xs text-[#667781]">
-                              Digite <span className="font-medium">/</span> para abrir o menu rapido.
-                            </p>
-                          </div>
-
-                          <TabsContent value="mensagem" className="mt-3">
-                            <p className="text-xs text-[#667781]">
-                              Use a mensagem livre para respostas normais ou digite <span className="font-medium">/</span> no
-                              campo abaixo para inserir uma mensagem padronizada.
-                            </p>
-                          </TabsContent>
-
-                          <TabsContent value="padronizadas" className="mt-3">
-                            <div className="rounded-2xl border border-[#d1d7db] bg-white p-3">
-                              <p className="text-sm font-medium text-[#111b21]">Mensagens padronizadas</p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {STANDARD_MESSAGE_PRESETS.map((preset) => (
-                                  <Button
-                                    key={preset.id}
-                                    type="button"
-                                    variant="outline"
-                                    className="justify-start rounded-full border-[#d1d7db] bg-white text-[#111b21] hover:bg-[#f5f6f6]"
-                                    onClick={() => applyStandardMessagePreset(preset)}
-                                  >
-                                    {preset.label}
-                                  </Button>
-                                ))}
-                              </div>
-                              <p className="mt-3 text-xs text-[#667781]">
-                                A mensagem de pedido deixa o trecho do pedido separado para voce digitar manualmente.
-                              </p>
-                            </div>
-                          </TabsContent>
-                        </Tabs>
+                        <div className="flex items-center justify-end">
+                          <p className="text-xs text-[#667781]">
+                            Digite <span className="font-medium">/</span> para abrir um atalho.
+                          </p>
+                        </div>
 
                         <div className="flex items-end gap-3">
                           <input
@@ -1528,14 +1484,14 @@ function ConversasPage() {
                               value={replyText}
                               onChange={(event) => setReplyText(event.target.value)}
                               onKeyDown={handleReplyKeyDown}
-                              placeholder="Mensagem"
+                              placeholder="Digite uma mensagem"
                               rows={1}
                               className="max-h-40 min-h-11 resize-none rounded-3xl border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
                             />
                             {isSlashMenuOpen ? (
                               <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 rounded-2xl border border-[#d1d7db] bg-white p-2 shadow-lg">
                                 <p className="px-2 pb-2 text-xs text-[#667781]">
-                                  Selecione uma mensagem padronizada
+                                  Atalhos de mensagem
                                 </p>
                                 <div className="space-y-1">
                                   {filteredStandardMessages.length ? (
@@ -1562,9 +1518,7 @@ function ConversasPage() {
                                       </button>
                                     ))
                                   ) : (
-                                    <p className="px-3 py-2 text-sm text-[#667781]">
-                                      Nenhuma mensagem padronizada encontrada.
-                                    </p>
+                                    <p className="px-3 py-2 text-sm text-[#667781]">Nenhum atalho encontrado.</p>
                                   )}
                                 </div>
                               </div>
