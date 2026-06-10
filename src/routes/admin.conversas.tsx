@@ -123,6 +123,10 @@ type StandardMessagePreset = {
   action?: "charge-pending-signatures";
 };
 
+const CONVERSATION_INCOMING_LIMIT = 3000;
+const CONVERSATION_OUTGOING_LIMIT = 3000;
+const CONVERSATION_STATUS_LIMIT = 5000;
+
 function normalizePhone(value: string | null | undefined) {
   const digits = String(value ?? "").replace(/\D/g, "");
   return digits || "";
@@ -625,18 +629,18 @@ function ConversasPage() {
           .select("message_id,sender_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("sender_id", "is", null)
           .order("created_at", { ascending: false })
-          .limit(500),
+          .limit(CONVERSATION_INCOMING_LIMIT),
         (supabase as any)
           .from("whatsapp_outbound_message_audit")
           .select("message_id,recipient_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("recipient_id", "is", null)
           .order("created_at", { ascending: false })
-          .limit(500),
+          .limit(CONVERSATION_OUTGOING_LIMIT),
         (supabase as any)
           .from("whatsapp_webhook_status_audit")
           .select("message_id,recipient_id,status,occurred_at,created_at")
           .order("created_at", { ascending: false })
-          .limit(1000),
+          .limit(CONVERSATION_STATUS_LIMIT),
         supabase
           .from("usuarios")
           .select("nome,whatsapp,cpf,setor,unidade_nome,is_admin,role")
