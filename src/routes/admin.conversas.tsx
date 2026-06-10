@@ -107,6 +107,7 @@ type ConversationMessage = {
 type ConversationSummary = {
   phone: string;
   displayName: string;
+  hasRegisteredUser: boolean;
   preview: string;
   lastAt: string;
   lastIncomingAt: string | null;
@@ -237,14 +238,11 @@ function isAdminUser(user: UserRow | null | undefined) {
   return Boolean(user.is_admin) || user.role === "admin";
 }
 
-function isKnownNonAdminUserPhone(phone: string, users: UserRow[]) {
-  const matchedUser = resolveConversationUser(phone, users);
-  return Boolean(matchedUser) && !isAdminUser(matchedUser);
-}
+function isAdminPhone(phone: string, users: UserRow[], adminNumbers: string[] = []) {
+  if (adminNumbers.some((adminNumber) => phonesMatch(adminNumber, phone))) return true;
 
-function getDisplayName(phone: string, users: UserRow[]) {
   const matchedUser = resolveConversationUser(phone, users);
-  return matchedUser?.nome?.trim() || formatPhone(phone);
+  return isAdminUser(matchedUser);
 }
 
 function getInitials(name: string) {
@@ -351,6 +349,9 @@ type PendingSignatureReminderRequest = {
   created_at: string;
   status: string;
   signed_attachment: unknown;
+  solicitante: string | null;
+  solicitante_cpf: string | null;
+  setor: string | null;
 };
 
 function getPendingSignatureLabel(status: string) {
@@ -360,18 +361,34 @@ function getPendingSignatureLabel(status: string) {
 }
 
 async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[]) {
-  const matchedUser = resolveConversationUser(phone, users);
-  if (!matchedUser) {
+  const candidateUsers = users.filter(
+    (user) => phonesMatch(user.whatsapp || "", phone) && !isAdminUser(user),
+  );
+  const matchedUser = resolveConversationUser(phone, candidateUsers) || candidateUsers[0] || null;
+
+  if (!matchedUser || candidateUsers.length === 0) {
     throw new Error("Não foi possível identificar o usuário desta conversa para buscar as assinaturas pendentes.");
   }
 
-  const cpf = matchedUser.cpf?.trim() || "";
   const nome = matchedUser.nome?.trim() || "usuario";
-  const location = matchedUser.unidade_nome?.trim() || matchedUser.setor?.trim() || "";
+  const candidateCpfs = new Set(
+    candidateUsers
+      .map((user) => user.cpf?.trim() || "")
+      .filter(Boolean),
+  );
+  const candidateIdentityKeys = new Set(
+    candidateUsers
+      .map((user) => {
+        const candidateName = user.nome?.trim() || "";
+        const candidateLocation = user.unidade_nome?.trim() || user.setor?.trim() || "";
+        return candidateName && candidateLocation ? `${candidateName}::${candidateLocation}` : "";
+      })
+      .filter(Boolean),
+  );
 
-  let query = supabase
+  const { data, error } = await supabase
     .from("requisicoes")
-    .select("id,saida_codigo,data,created_at,status,signed_attachment")
+    .select("id,saida_codigo,data,created_at,status,signed_attachment,solicitante,solicitante_cpf,setor")
     .in("status", [
       "aguardando_assinatura",
       "aguardando_assinatura_requisicao",
@@ -380,18 +397,24 @@ async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[
     ])
     .order("updated_at", { ascending: false });
 
-  if (cpf) {
-    query = query.eq("solicitante_cpf", cpf);
-  } else if (nome && location) {
-    query = query.eq("solicitante", nome).eq("setor", location);
-  } else {
+  if (error) throw new Error(error.message);
+
+  if (candidateCpfs.size === 0 && candidateIdentityKeys.size === 0) {
     throw new Error("Este usuário não possui identificação suficiente para localizar as assinaturas pendentes.");
   }
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
+  const pendingRequests = ((data ?? []) as PendingSignatureReminderRequest[]).filter((request) => {
+    if (!requestNeedsSignature(request)) return false;
 
-  const pendingRequests = ((data ?? []) as PendingSignatureReminderRequest[]).filter(requestNeedsSignature);
+    const requestCpf = request.solicitante_cpf?.trim() || "";
+    if (requestCpf && candidateCpfs.has(requestCpf)) return true;
+
+    const requestName = request.solicitante?.trim() || "";
+    const requestLocation = request.setor?.trim() || "";
+    return Boolean(requestName && requestLocation) &&
+      candidateIdentityKeys.has(`${requestName}::${requestLocation}`);
+  });
+
   if (pendingRequests.length === 0) {
     return [
       `Olá, ${getFirstName(nome)}.`,
@@ -478,8 +501,9 @@ function buildConversationSummaries(input: {
   });
 
   return [...byPhone.entries()]
-    .filter(([phone]) => isKnownNonAdminUserPhone(phone, input.users))
+    .filter(([phone]) => !isAdminPhone(phone, input.users, input.adminNumbers))
     .map(([phone, messages]) => {
+      const matchedUser = resolveConversationUser(phone, input.users);
       const sortedMessages = [...messages].sort(
         (left, right) => getMessageSortTime(left) - getMessageSortTime(right),
       );
@@ -505,7 +529,8 @@ function buildConversationSummaries(input: {
 
       return {
         phone,
-        displayName: getDisplayName(phone, input.users),
+        displayName: matchedUser?.nome?.trim() || formatPhone(phone),
+        hasRegisteredUser: Boolean(matchedUser) && !isAdminUser(matchedUser),
         preview: lastMessage ? getMessageDisplayBody(lastMessage) : "",
         lastAt: lastMessage?.createdAt || lastMessage?.occurredAt || new Date(0).toISOString(),
         lastIncomingAt,
@@ -1393,9 +1418,16 @@ function ConversasPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-[#111b21]">
-                              {conversation.displayName}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium text-[#111b21]">
+                                {conversation.displayName}
+                              </p>
+                              {!conversation.hasRegisteredUser ? (
+                                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.02em] text-amber-700">
+                                  Sem cadastro
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="truncate text-xs text-[#667781]">
                               {formatPhone(conversation.phone)}
                             </p>
@@ -1438,6 +1470,11 @@ function ConversasPage() {
                           <MessageSquareMore className="h-4 w-4" />
                           {selectedConversation.displayName}
                         </CardTitle>
+                        {!selectedConversation.hasRegisteredUser ? (
+                          <p className="mt-1 text-[11px] font-medium text-amber-700">
+                            Contato sem cadastro no sistema.
+                          </p>
+                        ) : null}
                         <CardDescription className="text-xs">
                           {formatPhone(selectedConversation.phone)}
                         </CardDescription>
