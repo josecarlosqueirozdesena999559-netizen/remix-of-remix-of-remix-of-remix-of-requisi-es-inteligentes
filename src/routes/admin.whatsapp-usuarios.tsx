@@ -198,6 +198,7 @@ function WhatsAppUsuariosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [rows, setRows] = useState<WhatsAppUserStatusRow[]>([]);
   const [openingPhone, setOpeningPhone] = useState<string | null>(null);
 
@@ -344,6 +345,7 @@ function WhatsAppUsuariosPage() {
     if (!row.whatsapp) return;
 
     setActionError(null);
+    setActionNotice(null);
     setOpeningPhone(row.whatsapp);
 
     try {
@@ -374,6 +376,9 @@ function WhatsAppUsuariosPage() {
         if (!result?.ok) {
           throw new Error(result?.error || "Erro ao enviar o template do WhatsApp.");
         }
+
+        setActionNotice("Template enviado ao usuario. A conversa pode ser aberta quando ele responder.");
+        return;
       }
 
       await navigate({
@@ -419,6 +424,12 @@ function WhatsAppUsuariosPage() {
 
   return (
     <div className="space-y-4">
+      {actionNotice ? (
+        <Alert>
+          <AlertDescription>{actionNotice}</AlertDescription>
+        </Alert>
+      ) : null}
+
       {actionError ? (
         <Alert variant="destructive">
           <AlertDescription>{actionError}</AlertDescription>

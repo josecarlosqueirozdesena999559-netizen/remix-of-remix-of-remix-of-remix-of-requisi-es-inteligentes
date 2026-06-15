@@ -13,6 +13,10 @@ import {
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import {
+  getRequestOwnerCpf,
+  getRequestOwnerLocation,
+} from "@/lib/request-owner";
+import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
@@ -77,19 +81,8 @@ function needsCurrentStageSignature(request: Requisicao) {
 }
 
 function buildRequestDedupKey(request: Requisicao) {
-  const code = request.saida_codigo?.trim();
-  if (code) {
-    return `code:${code}|status:${request.status}`;
-  }
-
-  return [
-    request.status,
-    request.solicitante_cpf?.trim() || "",
-    request.setor?.trim() || "",
-    request.data?.trim() || "",
-    request.return_target?.trim() || "",
-    request.return_reason?.trim() || "",
-  ].join("|");
+  // Each request must remain visible for signature even before it receives a saída code.
+  return request.id;
 }
 
 function dedupeRequests(requests: Requisicao[]) {
@@ -113,6 +106,10 @@ function normalizeRequestedQuantity(item: RequestPdfItem) {
 
 function hasRequestItems(request: Requisicao) {
   return Array.isArray(request.items) && request.items.some((item) => normalizeRequestedQuantity(item) > 0);
+}
+
+function shouldBlockSignatureUpload(request: Requisicao) {
+  return request.status !== "aguardando_assinatura_saida" && !hasRequestItems(request);
 }
 
 async function removeOldAttachment(attachment: AttachmentFile | null | undefined) {
@@ -149,19 +146,38 @@ function MinhasAssinaturasPage() {
     try {
       const { profile } = await getCurrentUserProfile();
 
-      if (!profile?.cpf) {
+      const cpf = getRequestOwnerCpf(profile);
+      const location = getRequestOwnerLocation(profile);
+      const name = profile?.nome?.trim() || "";
+
+      if (!cpf && !(name && location)) {
         setRequests([]);
         return;
       }
 
+      const requestsQuery = supabase
+        .from("requisicoes")
+        .select(`${baseSelect},return_reason,return_target`)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
+        .order("updated_at", { ascending: false });
+
+      const fallbackRequestsQuery = supabase
+        .from("requisicoes")
+        .select(baseSelect)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
+        .order("updated_at", { ascending: false });
+
+      const scopedRequestsQuery = cpf
+        ? requestsQuery.eq("solicitante_cpf", cpf)
+        : requestsQuery.eq("solicitante", name).eq("setor", location);
+
+      const scopedFallbackQuery = cpf
+        ? fallbackRequestsQuery.eq("solicitante_cpf", cpf)
+        : fallbackRequestsQuery.eq("solicitante", name).eq("setor", location);
+
       const [{ data: setoresData, error: setoresError }, requestsResult] = await Promise.all([
         supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
-        supabase
-          .from("requisicoes")
-          .select(`${baseSelect},return_reason,return_target`)
-          .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
-          .order("updated_at", { ascending: false }),
+        scopedRequestsQuery,
       ]);
 
       let { data, error } = requestsResult;
@@ -173,12 +189,7 @@ function MinhasAssinaturasPage() {
       const locationOptions = (setoresData ?? []) as LocationOption[];
 
       if (error && isMissingReturnFeedbackColumnError(error.message)) {
-        const fallbackResult = await supabase
-          .from("requisicoes")
-          .select(baseSelect)
-          .eq("solicitante_cpf", profile.cpf)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
-          .order("updated_at", { ascending: false });
+        const fallbackResult = await scopedFallbackQuery;
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,
@@ -221,7 +232,7 @@ function MinhasAssinaturasPage() {
     setMessage(null);
     setError(null);
 
-    if (!hasRequestItems(request)) {
+    if (shouldBlockSignatureUpload(request)) {
       setError("Esta requisicao esta sem itens e nao pode ser assinada. Refaça a requisicao com os itens corretos.");
       return;
     }
@@ -239,6 +250,9 @@ function MinhasAssinaturasPage() {
       storageBucket: REQUISICOES_BUCKET,
       storagePath,
       uploadedAt: new Date().toISOString(),
+      sourceUploadedAt: isOutputStage
+        ? ((request.admin_attachment as AttachmentFile | null)?.uploadedAt || new Date().toISOString())
+        : undefined,
       kind: isOutputStage ? "output" as const : "request" as const,
     };
 
@@ -414,6 +428,7 @@ function MinhasAssinaturasPage() {
                 {requests.map((request) => {
                   const hasRequestSigned = Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
                   const missingItems = !hasRequestItems(request);
+                  const uploadBlocked = shouldBlockSignatureUpload(request);
                   return (
                     <tr key={request.id} className="border-t">
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
@@ -512,7 +527,7 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
-                                disabled={uploadingId === request.id || missingItems}
+                                disabled={uploadingId === request.id || uploadBlocked}
                                 onChange={(event) => {
                                   void handleUpload(request, event.target.files?.[0]);
                                   event.currentTarget.value = "";
@@ -523,7 +538,7 @@ function MinhasAssinaturasPage() {
                                 variant="outline"
                                 size="sm"
                                 className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                                disabled={uploadingId === request.id || missingItems}
+                                disabled={uploadingId === request.id || uploadBlocked}
                                 onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
                               >
                                 {uploadingId === request.id ? (

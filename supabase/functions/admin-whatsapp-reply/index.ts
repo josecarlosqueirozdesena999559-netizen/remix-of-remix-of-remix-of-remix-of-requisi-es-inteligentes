@@ -4,6 +4,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const DEFAULT_GRAPH_API_VERSION = "v25.0";
 const ADMIN_OUTSIDE_WINDOW_TEMPLATE_NAME = "mensagem_admin_almoxarifado";
 const ADMIN_OUTSIDE_WINDOW_TEMPLATE_PREVIEW = "Oi";
+const ADMIN_OUTSIDE_WINDOW_TEMPLATE_MESSAGE = "Oi, preciso confirmar uma informação da sua requisição.";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -187,6 +188,30 @@ async function requireAdmin(user: SupabaseUser) {
   }
 
   throw new Error("Apenas administradores podem responder conversas.");
+}
+
+async function getUserDisplayNameByWhatsApp(phone: string) {
+  const variants = getBrazilianPhoneVariants(phone);
+  if (!variants.length) return "Usuário";
+
+  const orFilter = variants
+    .map((variant) => `whatsapp.like.*${encodeURIComponent(variant)}*`)
+    .join(",");
+
+  const rows = (await supabaseFetch(
+    `usuarios?select=nome,whatsapp&or=(${orFilter})&limit=10`,
+  )) as Array<{ nome?: string | null; whatsapp?: string | null }>;
+
+  const normalizedPhone = normalizeWhatsAppPhoneNumber(phone);
+  const exactMatch = rows.find((row) => {
+    try {
+      return normalizeWhatsAppPhoneNumber(String(row.whatsapp || "")) === normalizedPhone;
+    } catch {
+      return false;
+    }
+  });
+
+  return exactMatch?.nome?.trim() || rows[0]?.nome?.trim() || "Usuário";
 }
 
 async function getWhatsAppSettings() {
@@ -498,6 +523,7 @@ Deno.serve(async (request) => {
     }
 
     const adminDisplayName = getAdminDisplayName(adminProfile, user);
+    const userDisplayName = sendTemplateOnly ? await getUserDisplayNameByWhatsApp(to) : "";
     let payload:
       | {
           contacts?: Array<{ wa_id?: string }>;
@@ -512,6 +538,11 @@ Deno.serve(async (request) => {
       payload = await sendTemplateMessage({
         to,
         templateName: ADMIN_OUTSIDE_WINDOW_TEMPLATE_NAME,
+        bodyParameters: [
+          userDisplayName,
+          adminDisplayName,
+          ADMIN_OUTSIDE_WINDOW_TEMPLATE_MESSAGE,
+        ],
       });
     } else if (audio) {
       const fileName = sanitizeFileName(String(audio.fileName || "").trim()) || "audio.ogg";

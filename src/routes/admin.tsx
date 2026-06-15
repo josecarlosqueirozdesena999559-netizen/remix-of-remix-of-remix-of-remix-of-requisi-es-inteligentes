@@ -27,6 +27,10 @@ import {
   isLimitedAdmin,
 } from "@/lib/admin-sections";
 import {
+  BLOCK_NEW_REQUEST_MESSAGE,
+  hasPendingRequestSignatures,
+} from "@/lib/pending-request-signatures";
+import {
   getCurrentUserProfile,
   isUserProfileIncomplete,
   type CurrentUserProfile,
@@ -55,6 +59,8 @@ function AdminLayout() {
   const [whatsappNotice, setWhatsappNotice] = useState<string | null>(null);
   const [whatsappReminderOpen, setWhatsappReminderOpen] = useState(false);
   const [whatsappQrCode, setWhatsappQrCode] = useState<string | null>(null);
+  const [createRequestError, setCreateRequestError] = useState<string | null>(null);
+  const [checkingCreateRequest, setCheckingCreateRequest] = useState(false);
 
   useEffect(() => {
     if (pathname.startsWith("/admin/cadastros")) setOpenCadastros(true);
@@ -62,6 +68,7 @@ function AdminLayout() {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setCreateRequestError(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -199,6 +206,33 @@ function AdminLayout() {
     navigate({ to: "/" });
   };
 
+  const handleCreateRequestClick = async () => {
+    if (!profile) {
+      setCreateRequestError("Nao foi possivel validar suas assinaturas pendentes.");
+      return;
+    }
+
+    setCheckingCreateRequest(true);
+    setCreateRequestError(null);
+
+    try {
+      const hasPendingSignatures = await hasPendingRequestSignatures(profile);
+
+      if (hasPendingSignatures) {
+        setCreateRequestError(BLOCK_NEW_REQUEST_MESSAGE);
+        return;
+      }
+
+      navigate({ to: "/admin/requisicao" });
+    } catch (error) {
+      setCreateRequestError(
+        error instanceof Error ? error.message : "Erro ao verificar assinaturas pendentes.",
+      );
+    } finally {
+      setCheckingCreateRequest(false);
+    }
+  };
+
   const renderNavigation = (mobile = false) => (
     <nav className={`flex-1 space-y-1 ${mobile ? "mt-4" : ""}`}>
       <Link
@@ -318,8 +352,15 @@ function AdminLayout() {
             to="/admin/requisicao"
             className={itemCls}
             activeProps={{ className: `${itemCls} ${activeCls}` }}
+            onClick={(event) => {
+              event.preventDefault();
+              void handleCreateRequestClick();
+            }}
           >
-            Criar Requisição
+            <span className="inline-flex items-center gap-2">
+              Criar Requisição
+              {checkingCreateRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            </span>
           </Link>
           <Link
             to="/admin/minhas-assinaturas"
@@ -396,6 +437,13 @@ function AdminLayout() {
                 Clique aqui
               </button>{" "}
               para abrir o QR Code e enviar a mensagem no WhatsApp.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {createRequestError ? (
+          <Alert className="rounded-none border-x-0 border-b border-t-0 border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive shadow-none">
+            <AlertDescription className="text-sm font-medium">
+              {createRequestError}
             </AlertDescription>
           </Alert>
         ) : null}

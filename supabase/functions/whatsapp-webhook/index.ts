@@ -12,12 +12,6 @@ const READY_TEMPLATE_NAME = "pedido_pronto_retirada";
 const CONFIRM_BUTTON_ID = "confirmar_retirada";
 const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 const USER_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
-const ADMIN_KEEPALIVE_BUTTON_IDS = ["admin_keepalive_confirmar", "abrir_janela_24h_admin"];
-const ADMIN_KEEPALIVE_BUTTON_TITLES = [
-  "abrir janela 24h",
-  "confirmar janela",
-  "confirmar recebimento",
-];
 const WEBHOOK_LAST_POST_AT_KEY = "WHATSAPP_WEBHOOK_LAST_POST_AT";
 const WEBHOOK_LAST_POST_SUMMARY_KEY = "WHATSAPP_WEBHOOK_LAST_POST_SUMMARY";
 const WEBHOOK_LAST_POST_RAW_KEY = "WHATSAPP_WEBHOOK_LAST_POST_RAW";
@@ -1061,29 +1055,6 @@ async function handleConfirmation(from: string) {
   await deletePendingConfirmation(from);
 }
 
-function matchesAdminKeepaliveButton(message: any) {
-  const interactiveId = String(message?.interactive?.button_reply?.id || "").trim().toLowerCase();
-  const interactiveTitle = String(message?.interactive?.button_reply?.title || "").trim().toLowerCase();
-  const buttonPayload = String(message?.button?.payload || "").trim().toLowerCase();
-  const buttonText = String(message?.button?.text || "").trim().toLowerCase();
-
-  return (
-    ADMIN_KEEPALIVE_BUTTON_IDS.includes(interactiveId) ||
-    ADMIN_KEEPALIVE_BUTTON_IDS.includes(buttonPayload) ||
-    ADMIN_KEEPALIVE_BUTTON_TITLES.includes(interactiveTitle) ||
-    ADMIN_KEEPALIVE_BUTTON_TITLES.includes(buttonText)
-  );
-}
-
-async function handleAdminKeepalive(from: string) {
-  await markAdminSessionActive(from);
-  await sendTextMessage({
-    to: from,
-    text:
-      "Recebido. Sua janela de mensagens ficou aberta por 24 horas a partir desta resposta. Os alertas do sistema podem ser enviados normalmente durante esse período.",
-  });
-}
-
 function extractMessages(payload: any) {
   const entries = Array.isArray(payload?.entry) ? payload.entry : [];
   return entries.flatMap((entry: any) =>
@@ -1202,14 +1173,6 @@ Deno.serve(async (request) => {
 
         try {
           await markAdminSessionActive(from);
-
-          if (
-            (message.type === "interactive" || message.type === "button") &&
-            matchesAdminKeepaliveButton(message)
-          ) {
-            await handleAdminKeepalive(from);
-            return;
-          }
 
           if (message.type === "image" && message.image?.id) {
             await handleImageMessage(from, message.image.id);

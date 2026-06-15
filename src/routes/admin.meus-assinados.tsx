@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
+import { getRequestArchiveMonth } from "@/lib/request-archive-month";
+import {
+  getRequestOwnerCpf,
+  getRequestOwnerLocation,
+  type RequestOwnerProfile,
+} from "@/lib/request-owner";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/meus-assinados")({
@@ -27,20 +33,6 @@ function getCurrentMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
-  const displayDate = request.data?.trim();
-
-  if (displayDate) {
-    const brDate = displayDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (brDate) return `${brDate[3]}-${brDate[2].padStart(2, "0")}`;
-
-    const isoDate = displayDate.match(/^(\d{4})-(\d{2})/);
-    if (isoDate) return `${isoDate[1]}-${isoDate[2]}`;
-  }
-
-  return String(request.created_at || "").slice(0, 7);
-}
-
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluída";
   if (status === "requisicao_assinada") return "Requisição assinada";
@@ -57,19 +49,33 @@ function hasOutputDocument(request: Requisicao) {
   );
 }
 
-async function fetchCompletedUserRequests(cpf: string) {
+async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
   const pageSize = 1000;
   let from = 0;
   const requests: Requisicao[] = [];
+  const cpf = getRequestOwnerCpf(profile);
+  const location = getRequestOwnerLocation(profile);
+  const name = profile.nome?.trim() || "";
+
+  if (!cpf && !(name && location)) {
+    return requests;
+  }
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("requisicoes")
       .select("id,saida_codigo,setor,data,created_at,status,signed_attachment,admin_attachment")
-      .eq("solicitante_cpf", cpf)
       .eq("status", "concluido")
       .order("updated_at", { ascending: false })
       .range(from, from + pageSize - 1);
+
+    if (cpf) {
+      query = query.eq("solicitante_cpf", cpf);
+    } else {
+      query = query.eq("solicitante", name).eq("setor", location);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
 
@@ -102,12 +108,12 @@ function MeusAssinadosPage() {
       try {
         const { profile } = await getCurrentUserProfile();
 
-        if (!profile?.cpf) {
+        if (!profile) {
           setRequests([]);
           return;
         }
 
-        const data = await fetchCompletedUserRequests(profile.cpf);
+        const data = await fetchCompletedUserRequests(profile);
         if (active) {
           setRequests(data.filter(hasOutputDocument));
         }
@@ -126,7 +132,7 @@ function MeusAssinadosPage() {
   }, []);
 
   const filteredRequests = useMemo(() => {
-    return requests.filter((request) => getRequestMonth(request) === selectedMonth);
+    return requests.filter((request) => getRequestArchiveMonth(request) === selectedMonth);
   }, [requests, selectedMonth]);
 
   if (isChildRoute) {

@@ -1,5 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, BellOff, Loader2, MessageCircle, MessageSquareMore, Mic, Paperclip, Send, Square } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  Check,
+  Loader2,
+  MessageCircle,
+  MessageSquareMore,
+  Mic,
+  Paperclip,
+  Send,
+  Square,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,6 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
 import { getWhatsAppAdminNumbers } from "@/lib/app-settings-actions";
+import { requestNeedsSignature } from "@/lib/pending-request-signatures";
+import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/conversas")({
@@ -66,6 +79,9 @@ type OutgoingStatusRow = {
 type UserRow = {
   nome: string | null;
   whatsapp: string | null;
+  cpf?: string | null;
+  setor?: string | null;
+  unidade_nome?: string | null;
   is_admin?: boolean | null;
   role?: string | null;
 };
@@ -92,12 +108,25 @@ type ConversationMessage = {
 type ConversationSummary = {
   phone: string;
   displayName: string;
+  hasRegisteredUser: boolean;
   preview: string;
   lastAt: string;
   lastIncomingAt: string | null;
   isWindowOpen: boolean;
   messages: ConversationMessage[];
 };
+
+type StandardMessagePreset = {
+  id: string;
+  label: string;
+  description: string;
+  buildMessage?: (userName: string) => string;
+  action?: "charge-pending-signatures";
+};
+
+const CONVERSATION_INCOMING_LIMIT = 3000;
+const CONVERSATION_OUTGOING_LIMIT = 3000;
+const CONVERSATION_STATUS_LIMIT = 5000;
 
 function normalizePhone(value: string | null | undefined) {
   const digits = String(value ?? "").replace(/\D/g, "");
@@ -214,14 +243,11 @@ function isAdminUser(user: UserRow | null | undefined) {
   return Boolean(user.is_admin) || user.role === "admin";
 }
 
-function isKnownNonAdminUserPhone(phone: string, users: UserRow[]) {
-  const matchedUser = resolveConversationUser(phone, users);
-  return Boolean(matchedUser) && !isAdminUser(matchedUser);
-}
+function isAdminPhone(phone: string, users: UserRow[], adminNumbers: string[] = []) {
+  if (adminNumbers.some((adminNumber) => phonesMatch(adminNumber, phone))) return true;
 
-function getDisplayName(phone: string, users: UserRow[]) {
   const matchedUser = resolveConversationUser(phone, users);
-  return matchedUser?.nome?.trim() || formatPhone(phone);
+  return isAdminUser(matchedUser);
 }
 
 function getInitials(name: string) {
@@ -233,6 +259,11 @@ function getInitials(name: string) {
 
   if (!parts.length) return "??";
   return parts.map((part) => part[0]?.toUpperCase() || "").join("");
+}
+
+function getFirstName(name: string) {
+  const firstName = name.trim().split(/\s+/).filter(Boolean)[0];
+  return firstName || "usuario";
 }
 
 function getMessagePlaceholder(messageType: string, direction: "incoming" | "outgoing") {
@@ -301,6 +332,128 @@ function getMicrophoneAccessMessage(error: unknown) {
   return "Nao foi possivel acessar o microfone.";
 }
 
+const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
+  {
+    id: "cobrar-assinatura",
+    label: "Cobrar assinatura",
+    description: "Busca todas as assinaturas pendentes do usuário e monta uma cobrança profissional.",
+    action: "charge-pending-signatures",
+  },
+  {
+    id: "pedido-separado",
+    label: "Pedido separado e aguardando assinaturas",
+    description: "Avisa que o pedido esta separado e lembra sobre assinatura e retirada.",
+    buildMessage: (userName) =>
+      [
+        `Ola, ${userName}.`,
+        "Seu pedido [DIGITE AQUI MANUALMENTE] esta separado.",
+        "Por gentileza, assine suas requisicoes e realize a retirada.",
+        "Lembramos que os pedidos so sao entregues apos a conclusao de todas as assinaturas.",
+        "Obrigado!",
+      ].join(" "),
+  },
+];
+
+type PendingSignatureReminderRequest = {
+  id: string;
+  saida_codigo: string | null;
+  data: string | null;
+  created_at: string;
+  status: string;
+  signed_attachment: unknown;
+  solicitante: string | null;
+  solicitante_cpf: string | null;
+  setor: string | null;
+};
+
+function getPendingSignatureLabel(status: string) {
+  if (status === "aguardando_assinatura_saida") return "assinatura da saída";
+  if (status === "correcao_requisicao") return "correção e reenvio da requisição";
+  return "assinatura da requisição";
+}
+
+async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[]) {
+  const candidateUsers = users.filter(
+    (user) => phonesMatch(user.whatsapp || "", phone) && !isAdminUser(user),
+  );
+  const matchedUser = resolveConversationUser(phone, candidateUsers) || candidateUsers[0] || null;
+
+  if (!matchedUser || candidateUsers.length === 0) {
+    throw new Error("Não foi possível identificar o usuário desta conversa para buscar as assinaturas pendentes.");
+  }
+
+  const nome = matchedUser.nome?.trim() || "usuario";
+  const candidateCpfs = new Set(
+    candidateUsers
+      .map((user) => user.cpf?.trim() || "")
+      .filter(Boolean),
+  );
+  const candidateIdentityKeys = new Set(
+    candidateUsers
+      .map((user) => {
+        const candidateName = user.nome?.trim() || "";
+        const candidateLocation = user.unidade_nome?.trim() || user.setor?.trim() || "";
+        return candidateName && candidateLocation ? `${candidateName}::${candidateLocation}` : "";
+      })
+      .filter(Boolean),
+  );
+
+  const { data, error } = await supabase
+    .from("requisicoes")
+    .select("id,saida_codigo,data,created_at,status,signed_attachment,solicitante,solicitante_cpf,setor")
+    .in("status", [
+      "aguardando_assinatura",
+      "aguardando_assinatura_requisicao",
+      "aguardando_assinatura_saida",
+      "correcao_requisicao",
+    ])
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  if (candidateCpfs.size === 0 && candidateIdentityKeys.size === 0) {
+    throw new Error("Este usuário não possui identificação suficiente para localizar as assinaturas pendentes.");
+  }
+
+  const pendingRequests = ((data ?? []) as PendingSignatureReminderRequest[]).filter((request) => {
+    if (!requestNeedsSignature(request)) return false;
+
+    const requestCpf = request.solicitante_cpf?.trim() || "";
+    if (requestCpf && candidateCpfs.has(requestCpf)) return true;
+
+    const requestName = request.solicitante?.trim() || "";
+    const requestLocation = request.setor?.trim() || "";
+    return Boolean(requestName && requestLocation) &&
+      candidateIdentityKeys.has(`${requestName}::${requestLocation}`);
+  });
+
+  if (pendingRequests.length === 0) {
+    return [
+      `Olá, ${getFirstName(nome)}.`,
+      "No momento não identificamos assinaturas pendentes vinculadas ao seu cadastro.",
+      "Se precisar de apoio, ficamos à disposição.",
+    ].join("\n\n");
+  }
+
+  const codeByRequestId = buildGlobalRequestCodes(pendingRequests);
+  const requestLines = pendingRequests.map((request, index) => {
+    const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
+    const requestDate = request.data?.trim() || "-";
+    return `${index + 1}. ${code} (${requestDate}) - ${getPendingSignatureLabel(request.status)}.`;
+  });
+
+  return [
+    `Olá, ${getFirstName(nome)}.`,
+    "Identificamos pendências de assinatura em seu nome no sistema do almoxarifado.",
+    "No momento constam os seguintes documentos aguardando regularização:",
+    requestLines.join("\n"),
+    "Por gentileza, acesse o sistema e conclua as assinaturas pendentes para dar continuidade ao atendimento da sua solicitação.",
+    "Após a regularização das pendências, solicitamos que o motorista ou responsável compareça ao almoxarifado para retirada do material, conforme os procedimentos internos.",
+    "Se alguma pendência já tiver sido regularizada, desconsidere esta mensagem.",
+    "Ficamos à disposição.",
+  ].join("\n\n");
+}
+
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
@@ -361,8 +514,9 @@ function buildConversationSummaries(input: {
   });
 
   return [...byPhone.entries()]
-    .filter(([phone]) => isKnownNonAdminUserPhone(phone, input.users))
+    .filter(([phone]) => !isAdminPhone(phone, input.users, input.adminNumbers))
     .map(([phone, messages]) => {
+      const matchedUser = resolveConversationUser(phone, input.users);
       const sortedMessages = [...messages].sort(
         (left, right) => getMessageSortTime(left) - getMessageSortTime(right),
       );
@@ -388,7 +542,8 @@ function buildConversationSummaries(input: {
 
       return {
         phone,
-        displayName: getDisplayName(phone, input.users),
+        displayName: matchedUser?.nome?.trim() || formatPhone(phone),
+        hasRegisteredUser: Boolean(matchedUser) && !isAdminUser(matchedUser),
         preview: lastMessage ? getMessageDisplayBody(lastMessage) : "",
         lastAt: lastMessage?.createdAt || lastMessage?.occurredAt || new Date(0).toISOString(),
         lastIncomingAt,
@@ -432,6 +587,7 @@ function ConversasPage() {
   const latestIncomingMessageIdsRef = useRef<Map<string, string>>(new Map());
   const notificationsBootstrappedRef = useRef(false);
   const notificationRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function fileToBase64(file: File) {
     return await new Promise<string>((resolve, reject) => {
@@ -484,21 +640,21 @@ function ConversasPage() {
           .select("message_id,sender_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("sender_id", "is", null)
           .order("created_at", { ascending: false })
-          .limit(500),
+          .limit(CONVERSATION_INCOMING_LIMIT),
         (supabase as any)
           .from("whatsapp_outbound_message_audit")
           .select("message_id,recipient_id,body,message_type,occurred_at,created_at,raw_payload")
           .not("recipient_id", "is", null)
           .order("created_at", { ascending: false })
-          .limit(500),
+          .limit(CONVERSATION_OUTGOING_LIMIT),
         (supabase as any)
           .from("whatsapp_webhook_status_audit")
           .select("message_id,recipient_id,status,occurred_at,created_at")
           .order("created_at", { ascending: false })
-          .limit(1000),
+          .limit(CONVERSATION_STATUS_LIMIT),
         supabase
           .from("usuarios")
-          .select("nome,whatsapp,is_admin,role")
+          .select("nome,whatsapp,cpf,setor,unidade_nome,is_admin,role")
           .not("whatsapp", "is", null),
         (supabase as any)
           .from("app_settings")
@@ -753,10 +909,33 @@ function ConversasPage() {
 
   const selectedConversation =
     conversations.find((conversation) => conversation.phone === selectedPhone) || null;
+  const selectedConversationFirstName = getFirstName(selectedConversation?.displayName || "");
+  const replyLineCount = replyText ? replyText.split(/\r?\n/).length : 1;
+  const hasLongReplyDraft = replyText.length > 140 || replyLineCount > 4;
+  const slashQuery = replyText.trimStart().startsWith("/") ? replyText.trimStart().slice(1).toLowerCase() : "";
+  const filteredStandardMessages = useMemo(
+    () =>
+      STANDARD_MESSAGE_PRESETS.filter((preset) => {
+        if (!slashQuery) return true;
+        const haystack = `${preset.label} ${preset.description}`.toLowerCase();
+        return haystack.includes(slashQuery);
+      }),
+    [slashQuery],
+  );
+  const isSlashMenuOpen = selectedConversation?.isWindowOpen && replyText.trimStart().startsWith("/");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [selectedConversation?.phone, selectedConversation?.messages.length]);
+
+  useEffect(() => {
+    const textarea = replyTextareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    const nextHeight = Math.min(textarea.scrollHeight, 220);
+    textarea.style.height = `${Math.max(nextHeight, 44)}px`;
+  }, [replyText]);
 
   useEffect(() => {
     let active = true;
@@ -830,6 +1009,38 @@ function ConversasPage() {
       to: "/admin/conversas",
       search: {},
     });
+  };
+
+  const focusReplyWithMarker = (message: string) => {
+    window.setTimeout(() => {
+      replyTextareaRef.current?.focus();
+      const manualMarker = "[DIGITE AQUI MANUALMENTE]";
+      const markerIndex = message.indexOf(manualMarker);
+      if (markerIndex >= 0) {
+        replyTextareaRef.current?.setSelectionRange(markerIndex, markerIndex + manualMarker.length);
+      }
+    }, 0);
+  };
+
+  const applyStandardMessagePreset = async (preset: StandardMessagePreset) => {
+    setError(null);
+    setNotice(null);
+
+    try {
+      const nextMessage =
+        preset.action === "charge-pending-signatures"
+          ? await buildPendingSignatureChargeMessage(selectedConversation?.phone || "", users)
+          : preset.buildMessage?.(selectedConversationFirstName) || "";
+
+      setReplyText(nextMessage);
+      focusReplyWithMarker(nextMessage);
+    } catch (presetError) {
+      setError(
+        presetError instanceof Error
+          ? presetError.message
+          : "Nao foi possivel montar a mensagem padrao.",
+      );
+    }
   };
 
   const handleReply = async () => {
@@ -957,6 +1168,7 @@ function ConversasPage() {
 
       setNotice("Oi enviado ao usuario por template.");
       await loadConversations();
+      closeConversation();
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Erro ao enviar template.");
     } finally {
@@ -1148,6 +1360,13 @@ function ConversasPage() {
   };
 
   const handleReplyKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isSlashMenuOpen && event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const firstPreset = filteredStandardMessages[0];
+      if (firstPreset) applyStandardMessagePreset(firstPreset);
+      return;
+    }
+
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     void handleReply();
@@ -1179,7 +1398,7 @@ function ConversasPage() {
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,34vh)_minmax(0,1fr)] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:grid-cols-[360px_minmax(0,1fr)] xl:grid-rows-1 2xl:grid-cols-[400px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,34vh)_minmax(0,1fr)] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:grid-cols-[340px_minmax(0,1fr)] xl:grid-rows-1 2xl:grid-cols-[380px_minmax(0,1fr)]">
           <Card className="flex min-h-0 flex-col overflow-hidden rounded-none border-0 border-b bg-white shadow-none xl:h-full xl:border-b-0 xl:border-r">
             <CardHeader className="shrink-0 border-b bg-[#f0f2f5] px-4 py-4">
               <div className="flex items-center justify-between gap-3">
@@ -1216,9 +1435,16 @@ function ConversasPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-[#111b21]">
-                              {conversation.displayName}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-medium text-[#111b21]">
+                                {conversation.displayName}
+                              </p>
+                              {!conversation.hasRegisteredUser ? (
+                                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.02em] text-amber-700">
+                                  Sem cadastro
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="truncate text-xs text-[#667781]">
                               {formatPhone(conversation.phone)}
                             </p>
@@ -1261,6 +1487,11 @@ function ConversasPage() {
                           <MessageSquareMore className="h-4 w-4" />
                           {selectedConversation.displayName}
                         </CardTitle>
+                        {!selectedConversation.hasRegisteredUser ? (
+                          <p className="mt-1 text-[11px] font-medium text-amber-700">
+                            Contato sem cadastro no sistema.
+                          </p>
+                        ) : null}
                         <CardDescription className="text-xs">
                           {formatPhone(selectedConversation.phone)}
                         </CardDescription>
@@ -1300,7 +1531,7 @@ function ConversasPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
+                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-5 sm:px-5 xl:px-10">
                     {selectedConversation.messages.map((message) => (
                       <div
                         key={message.id}
@@ -1309,13 +1540,13 @@ function ConversasPage() {
                         }`}
                       >
                         <div
-                          className={`relative max-w-[min(92%,720px)] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[min(78%,760px)] lg:max-w-[min(68%,760px)] ${
+                          className={`relative max-w-[92%] rounded-2xl px-4 py-3 text-[14px] leading-6 shadow-sm sm:max-w-[80%] lg:max-w-[72%] xl:max-w-[66%] 2xl:max-w-[60%] ${
                             message.direction === "outgoing"
                               ? "bg-[#d9fdd3] text-[#111b21]"
                               : "bg-white text-[#111b21]"
                           }`}
                         >
-                          <p className="mb-1 text-[11px] font-medium text-[#667781]">
+                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.02em] text-[#667781]">
                             {message.direction === "outgoing"
                               ? message.senderName?.trim() || "Admin"
                               : selectedConversation.displayName}
@@ -1333,7 +1564,7 @@ function ConversasPage() {
                                   className="max-h-80 max-w-full rounded-md object-contain"
                                 />
                               </button>
-                              <p className="whitespace-pre-wrap break-words">
+                              <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
                                 {getMessageDisplayBody(message)}
                               </p>
                             </div>
@@ -1343,14 +1574,14 @@ function ConversasPage() {
                                 <source src={messageMediaUrls[message.id]} />
                                 Seu navegador não suporta vídeo.
                               </video>
-                              <p className="whitespace-pre-wrap break-words">
+                              <p className="whitespace-pre-wrap break-words text-[14px] leading-6">
                                 {getMessageDisplayBody(message)}
                               </p>
                             </div>
                           ) : message.messageType === "audio" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
                               <p
-                                className={`whitespace-pre-wrap break-words ${
+                                className={`whitespace-pre-wrap break-words text-[14px] leading-6 ${
                                   message.direction === "outgoing" ? "font-semibold" : ""
                                 }`}
                               >
@@ -1363,14 +1594,14 @@ function ConversasPage() {
                             </div>
                           ) : (
                             <p
-                              className={`whitespace-pre-wrap break-words ${
+                              className={`whitespace-pre-wrap break-words text-[14px] leading-6 ${
                                 message.direction === "outgoing" ? "font-semibold" : ""
                               }`}
                             >
                               {getMessageDisplayBody(message)}
                             </p>
                           )}
-                          <p className="mt-1 text-right text-[11px] text-[#667781]">
+                          <p className="mt-2 text-right text-[11px] text-[#667781]">
                             {getOutgoingStatusLabel(message.status) ||
                               formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
@@ -1382,63 +1613,119 @@ function ConversasPage() {
 
                   <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
                     {selectedConversation.isWindowOpen ? (
-                      <div className="flex items-end gap-3">
-                        <input
-                          ref={audioInputRef}
-                          type="file"
-                          accept="audio/*"
-                          className="hidden"
-                          onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
-                            recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
-                          }`}
-                          disabled={saving}
-                          onClick={() => void handleRecordAudio()}
-                          title={recording ? "Parar gravacao" : "Gravar audio"}
-                          aria-label={recording ? "Parar gravacao" : "Gravar audio"}
-                        >
-                          {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
-                          disabled={saving || recording}
-                          onClick={() => audioInputRef.current?.click()}
-                          title="Enviar audio"
-                          aria-label="Enviar audio"
-                        >
-                          <Paperclip className="h-5 w-5" />
-                        </Button>
-                        <Textarea
-                          value={replyText}
-                          onChange={(event) => setReplyText(event.target.value)}
-                          onKeyDown={handleReplyKeyDown}
-                          placeholder="Mensagem"
-                          rows={1}
-                          className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
-                          disabled={saving || !replyText.trim()}
-                          onClick={() => void handleReply()}
-                          title="Enviar"
-                          aria-label="Enviar mensagem"
-                        >
-                          {saving ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
-                            <Send className="h-5 w-5" />
-                          )}
-                        </Button>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-end">
+                          <p className="text-xs text-[#667781]">
+                            Digite <span className="font-medium">/</span> para abrir um atalho.
+                          </p>
+                        </div>
+
+                        <div className="flex items-end gap-3">
+                          <input
+                            ref={audioInputRef}
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
+                              recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
+                            }`}
+                            disabled={saving}
+                            onClick={() => void handleRecordAudio()}
+                            title={recording ? "Parar gravacao" : "Gravar audio"}
+                            aria-label={recording ? "Parar gravacao" : "Gravar audio"}
+                          >
+                            {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                            disabled={saving || recording}
+                            onClick={() => audioInputRef.current?.click()}
+                            title="Enviar audio"
+                            aria-label="Enviar audio"
+                          >
+                            <Paperclip className="h-5 w-5" />
+                          </Button>
+                          <div className="relative flex-1">
+                            <Textarea
+                              ref={replyTextareaRef}
+                              value={replyText}
+                              onChange={(event) => setReplyText(event.target.value)}
+                              onKeyDown={handleReplyKeyDown}
+                              placeholder="Digite uma mensagem"
+                              rows={1}
+                              className={`resize-none border-0 bg-white px-4 py-3 leading-6 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884] ${
+                                hasLongReplyDraft
+                                  ? "max-h-[220px] min-h-[120px] rounded-2xl"
+                                  : "max-h-40 min-h-11 rounded-3xl"
+                              }`}
+                            />
+                            {isSlashMenuOpen ? (
+                              <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-10 rounded-2xl border border-[#d1d7db] bg-white p-2 shadow-lg">
+                                <p className="px-2 pb-2 text-xs text-[#667781]">
+                                  Atalhos de mensagem
+                                </p>
+                                <div className="space-y-1">
+                                  {filteredStandardMessages.length ? (
+                                    filteredStandardMessages.map((preset, index) => (
+                                      <button
+                                        key={preset.id}
+                                        type="button"
+                                        className="flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left hover:bg-[#f5f6f6]"
+                                        onClick={() => applyStandardMessagePreset(preset)}
+                                      >
+                                        <Check
+                                          className={`mt-0.5 h-4 w-4 shrink-0 ${
+                                            index === 0 ? "text-[#00a884]" : "text-transparent"
+                                          }`}
+                                        />
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block text-sm font-medium text-[#111b21]">
+                                            {preset.label}
+                                          </span>
+                                          <span className="block text-xs text-[#667781]">
+                                            {preset.description}
+                                          </span>
+                                        </span>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <p className="px-3 py-2 text-sm text-[#667781]">Nenhum atalho encontrado.</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-[#667781]">
+                              <p>Enter envia. Shift+Enter quebra linha.</p>
+                              <p>
+                                {replyLineCount} {replyLineCount === 1 ? "linha" : "linhas"} • {replyText.length} caracteres
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="icon"
+                            className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
+                            disabled={saving || !replyText.trim()}
+                            onClick={() => void handleReply()}
+                            title="Enviar"
+                            aria-label="Enviar mensagem"
+                          >
+                            {saving ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <Send className="h-5 w-5" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

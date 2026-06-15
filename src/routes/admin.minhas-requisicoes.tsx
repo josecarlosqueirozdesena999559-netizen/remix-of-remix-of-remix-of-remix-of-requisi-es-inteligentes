@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getRequestOwnerCpf,
+  getRequestOwnerLocation,
+  type RequestOwnerProfile,
+} from "@/lib/request-owner";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/minhas-requisicoes")({
@@ -40,19 +45,33 @@ function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
   return String(request.created_at || "").slice(0, 7);
 }
 
-async function fetchUserRequests(cpf: string) {
+async function fetchUserRequests(profile: RequestOwnerProfile) {
   const pageSize = 1000;
   let from = 0;
   const requests: Requisicao[] = [];
+  const cpf = getRequestOwnerCpf(profile);
+  const location = getRequestOwnerLocation(profile);
+  const name = profile.nome?.trim() || "";
+
+  if (!cpf && !(name && location)) {
+    return requests;
+  }
 
   while (true) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("requisicoes")
       .select("id,saida_codigo,setor,data,created_at,updated_at,status,signed_attachment")
-      .eq("solicitante_cpf", cpf)
       .in("status", ["recebido", "requisicao_assinada"])
       .order("updated_at", { ascending: false })
       .range(from, from + pageSize - 1);
+
+    if (cpf) {
+      query = query.eq("solicitante_cpf", cpf);
+    } else {
+      query = query.eq("solicitante", name).eq("setor", location);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
 
@@ -83,12 +102,12 @@ function MinhasRequisicoesPage() {
       try {
         const { profile } = await getCurrentUserProfile();
 
-        if (!profile?.cpf) {
+        if (!profile) {
           setRequests([]);
           return;
         }
 
-        const data = await fetchUserRequests(profile.cpf);
+        const data = await fetchUserRequests(profile);
         if (active) setRequests(data);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");

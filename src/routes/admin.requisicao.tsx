@@ -6,10 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  getOutputSignedAttachment,
-  getRequestSignedAttachment,
-} from "@/lib/attachments";
-import {
   isCleaningProduct,
   isMedicationProduct,
   normalizeProductSearchValue,
@@ -23,6 +19,10 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import {
+  BLOCK_NEW_REQUEST_MESSAGE,
+  hasPendingRequestSignatures,
+} from "@/lib/pending-request-signatures";
 import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
@@ -73,12 +73,6 @@ interface EditableRequest {
   return_reason: string | null;
 }
 
-interface PendingSignatureRequest {
-  id: string;
-  status: string;
-  signed_attachment: unknown;
-}
-
 interface RequestSection {
   id: string;
   label: string;
@@ -108,14 +102,6 @@ function hasRequestedQuantity(value: string | undefined) {
 function canEditRequestBeforeSignature(request: EditableRequest | null) {
   if (!request) return false;
   return request.status === "aguardando_assinatura" || request.status === "aguardando_assinatura_requisicao" || request.status === "correcao_requisicao";
-}
-
-function needsSignature(request: PendingSignatureRequest) {
-  if (request.status === "aguardando_assinatura_saida") {
-    return !getOutputSignedAttachment(request.signed_attachment, request.status);
-  }
-
-  return !getRequestSignedAttachment(request.signed_attachment, request.status);
 }
 
 function getItemName(item: EditableRequestItem) {
@@ -461,27 +447,11 @@ function CriarRequisicaoPage() {
           throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
         }
 
-        if (!editingRequestId && profile?.cpf) {
-          const { data: pendingData, error: pendingError } = await supabase
-            .from("requisicoes")
-            .select("id,status,signed_attachment")
-            .eq("solicitante_cpf", profile.cpf)
-            .in("status", [
-              "aguardando_assinatura",
-              "aguardando_assinatura_requisicao",
-              "aguardando_assinatura_saida",
-              "correcao_requisicao",
-            ])
-            .order("updated_at", { ascending: false });
-
-          if (pendingError) throw new Error(pendingError.message);
-
-          const hasPendingSignature = ((pendingData ?? []) as PendingSignatureRequest[]).some(
-            needsSignature,
-          );
+        if (!editingRequestId && profile) {
+          const hasPendingSignature = await hasPendingRequestSignatures(profile);
 
           if (hasPendingSignature) {
-            throw new Error("VocÃª precisa assinar suas requisiÃ§Ãµes pendentes antes de pedir novamente.");
+            throw new Error(BLOCK_NEW_REQUEST_MESSAGE);
           }
         }
 
@@ -645,7 +615,7 @@ function CriarRequisicaoPage() {
       categoria: requestCategories.join("; ") || selectedSection?.baseCategory || null,
       setor: profile.unidade_nome || profile.setor,
       solicitante: profile.nome,
-      solicitante_cpf: profile.cpf,
+      solicitante_cpf: profile.cpf?.trim() || null,
       solicitante_funcao: profile.funcao,
       data: formatToday(),
       status: "aguardando_assinatura",

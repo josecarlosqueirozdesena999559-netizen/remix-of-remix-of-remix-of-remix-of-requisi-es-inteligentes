@@ -7,6 +7,10 @@ import {
   getOutputSignedAttachment,
   getRequestSignedAttachment,
 } from "@/lib/attachments";
+import {
+  getRequestOwnerCpf,
+  getRequestOwnerLocation,
+} from "@/lib/request-owner";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
@@ -30,7 +34,10 @@ function getRequestDisplayCode(request: PendingSignatureRequest) {
   return request.saida_codigo?.trim() || request.id.slice(0, 8);
 }
 
-function buildPendingNoticeItem(request: PendingSignatureRequest, includeRequester = false): PendingNoticeItem {
+function buildPendingNoticeItem(
+  request: PendingSignatureRequest,
+  includeRequester = false,
+): PendingNoticeItem {
   const code = getRequestDisplayCode(request);
   const requester = request.solicitante?.trim();
 
@@ -93,7 +100,11 @@ function AdminHome() {
           return;
         }
 
-        if (!profile.cpf) {
+        const cpf = getRequestOwnerCpf(profile);
+        const location = getRequestOwnerLocation(profile);
+        const name = profile.nome?.trim() || "";
+
+        if (!cpf && !(name && location)) {
           if (active) {
             setPendingCount(0);
             setPendingNoticeItems([]);
@@ -101,10 +112,9 @@ function AdminHome() {
           return;
         }
 
-        const { data, error } = await supabase
+        let query = supabase
           .from("requisicoes")
           .select("id,saida_codigo,status,signed_attachment")
-          .eq("solicitante_cpf", profile.cpf)
           .in("status", [
             "aguardando_assinatura",
             "aguardando_assinatura_requisicao",
@@ -112,6 +122,14 @@ function AdminHome() {
             "correcao_requisicao",
           ])
           .order("updated_at", { ascending: false });
+
+        if (cpf) {
+          query = query.eq("solicitante_cpf", cpf);
+        } else {
+          query = query.eq("solicitante", name).eq("setor", location);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw new Error(error.message);
         if (!active) return;
@@ -136,9 +154,7 @@ function AdminHome() {
       ? `Você tem ${pendingCount} ${pendingCount === 1 ? "solicitação pendente" : "solicitações pendentes"}.`
       : "Você não tem solicitações pendentes no momento."
     : pendingCount > 0
-      ? `Você tem ${pendingCount} ${
-          pendingCount === 1 ? "requisição pendente de assinatura" : "requisições pendentes de assinatura"
-        }.`
+      ? "Atenção, você precisa assinar suas requisições para pedir."
       : "Você não tem requisições pendentes de assinatura no momento.";
 
   return (
