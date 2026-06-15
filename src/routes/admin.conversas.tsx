@@ -440,6 +440,7 @@ async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[
     "No momento constam os seguintes documentos aguardando regularização:",
     requestLines.join("\n"),
     "Por gentileza, acesse o sistema e conclua as assinaturas pendentes para dar continuidade ao atendimento da sua solicitação.",
+    "Após a regularização das pendências, solicitamos que o motorista ou responsável compareça ao almoxarifado para retirada do material, conforme os procedimentos internos.",
     "Se alguma pendência já tiver sido regularizada, desconsidere esta mensagem.",
     "Ficamos à disposição.",
   ].join("\n\n");
@@ -1156,6 +1157,7 @@ function ConversasPage() {
 
       setNotice("Oi enviado ao usuario por template.");
       await loadConversations();
+      closeConversation();
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Erro ao enviar template.");
     } finally {
