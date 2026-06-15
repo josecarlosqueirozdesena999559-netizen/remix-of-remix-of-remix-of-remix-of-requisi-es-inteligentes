@@ -10,6 +10,12 @@ const PROGRAM_LABELS: Record<string, string> = {
   "casa de apoio": "CASA DE APOIO",
   "secretaria de saude": "SECRETARIA DE SAÚDE",
   "vigilancia sanitaria": "VIGILÂNCIA SANITÁRIA",
+  samu: "SAMU",
+};
+
+const PROGRAM_EQUIVALENTS: Record<string, string[]> = {
+  "atencao basica": ["atencao basica", "samu"],
+  samu: ["samu", "atencao basica"],
 };
 
 export function normalizeProgramKey(value: string | null | undefined) {
@@ -32,4 +38,11 @@ export function formatProgramName(value: string | null | undefined) {
   if (!key) return "";
 
   return PROGRAM_LABELS[key] ?? String(value || "").trim();
+}
+
+export function getRelatedProgramKeys(value: string | null | undefined) {
+  const key = normalizeProgramKey(value);
+  if (!key) return [];
+
+  return PROGRAM_EQUIVALENTS[key] ?? [key];
 }

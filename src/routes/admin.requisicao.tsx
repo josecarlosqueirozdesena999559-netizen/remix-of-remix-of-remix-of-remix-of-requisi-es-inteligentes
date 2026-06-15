@@ -1,10 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, Search, Send, X } from "lucide-react";
+import { ArrowLeft, Loader2, Search, Send, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+} from "@/lib/attachments";
 import {
   isCleaningProduct,
   isMedicationProduct,
@@ -19,7 +23,7 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
-import { normalizeProgramKey } from "@/lib/program-options";
+import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
@@ -64,8 +68,15 @@ interface EditableRequestItem {
 interface EditableRequest {
   id: string;
   categoria: string | null;
+  status: string | null;
   items: EditableRequestItem[] | null;
   return_reason: string | null;
+}
+
+interface PendingSignatureRequest {
+  id: string;
+  status: string;
+  signed_attachment: unknown;
 }
 
 interface RequestSection {
@@ -76,8 +87,8 @@ interface RequestSection {
   order: number;
 }
 
-const requestSelectWithFeedback = "id,categoria,items,return_reason";
-const requestSelectFallback = "id,categoria,items";
+const requestSelectWithFeedback = "id,categoria,status,items,return_reason";
+const requestSelectFallback = "id,categoria,status,items";
 
 function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
@@ -92,6 +103,19 @@ function formatToday() {
 function hasRequestedQuantity(value: string | undefined) {
   const quantity = Number(String(value ?? "").trim().replace(",", "."));
   return Number.isFinite(quantity) && quantity > 0;
+}
+
+function canEditRequestBeforeSignature(request: EditableRequest | null) {
+  if (!request) return false;
+  return request.status === "aguardando_assinatura" || request.status === "aguardando_assinatura_requisicao" || request.status === "correcao_requisicao";
+}
+
+function needsSignature(request: PendingSignatureRequest) {
+  if (request.status === "aguardando_assinatura_saida") {
+    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  return !getRequestSignedAttachment(request.signed_attachment, request.status);
 }
 
 function getItemName(item: EditableRequestItem) {
@@ -169,6 +193,10 @@ function getProgramMatchKey(value: string | null | undefined) {
   return normalizeProgramKey(value);
 }
 
+function getComparableProgramKeys(value: string | null | undefined) {
+  return getRelatedProgramKeys(value);
+}
+
 function getItemProgramKeys(item: ItemRow) {
   return (item.programa_produtos ?? [])
     .map((link) => getProgramMatchKey(link.programas?.nome))
@@ -178,10 +206,10 @@ function getItemProgramKeys(item: ItemRow) {
 function itemMatchesSection(item: ItemRow, section: RequestSection) {
   if (productHasCategory(item.categoria, section.baseCategory)) return true;
 
-  const sectionProgram = getProgramMatchKey(section.baseCategory);
-  if (!sectionProgram) return false;
+  const sectionPrograms = getComparableProgramKeys(section.baseCategory);
+  if (sectionPrograms.length === 0) return false;
 
-  return getItemProgramKeys(item).includes(sectionProgram);
+  return getItemProgramKeys(item).some((programKey) => sectionPrograms.includes(programKey));
 }
 
 function isItemAllowedForProfileProgram(
@@ -196,12 +224,11 @@ function isItemAllowedForProfileProgram(
 
   if (linkedPrograms.length === 0) return false;
 
-  const sectionProgram = getProgramMatchKey(section.baseCategory);
-  if (sectionProgram && linkedPrograms.includes(sectionProgram)) return true;
+  const sectionPrograms = getComparableProgramKeys(section.baseCategory);
+  if (sectionPrograms.some((programKey) => linkedPrograms.includes(programKey))) return true;
 
   const profilePrograms = [profile?.setor, profile?.unidade_nome]
-    .map((value) => getProgramMatchKey(value))
-    .filter(Boolean);
+    .flatMap((value) => getComparableProgramKeys(value));
 
   if (profilePrograms.length === 0) return false;
 
@@ -346,9 +373,7 @@ function getInitialSectionId(sections: RequestSection[], categoria: string | nul
 function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
   return (
     sections.find((section) => {
-      if (!productHasCategory(item.categoria, section.baseCategory)) return false;
-      if (section.matchesItem && !section.matchesItem(item)) return false;
-      return true;
+      return itemMatchesSection(item, section) && (!section.matchesItem || section.matchesItem(item));
     }) || null
   );
 }
@@ -365,6 +390,7 @@ function CriarRequisicaoPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState("");
+  const [editingRequestStatus, setEditingRequestStatus] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState<string | null>(null);
 
   useEffect(() => {
@@ -431,11 +457,40 @@ function CriarRequisicaoPage() {
           throw new Error(itemsResult.error?.message || requestError?.message || "Erro ao carregar requisição.");
         }
 
+        if (editingRequestId && !canEditRequestBeforeSignature(editableRequest)) {
+          throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
+        }
+
+        if (!editingRequestId && profile?.cpf) {
+          const { data: pendingData, error: pendingError } = await supabase
+            .from("requisicoes")
+            .select("id,status,signed_attachment")
+            .eq("solicitante_cpf", profile.cpf)
+            .in("status", [
+              "aguardando_assinatura",
+              "aguardando_assinatura_requisicao",
+              "aguardando_assinatura_saida",
+              "correcao_requisicao",
+            ])
+            .order("updated_at", { ascending: false });
+
+          if (pendingError) throw new Error(pendingError.message);
+
+          const hasPendingSignature = ((pendingData ?? []) as PendingSignatureRequest[]).some(
+            needsSignature,
+          );
+
+          if (hasPendingSignature) {
+            throw new Error("VocÃª precisa assinar suas requisiÃ§Ãµes pendentes antes de pedir novamente.");
+          }
+        }
+
         const categories = getAllowedCategories(profile);
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
 
         setProfile(profile);
         setItems(loadedItems);
+        setEditingRequestStatus(editableRequest?.status || null);
         setReturnReason(editableRequest?.return_reason || null);
 
         const availableSections = buildNormalizedRequestSections(categories);
@@ -477,6 +532,8 @@ function CriarRequisicaoPage() {
 
   const categories = useMemo(() => getAllowedCategories(profile), [profile]);
   const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
+  const isCorrectionEdit = editingRequestStatus === "correcao_requisicao";
+  const returnPath = editingRequestId ? "/admin/minhas-assinaturas" : "/admin";
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) || sections[0] || null,
     [sections, selectedSectionId],
@@ -604,14 +661,19 @@ function CriarRequisicaoPage() {
     let savedRequestId = editingRequestId;
 
     if (editingRequestId) {
-      const updateResult = await supabase.from("requisicoes").update(payload).eq("id", editingRequestId);
+      const updateResult = await supabase
+        .from("requisicoes")
+        .update(payload)
+        .eq("id", editingRequestId)
+        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"]);
       requestError = updateResult.error;
 
       if (requestError && isMissingReturnFeedbackColumnError(requestError.message)) {
         const fallbackResult = await supabase
           .from("requisicoes")
           .update(omitReturnFeedbackFields(payload))
-          .eq("id", editingRequestId);
+          .eq("id", editingRequestId)
+          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"]);
 
         requestError = fallbackResult.error;
       }
@@ -666,11 +728,23 @@ function CriarRequisicaoPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
-        <h2 className="text-2xl text-foreground">
-          {editingRequestId ? "Corrigir requisição" : "Criar requisição"}
-        </h2>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
+          <h2 className="text-2xl text-foreground">
+            {editingRequestId ? (isCorrectionEdit ? "Corrigir requisição" : "Editar requisição") : "Criar requisição"}
+          </h2>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          disabled={saving}
+          onClick={() => navigate({ to: returnPath })}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </Button>
       </div>
 
       {loading ? (
@@ -784,10 +858,22 @@ function CriarRequisicaoPage() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {editingRequestId ? "Reenviar requisição" : "Enviar requisição"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {editingRequestId ? (isCorrectionEdit ? "Reenviar requisição" : "Salvar alterações") : "Enviar requisição"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={saving}
+              onClick={() => navigate({ to: returnPath })}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </Button>
+          </div>
         </>
       )}
     </div>

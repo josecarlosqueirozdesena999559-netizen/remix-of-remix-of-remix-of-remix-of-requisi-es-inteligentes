@@ -35,7 +35,7 @@ export const Route = createFileRoute("/admin/cadastros/usuarios/$usuarioId")({
 interface UsuarioRow {
   id: string;
   nome: string;
-  email: string;
+  usuario: string | null;
   cpf: string | null;
   funcao: string | null;
   setor: string | null;
@@ -62,7 +62,7 @@ function UsuarioFormPage() {
   const isNew = usuarioId === "novo";
 
   const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [cpf, setCpf] = useState("");
   const [funcao, setFuncao] = useState("");
   const [senha, setSenha] = useState("123456");
@@ -93,7 +93,7 @@ function UsuarioFormPage() {
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from("usuarios")
-              .select("id,nome,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
+              .select("id,nome,usuario,cpf,funcao,setor,unidade_nome,categorias_permitidas")
               .eq("id", usuarioId)
               .maybeSingle(),
       ]);
@@ -134,7 +134,7 @@ function UsuarioFormPage() {
 
       const usuario = data as UsuarioRow;
       setNome(usuario.nome);
-      setEmail(usuario.email);
+      setUsuario(usuario.usuario ?? "");
       setCpf(usuario.cpf ?? "");
       setFuncao(usuario.funcao ?? "");
       setSenha("");
@@ -162,9 +162,7 @@ function UsuarioFormPage() {
         ? [...current, normalizedCategory]
         : current.filter((item) => item !== normalizedCategory);
 
-      return nextValues.filter(
-        (item, index, values) => item && values.indexOf(item) === index,
-      );
+      return nextValues.filter((item, index, values) => item && values.indexOf(item) === index);
     });
   };
 
@@ -174,7 +172,7 @@ function UsuarioFormPage() {
 
     const local = locais.find((item) => item.nome === nextLocal);
     if (local?.programa) {
-      setSetor(formatProgramName(local.programa));
+      setSetor(local.programa);
     }
   };
 
@@ -184,10 +182,10 @@ function UsuarioFormPage() {
     setError(null);
 
     const nomeLimpo = nome.trim();
-    const emailLimpo = email.trim();
+    const usuarioLimpo = usuario.trim();
 
-    if (!nomeLimpo || !emailLimpo) {
-      setError("Informe nome e e-mail.");
+    if (!nomeLimpo || !usuarioLimpo) {
+      setError("Informe nome e usuário de acesso.");
       setSaving(false);
       return;
     }
@@ -195,7 +193,7 @@ function UsuarioFormPage() {
     const payload = {
       id: isNew ? null : usuarioId,
       nome: nomeLimpo,
-      email: emailLimpo,
+      usuario: usuarioLimpo,
       cpf: cpf.trim() || null,
       funcao: funcao.trim() || null,
       setor: setor.trim() || null,
@@ -209,7 +207,13 @@ function UsuarioFormPage() {
     };
 
     try {
-      await saveAdminUser({ data: payload });
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      await saveAdminUser({ data: { ...payload, accessToken } });
       setSaving(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
@@ -225,7 +229,13 @@ function UsuarioFormPage() {
     setError(null);
 
     try {
-      await deleteAdminUser({ data: { id: usuarioId } });
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      await deleteAdminUser({ data: { id: usuarioId, accessToken } });
       setDeleteOpen(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
@@ -260,27 +270,61 @@ function UsuarioFormPage() {
             Carregando...
           </div>
         ) : (
-          <form className="max-w-2xl space-y-5" onSubmit={handleSubmit}>
-            <div className="grid gap-4 sm:grid-cols-2">
+          <form className="max-w-4xl space-y-6" onSubmit={handleSubmit}>
+            <section className="space-y-3">
+              <div>
+                <h3 className="text-base font-medium text-foreground">Acesso</h3>
+                <p className="text-sm text-muted-foreground">
+                  O usuário entra no sistema usando somente o usuário de acesso e a senha.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="usuario">Usuário de acesso</Label>
+                  <Input
+                    id="usuario"
+                    value={usuario}
+                    onChange={(event) => setUsuario(event.target.value)}
+                    placeholder="Usuário de acesso"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="senha">{isNew ? "Senha inicial" : "Nova senha"}</Label>
+                  <Input
+                    id="senha"
+                    type="password"
+                    value={senha}
+                    onChange={(event) => setSenha(event.target.value)}
+                    placeholder={isNew ? "Senha inicial" : "Deixe em branco para manter"}
+                    required={isNew}
+                    minLength={isNew || senha ? 6 : undefined}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {isNew
+                      ? "A senha é criada pelo admin e pode ser usada no primeiro acesso."
+                      : "Preencha apenas se quiser trocar a senha de acesso."}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-3 border-t pt-5">
+              <div>
+                <h3 className="text-base font-medium text-foreground">Dados do usuário</h3>
+                <p className="text-sm text-muted-foreground">
+                  Dados usados para identificar requisições, assinaturas e permissões.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="nome">Nome</Label>
                 <Input
                   id="nome"
                   value={nome}
                   onChange={(event) => setNome(event.target.value)}
-                  placeholder="Nome do usuário"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="email@exemplo.com"
+                  placeholder="Nome completo"
                   required
                 />
               </div>
@@ -338,32 +382,15 @@ function UsuarioFormPage() {
                   id="funcao"
                   value={funcao}
                   onChange={(event) => setFuncao(event.target.value)}
-                  placeholder="Função"
+                  placeholder="Cargo ou função"
                 />
               </div>
-
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="senha">{isNew ? "Senha inicial" : "Nova senha"}</Label>
-                <Input
-                  id="senha"
-                  type="password"
-                  value={senha}
-                  onChange={(event) => setSenha(event.target.value)}
-                  placeholder={isNew ? "Senha inicial" : "Deixe em branco para manter a senha"}
-                  required={isNew}
-                  minLength={isNew || senha ? 6 : undefined}
-                />
-                <p className="text-sm text-muted-foreground">
-                  {isNew
-                    ? "O usuário já poderá entrar com este e-mail e senha."
-                    : "Preencha apenas se quiser trocar a senha de acesso."}
-                </p>
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-3">
+            <section className="space-y-3 border-t pt-5">
               <div>
-                <Label>Tipos que este usuário pode pedir</Label>
+                <h3 className="text-base font-medium text-foreground">Permissões de produtos</h3>
                 <p className="text-sm text-muted-foreground">
                   Os itens carregam quando o tipo do produto estiver liberado aqui.
                 </p>
@@ -386,7 +413,7 @@ function UsuarioFormPage() {
                   </label>
                 ))}
               </div>
-            </div>
+            </section>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -415,11 +442,17 @@ function UsuarioFormPage() {
           <DialogHeader>
             <DialogTitle>Excluir usuário</DialogTitle>
             <DialogDescription>
-              Esta ação remove o cadastro e o login do usuário. As requisições já feitas continuam no histórico.
+              Esta ação remove o cadastro e o login do usuário. As requisições já feitas continuam
+              no histórico.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteOpen(false)}
+            >
               Cancelar
             </Button>
             <Button type="button" variant="destructive" disabled={deleting} onClick={handleDelete}>

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminWhatsappUsuariosRouteImport } from './routes/admin.whatsapp-usuarios'
 import { Route as AdminSolicitacoesRouteImport } from './routes/admin.solicitacoes'
 import { Route as AdminRequisicaoRouteImport } from './routes/admin.requisicao'
 import { Route as AdminMinhasRequisicoesRouteImport } from './routes/admin.minhas-requisicoes'
@@ -47,6 +48,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminWhatsappUsuariosRoute = AdminWhatsappUsuariosRouteImport.update({
+  id: '/whatsapp-usuarios',
+  path: '/whatsapp-usuarios',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminSolicitacoesRoute = AdminSolicitacoesRouteImport.update({
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
+  '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/cadastros/locais': typeof AdminCadastrosLocaisRoute
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
+  '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin': typeof AdminIndexRoute
   '/admin/cadastros/locais': typeof AdminCadastrosLocaisRoute
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
@@ -228,6 +236,7 @@ export interface FileRoutesById {
   '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
+  '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin/': typeof AdminIndexRoute
   '/admin/cadastros/locais': typeof AdminCadastrosLocaisRoute
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
@@ -256,6 +265,7 @@ export interface FileRouteTypes {
     | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
     | '/admin/solicitacoes'
+    | '/admin/whatsapp-usuarios'
     | '/admin/'
     | '/admin/cadastros/locais'
     | '/admin/cadastros/produtos'
@@ -281,6 +291,7 @@ export interface FileRouteTypes {
     | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
     | '/admin/solicitacoes'
+    | '/admin/whatsapp-usuarios'
     | '/admin'
     | '/admin/cadastros/locais'
     | '/admin/cadastros/produtos'
@@ -307,6 +318,7 @@ export interface FileRouteTypes {
     | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
     | '/admin/solicitacoes'
+    | '/admin/whatsapp-usuarios'
     | '/admin/'
     | '/admin/cadastros/locais'
     | '/admin/cadastros/produtos'
@@ -346,6 +358,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/whatsapp-usuarios': {
+      id: '/admin/whatsapp-usuarios'
+      path: '/whatsapp-usuarios'
+      fullPath: '/admin/whatsapp-usuarios'
+      preLoaderRoute: typeof AdminWhatsappUsuariosRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/solicitacoes': {
@@ -588,6 +607,7 @@ interface AdminRouteChildren {
   AdminMinhasRequisicoesRoute: typeof AdminMinhasRequisicoesRoute
   AdminRequisicaoRoute: typeof AdminRequisicaoRoute
   AdminSolicitacoesRoute: typeof AdminSolicitacoesRouteWithChildren
+  AdminWhatsappUsuariosRoute: typeof AdminWhatsappUsuariosRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminCadastrosLocaisRoute: typeof AdminCadastrosLocaisRoute
   AdminCadastrosProdutosRoute: typeof AdminCadastrosProdutosRouteWithChildren
@@ -607,6 +627,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminMinhasRequisicoesRoute: AdminMinhasRequisicoesRoute,
   AdminRequisicaoRoute: AdminRequisicaoRoute,
   AdminSolicitacoesRoute: AdminSolicitacoesRouteWithChildren,
+  AdminWhatsappUsuariosRoute: AdminWhatsappUsuariosRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminCadastrosLocaisRoute: AdminCadastrosLocaisRoute,
   AdminCadastrosProdutosRoute: AdminCadastrosProdutosRouteWithChildren,

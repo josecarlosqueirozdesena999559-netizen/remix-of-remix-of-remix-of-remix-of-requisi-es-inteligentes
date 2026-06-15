@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, MessageCircle, MessageSquareMore, Send } from "lucide-react";
+import { Bell, BellOff, Loader2, MessageCircle, MessageSquareMore, Mic, Paperclip, Send, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
@@ -25,6 +26,10 @@ type IncomingMessage = {
   occurred_at: string | null;
   created_at: string;
   raw_payload?: {
+    type?: string | null;
+    reaction?: {
+      emoji?: string | null;
+    } | null;
     stored_media?: AttachmentFile | null;
   } | null;
 };
@@ -40,9 +45,22 @@ type OutgoingMessage = {
     source?: string | null;
     audience?: string | null;
     notificationType?: string | null;
-    responder_name?: string | null;
-    responder_email?: string | null;
+    adminName?: string | null;
+    adminEmail?: string | null;
+    stored_media?: AttachmentFile | null;
+    sentBy?: {
+      name?: string | null;
+      email?: string | null;
+    } | null;
   } | null;
+};
+
+type OutgoingStatusRow = {
+  message_id: string;
+  recipient_id: string | null;
+  status: string;
+  occurred_at: string | null;
+  created_at: string;
 };
 
 type UserRow = {
@@ -65,7 +83,8 @@ type ConversationMessage = {
   occurredAt: string;
   createdAt: string;
   direction: "incoming" | "outgoing";
-  status?: "sending" | "failed";
+  senderName?: string | null;
+  status?: "sending" | "failed" | "sent" | "delivered" | "read";
   mediaAttachment?: AttachmentFile | null;
   senderName?: string | null;
 };
@@ -168,6 +187,16 @@ function getMessageSortTime(message: Pick<ConversationMessage, "occurredAt" | "c
   return Number.isFinite(occurred) ? occurred : 0;
 }
 
+function getOutgoingSenderName(message: OutgoingMessage) {
+  return (
+    message.raw_payload?.sentBy?.name?.trim() ||
+    message.raw_payload?.adminName?.trim() ||
+    message.raw_payload?.sentBy?.email?.trim() ||
+    message.raw_payload?.adminEmail?.trim() ||
+    "Admin"
+  );
+}
+
 function resolveConversationUser(phone: string, users: UserRow[]) {
   const exactMatch = users.find((user) => canonicalConversationPhone(user.whatsapp) === phone);
   if (exactMatch?.nome?.trim()) return exactMatch;
@@ -209,6 +238,8 @@ function getInitials(name: string) {
 function getMessagePlaceholder(messageType: string, direction: "incoming" | "outgoing") {
   if (messageType === "audio") return direction === "incoming" ? "[audio recebido]" : "[audio enviado]";
   if (messageType === "image") return "[imagem]";
+  if (messageType === "video") return direction === "incoming" ? "[video recebido]" : "[video enviado]";
+  if (messageType === "reaction") return "[reacao]";
   return "[mensagem sem texto]";
 }
 
@@ -225,9 +256,55 @@ function getMessageDisplayBody(
   return baseBody;
 }
 
+function getIncomingMessageDisplayBody(message: IncomingMessage) {
+  const body = message.body?.trim();
+  if (body) return body;
+
+  const reactionEmoji = message.raw_payload?.reaction?.emoji?.trim();
+  if (reactionEmoji) return `Reagiu com ${reactionEmoji}`;
+
+  const messageType = message.message_type?.trim() || message.raw_payload?.type?.trim() || "";
+  return getMessagePlaceholder(messageType, "incoming");
+}
+
+function getOutgoingStatusLabel(status?: ConversationMessage["status"]) {
+  if (status === "sending") return "Enviando...";
+  if (status === "failed") return "Falhou ao enviar";
+  if (status === "read") return "Lido";
+  if (status === "delivered") return "Entregue";
+  if (status === "sent") return "Enviado";
+  return null;
+}
+
+function getMicrophoneAccessMessage(error: unknown) {
+  const maybeError = error as { name?: string; message?: string } | null | undefined;
+  const errorName = String(maybeError?.name || "").trim();
+  const errorMessage = String(maybeError?.message || "").trim();
+
+  if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+    return "O acesso ao microfone foi bloqueado. Libere a permissao do site no navegador e tente novamente.";
+  }
+
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return "Nenhum microfone foi encontrado neste dispositivo.";
+  }
+
+  if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+    return "O microfone esta em uso por outro aplicativo. Feche o outro app e tente novamente.";
+  }
+
+  if (errorName === "SecurityError") {
+    return "O navegador bloqueou o microfone nesta pagina. Verifique as permissoes do site.";
+  }
+
+  if (errorMessage) return errorMessage;
+  return "Nao foi possivel acessar o microfone.";
+}
+
 function buildConversationSummaries(input: {
   incoming: IncomingMessage[];
   outgoing: OutgoingMessage[];
+  outgoingStatuses?: Map<string, ConversationMessage["status"]>;
   optimisticMessages?: ConversationMessage[];
   userSessions?: Map<string, string>;
   adminSessions?: Map<string, string>;
@@ -244,7 +321,7 @@ function buildConversationSummaries(input: {
     next.push({
       id: message.message_id,
       phone,
-      body: message.body?.trim() || getMessagePlaceholder(message.message_type?.trim() || "", "incoming"),
+      body: getIncomingMessageDisplayBody(message),
       messageType: message.message_type?.trim() || "desconhecida",
       occurredAt: message.occurred_at || message.created_at,
       createdAt: message.created_at,
@@ -267,7 +344,9 @@ function buildConversationSummaries(input: {
       occurredAt: message.occurred_at || message.created_at,
       createdAt: message.created_at,
       direction: "outgoing",
-      senderName: message.raw_payload?.responder_name?.trim() || "Admin",
+      senderName: getOutgoingSenderName(message),
+      status: input.outgoingStatuses?.get(message.message_id),
+      mediaAttachment: message.raw_payload?.stored_media || null,
     });
     byPhone.set(phone, next);
   });
@@ -329,6 +408,9 @@ function ConversasPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<IncomingMessage[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([]);
+  const [outgoingStatuses, setOutgoingStatuses] = useState<Map<string, ConversationMessage["status"]>>(
+    new Map(),
+  );
   const [optimisticMessages, setOptimisticMessages] = useState<ConversationMessage[]>([]);
   const [userSessions, setUserSessions] = useState<Map<string, string>>(new Map());
   const [adminSessions, setAdminSessions] = useState<Map<string, string>>(new Map());
@@ -337,7 +419,37 @@ function ConversasPage() {
   const [currentAdminName, setCurrentAdminName] = useState("Admin");
   const [replyText, setReplyText] = useState("");
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
+  const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification === "undefined" ? "denied" : Notification.permission,
+  );
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const latestIncomingMessageIdsRef = useRef<Map<string, string>>(new Map());
+  const notificationsBootstrappedRef = useRef(false);
+  const notificationRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+
+  async function fileToBase64(file: File) {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        const base64 = result.includes(",") ? result.split(",").pop() || "" : result;
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo de audio."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function stopRecordingTracks() {
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  }
 
   async function loadConversations() {
       setError(null);
@@ -352,13 +464,21 @@ function ConversasPage() {
       }
       setCurrentAdminName(profile.nome?.trim() || "Admin");
 
-      const adminNumbersResult = await getWhatsAppAdminNumbers().catch(() => ({ numbers: [] }));
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
+
+      const adminNumbersResult = await getWhatsAppAdminNumbers({
+        data: { accessToken },
+      }).catch(() => ({ numbers: [] }));
       const nextAdminNumbers = Array.isArray((adminNumbersResult as any)?.numbers)
         ? (adminNumbersResult as any).numbers.map(String)
         : [];
       setAdminNumbers(nextAdminNumbers);
 
-      const [incomingResult, outgoingResult, usersResult, sessionsResult] = await Promise.all([
+      const [incomingResult, outgoingResult, statusResult, usersResult, sessionsResult] = await Promise.all([
         (supabase as any)
           .from("whatsapp_webhook_message_audit")
           .select("message_id,sender_id,body,message_type,occurred_at,created_at,raw_payload")
@@ -371,6 +491,11 @@ function ConversasPage() {
           .not("recipient_id", "is", null)
           .order("created_at", { ascending: false })
           .limit(500),
+        (supabase as any)
+          .from("whatsapp_webhook_status_audit")
+          .select("message_id,recipient_id,status,occurred_at,created_at")
+          .order("created_at", { ascending: false })
+          .limit(1000),
         supabase
           .from("usuarios")
           .select("nome,whatsapp,is_admin,role")
@@ -381,10 +506,17 @@ function ConversasPage() {
           .like("key", "WHATSAPP_%_SESSION_%"),
       ]);
 
-      if (incomingResult.error || outgoingResult.error || usersResult.error || sessionsResult.error) {
+      if (
+        incomingResult.error ||
+        outgoingResult.error ||
+        statusResult.error ||
+        usersResult.error ||
+        sessionsResult.error
+      ) {
         throw new Error(
           incomingResult.error?.message ||
             outgoingResult.error?.message ||
+            statusResult.error?.message ||
             usersResult.error?.message ||
             sessionsResult.error?.message ||
             "Erro ao carregar conversas.",
@@ -404,6 +536,20 @@ function ConversasPage() {
               phonesMatch(adminNumber, message.recipient_id || ""),
             ),
         ),
+      );
+      setOutgoingStatuses(
+        ((statusResult.data ?? []) as OutgoingStatusRow[]).reduce((statuses, row) => {
+          const normalizedStatus = String(row.status || "").trim().toLowerCase();
+          if (
+            normalizedStatus === "sent" ||
+            normalizedStatus === "delivered" ||
+            normalizedStatus === "read" ||
+            normalizedStatus === "failed"
+          ) {
+            statuses.set(row.message_id, normalizedStatus as ConversationMessage["status"]);
+          }
+          return statuses;
+        }, new Map<string, ConversationMessage["status"]>()),
       );
       setUsers((usersResult.data ?? []) as UserRow[]);
       setUserSessions(
@@ -457,6 +603,11 @@ function ConversasPage() {
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "whatsapp_webhook_status_audit" },
+        () => void loadConversations(),
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "app_settings" },
         () => void loadConversations(),
       )
@@ -476,15 +627,116 @@ function ConversasPage() {
       buildConversationSummaries({
         incoming,
         outgoing,
+        outgoingStatuses,
         optimisticMessages,
         userSessions,
         adminSessions,
         adminNumbers,
         users,
       }),
-    [incoming, outgoing, optimisticMessages, userSessions, adminSessions, adminNumbers, users],
+    [incoming, outgoing, outgoingStatuses, optimisticMessages, userSessions, adminSessions, adminNumbers, users],
   );
   const selectedPhone = canonicalConversationPhone(search.phone);
+
+  useEffect(() => {
+    if (typeof Notification === "undefined") return;
+    setNotificationPermission(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    let active = true;
+
+    async function registerNotificationWorker() {
+      try {
+        const registration = await navigator.serviceWorker.register("/notification-sw.js");
+        if (!active) return;
+        notificationRegistrationRef.current = registration;
+      } catch {
+        notificationRegistrationRef.current = null;
+      }
+    }
+
+    void registerNotificationWorker();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function showIncomingMessageNotification(
+    phone: string,
+    title: string,
+    body: string,
+  ) {
+    if (notificationPermission !== "granted" || typeof Notification === "undefined") return;
+
+    const notificationUrl =
+      typeof window === "undefined"
+        ? `/admin/conversas?phone=${encodeURIComponent(phone)}`
+        : `${window.location.origin}/admin/conversas?phone=${encodeURIComponent(phone)}`;
+
+    try {
+      if (notificationRegistrationRef.current) {
+        await notificationRegistrationRef.current.showNotification(title, {
+          body,
+          tag: `whatsapp-${phone}`,
+          renotify: true,
+          data: {
+            url: notificationUrl,
+          },
+        });
+        return;
+      }
+    } catch {
+      notificationRegistrationRef.current = null;
+    }
+
+    const notification = new Notification(title, {
+      body,
+      tag: `whatsapp-${phone}`,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      openConversation(phone);
+      notification.close();
+    };
+  }
+
+  useEffect(() => {
+    if (!conversations.length) return;
+
+    const latestIncomingByPhone = new Map<string, ConversationMessage>();
+    conversations.forEach((conversation) => {
+      const latestIncoming =
+        [...conversation.messages].reverse().find((message) => message.direction === "incoming") || null;
+      if (latestIncoming) latestIncomingByPhone.set(conversation.phone, latestIncoming);
+    });
+
+    if (!notificationsBootstrappedRef.current) {
+      latestIncomingMessageIdsRef.current = new Map(
+        [...latestIncomingByPhone.entries()].map(([phone, message]) => [phone, message.id]),
+      );
+      notificationsBootstrappedRef.current = true;
+      return;
+    }
+
+    latestIncomingByPhone.forEach((message, phone) => {
+      const previousMessageId = latestIncomingMessageIdsRef.current.get(phone);
+      if (previousMessageId === message.id) return;
+
+      latestIncomingMessageIdsRef.current.set(phone, message.id);
+
+      const conversation = conversations.find((item) => item.phone === phone);
+      void showIncomingMessageNotification(
+        phone,
+        conversation?.displayName || "Nova mensagem",
+        getMessageDisplayBody(message),
+      );
+    });
+  }, [conversations, notificationPermission]);
 
   useEffect(() => {
     if (
@@ -510,17 +762,19 @@ function ConversasPage() {
     let active = true;
 
     async function loadMediaUrls() {
-      const audioMessages = (selectedConversation?.messages || []).filter(
+      const mediaMessages = (selectedConversation?.messages || []).filter(
         (message) =>
-          message.messageType === "audio" &&
+          (message.messageType === "audio" ||
+            message.messageType === "image" ||
+            message.messageType === "video") &&
           message.mediaAttachment?.storageBucket &&
           message.mediaAttachment?.storagePath,
       );
 
-      if (!audioMessages.length) return;
+      if (!mediaMessages.length) return;
 
       const resolvedEntries = await Promise.all(
-        audioMessages.map(async (message) => {
+        mediaMessages.map(async (message) => {
           try {
             const signedUrl = await resolveAttachmentUrl(message.mediaAttachment);
             return [message.id, signedUrl] as const;
@@ -547,6 +801,17 @@ function ConversasPage() {
       active = false;
     };
   }, [selectedConversation]);
+
+  useEffect(() => {
+    return () => {
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        // ignore stop failures during unmount
+      }
+      stopRecordingTracks();
+    };
+  }, []);
 
   const openConversation = (phone: string) => {
     setNotice(null);
@@ -648,6 +913,240 @@ function ConversasPage() {
     }
   };
 
+  const handleSendTemplate = async () => {
+    const phone = selectedConversation?.phone || "";
+
+    if (!phone) {
+      setError("Selecione uma conversa para enviar o template.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+      const { data: result, error: replyError } = await supabase.functions.invoke(
+        "admin-whatsapp-reply",
+        {
+          body: {
+            to: phone,
+            mode: "template",
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (replyError) {
+        throw new Error(
+          (replyError as any)?.context?.error ||
+            (replyError as any)?.context?.message ||
+            result?.error ||
+            replyError.message,
+        );
+      }
+      if (!result?.ok) throw new Error(result?.error || "Erro ao enviar template.");
+
+      setNotice("Oi enviado ao usuario por template.");
+      await loadConversations();
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Erro ao enviar template.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    if (typeof Notification === "undefined") {
+      setError("Seu navegador nao suporta notificacoes.");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      setNotice("As notificacoes ja estao ativadas.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+
+    if (permission === "granted") {
+      setError(null);
+      setNotice("Notificacoes ativadas para novas mensagens.");
+      return;
+    }
+
+    setNotice(null);
+    setError("Permita as notificacoes do site no navegador para receber alertas de novas mensagens.");
+  };
+
+  const handleAudioSelected = async (file: File | null | undefined) => {
+    const phone = selectedConversation?.phone || "";
+    if (!file) return;
+
+    if (!phone) {
+      setError("Selecione uma conversa para enviar audio.");
+      return;
+    }
+
+    if (!file.type.startsWith("audio/")) {
+      setError("Selecione um arquivo de audio valido.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+      const base64 = await fileToBase64(file);
+      const { data: result, error: replyError } = await supabase.functions.invoke(
+        "admin-whatsapp-reply",
+        {
+          body: {
+            to: phone,
+            audio: {
+              fileName: file.name,
+              mimeType: file.type || "audio/ogg",
+              base64,
+            },
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      if (replyError) {
+        throw new Error(
+          (replyError as any)?.context?.error ||
+            (replyError as any)?.context?.message ||
+            result?.error ||
+            replyError.message,
+        );
+      }
+
+      if (!result?.ok) throw new Error(result?.error || "Erro ao enviar audio.");
+
+      await loadConversations();
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Erro ao enviar audio.");
+    } finally {
+      if (audioInputRef.current) audioInputRef.current.value = "";
+      setSaving(false);
+    }
+  };
+
+  const handleRecordAudio = async () => {
+    if (recording) {
+      try {
+        mediaRecorderRef.current?.stop();
+      } catch {
+        setError("Nao foi possivel finalizar a gravacao.");
+      }
+      return;
+    }
+
+    if (!selectedConversation?.phone) {
+      setError("Selecione uma conversa para gravar audio.");
+      return;
+    }
+
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setError("O microfone so funciona em conexao segura (HTTPS).");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Seu navegador nao suporta gravacao de audio. Use o clipe para enviar um arquivo.");
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined") {
+      setError("Seu navegador nao suporta gravacao direta. Use o clipe para enviar um arquivo.");
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (navigator.permissions?.query) {
+        const permissionStatus = await navigator.permissions
+          .query({ name: "microphone" as PermissionName })
+          .catch(() => null);
+
+        if (permissionStatus?.state === "denied") {
+          setError("O microfone esta bloqueado no navegador. Libere a permissao do site e tente novamente.");
+          return;
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType =
+        MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")
+            ? "audio/ogg;codecs=opus"
+            : "";
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+      recordingStreamRef.current = stream;
+      recordingChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        setRecording(false);
+        stopRecordingTracks();
+        setError("Erro ao gravar audio.");
+      };
+
+      recorder.onstop = () => {
+        const chunkType = recorder.mimeType || mimeType || "audio/webm";
+        const extension = chunkType.includes("ogg") ? "ogg" : "webm";
+        const blob = new Blob(recordingChunksRef.current, { type: chunkType });
+        const file = new File([blob], `gravacao-${Date.now()}.${extension}`, { type: chunkType });
+
+        recordingChunksRef.current = [];
+        mediaRecorderRef.current = null;
+        setRecording(false);
+        stopRecordingTracks();
+
+        if (blob.size > 0) {
+          void handleAudioSelected(file);
+        } else {
+          setError("A gravacao ficou vazia.");
+        }
+      };
+
+      recorder.start();
+      setRecording(true);
+      setNotice("Gravando audio... clique no quadrado para enviar.");
+    } catch (error) {
+      stopRecordingTracks();
+      setRecording(false);
+      setError(getMicrophoneAccessMessage(error));
+    }
+  };
+
   const handleReplyKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
@@ -655,14 +1154,7 @@ function ConversasPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <div>
-          <p className="text-sm text-muted-foreground">Admin / WhatsApp</p>
-          <h2 className="text-2xl text-foreground">Conversas</h2>
-        </div>
-      </div>
-
+    <div className="flex h-[calc(100svh-64px)] min-h-0 flex-col overflow-hidden">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -676,20 +1168,20 @@ function ConversasPage() {
       )}
 
       {loading ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card className="min-h-0 flex-1 p-6 text-muted-foreground">
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" />
             Carregando conversas...
           </div>
         </Card>
       ) : conversations.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card className="min-h-0 flex-1 p-6 text-muted-foreground">
           Nenhuma conversa registrada no WhatsApp no momento.
         </Card>
       ) : (
-        <div className="grid min-h-[620px] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm lg:h-[calc(100vh-150px)] xl:grid-cols-[370px_minmax(0,1fr)]">
-          <Card className="flex min-h-[420px] flex-col overflow-hidden rounded-none border-0 border-r bg-white shadow-none xl:h-full">
-            <CardHeader className="border-b bg-[#f0f2f5] px-4 py-4">
+        <div className="grid min-h-0 flex-1 grid-rows-[minmax(180px,34vh)_minmax(0,1fr)] overflow-hidden rounded-md border bg-[#efeae2] shadow-sm xl:grid-cols-[360px_minmax(0,1fr)] xl:grid-rows-1 2xl:grid-cols-[400px_minmax(0,1fr)]">
+          <Card className="flex min-h-0 flex-col overflow-hidden rounded-none border-0 border-b bg-white shadow-none xl:h-full xl:border-b-0 xl:border-r">
+            <CardHeader className="shrink-0 border-b bg-[#f0f2f5] px-4 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">Conversas</CardTitle>
@@ -755,10 +1247,10 @@ function ConversasPage() {
             </CardContent>
           </Card>
 
-          <Card className="flex min-h-[520px] flex-col overflow-hidden rounded-none border-0 bg-[#efeae2] shadow-none xl:h-full">
+          <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-none border-0 bg-[#efeae2] shadow-none xl:h-full">
             {selectedConversation ? (
               <>
-                <CardHeader className="border-b bg-[#f0f2f5] px-4 py-3">
+                <CardHeader className="shrink-0 border-b bg-[#f0f2f5] px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#00a884] text-sm text-white">
@@ -781,11 +1273,25 @@ function ConversasPage() {
                         >
                           {selectedConversation.isWindowOpen
                             ? "Janela de 24h aberta para responder e notificar."
-                            : "Sem entrada recente registrada. A API do WhatsApp validará o envio."}
+                            : "Janela fechada. Fora das 24h o admin envia somente um oi por template."}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => void handleEnableNotifications()}
+                      >
+                        {notificationPermission === "granted" ? (
+                          <Bell className="h-4 w-4" />
+                        ) : (
+                          <BellOff className="h-4 w-4" />
+                        )}
+                        {notificationPermission === "granted" ? "Alertas ligados" : "Ativar alertas"}
+                      </Button>
                       <p className="text-xs text-muted-foreground">
                         {selectedConversation.messages.length}{" "}
                         {selectedConversation.messages.length === 1 ? "mensagem" : "mensagens"}
@@ -793,8 +1299,8 @@ function ConversasPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-5 sm:px-8">
+                <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
                     {selectedConversation.messages.map((message) => (
                       <div
                         key={message.id}
@@ -803,16 +1309,45 @@ function ConversasPage() {
                         }`}
                       >
                         <div
-                          className={`relative max-w-[88%] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[72%] ${
+                          className={`relative max-w-[min(92%,720px)] rounded-md px-3 py-2 text-sm shadow-sm sm:max-w-[min(78%,760px)] lg:max-w-[min(68%,760px)] ${
                             message.direction === "outgoing"
                               ? "bg-[#d9fdd3] text-[#111b21]"
                               : "bg-white text-[#111b21]"
                           }`}
                         >
                           <p className="mb-1 text-[11px] font-medium text-[#667781]">
-                            {message.direction === "outgoing" ? "Admin" : "Usuário"}
+                            {message.direction === "outgoing"
+                              ? message.senderName?.trim() || "Admin"
+                              : selectedConversation.displayName}
                           </p>
-                          {message.messageType === "audio" && messageMediaUrls[message.id] ? (
+                          {message.messageType === "image" && messageMediaUrls[message.id] ? (
+                            <div className="space-y-2">
+                              <button
+                                type="button"
+                                className="block"
+                                onClick={() => setExpandedImageUrl(messageMediaUrls[message.id] || null)}
+                              >
+                                <img
+                                  src={messageMediaUrls[message.id]}
+                                  alt="Imagem recebida no WhatsApp"
+                                  className="max-h-80 max-w-full rounded-md object-contain"
+                                />
+                              </button>
+                              <p className="whitespace-pre-wrap break-words">
+                                {getMessageDisplayBody(message)}
+                              </p>
+                            </div>
+                          ) : message.messageType === "video" && messageMediaUrls[message.id] ? (
+                            <div className="space-y-2">
+                              <video controls preload="metadata" className="max-h-80 max-w-full rounded-md">
+                                <source src={messageMediaUrls[message.id]} />
+                                Seu navegador não suporta vídeo.
+                              </video>
+                              <p className="whitespace-pre-wrap break-words">
+                                {getMessageDisplayBody(message)}
+                              </p>
+                            </div>
+                          ) : message.messageType === "audio" && messageMediaUrls[message.id] ? (
                             <div className="space-y-2">
                               <p
                                 className={`whitespace-pre-wrap break-words ${
@@ -836,11 +1371,8 @@ function ConversasPage() {
                             </p>
                           )}
                           <p className="mt-1 text-right text-[11px] text-[#667781]">
-                            {message.status === "sending"
-                              ? "Enviando..."
-                              : message.status === "failed"
-                                ? "Falhou ao enviar"
-                                : formatDateTime(message.createdAt || message.occurredAt)}
+                            {getOutgoingStatusLabel(message.status) ||
+                              formatDateTime(message.createdAt || message.occurredAt)}
                           </p>
                         </div>
                       </div>
@@ -848,32 +1380,86 @@ function ConversasPage() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <div className="border-t bg-[#f0f2f5] px-4 py-3">
-                    <div className="flex items-end gap-3">
-                      <Textarea
-                        value={replyText}
-                        onChange={(event) => setReplyText(event.target.value)}
-                        onKeyDown={handleReplyKeyDown}
-                        placeholder="Mensagem"
-                        rows={1}
-                        className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
-                      />
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
-                        disabled={!replyText.trim()}
-                        onClick={() => void handleReply()}
-                        title="Enviar"
-                        aria-label="Enviar mensagem"
-                      >
-                        {saving ? (
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                        ) : (
-                          <Send className="h-5 w-5" />
-                        )}
-                      </Button>
-                    </div>
+                  <div className="shrink-0 border-t bg-[#f0f2f5] px-4 py-3">
+                    {selectedConversation.isWindowOpen ? (
+                      <div className="flex items-end gap-3">
+                        <input
+                          ref={audioInputRef}
+                          type="file"
+                          accept="audio/*"
+                          className="hidden"
+                          onChange={(event) => void handleAudioSelected(event.target.files?.[0])}
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className={`h-11 w-11 shrink-0 rounded-full border-0 text-white ${
+                            recording ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#00a884] hover:bg-[#008f72]"
+                          }`}
+                          disabled={saving}
+                          onClick={() => void handleRecordAudio()}
+                          title={recording ? "Parar gravacao" : "Gravar audio"}
+                          aria-label={recording ? "Parar gravacao" : "Gravar audio"}
+                        >
+                          {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
+                          disabled={saving || recording}
+                          onClick={() => audioInputRef.current?.click()}
+                          title="Enviar audio"
+                          aria-label="Enviar audio"
+                        >
+                          <Paperclip className="h-5 w-5" />
+                        </Button>
+                        <Textarea
+                          value={replyText}
+                          onChange={(event) => setReplyText(event.target.value)}
+                          onKeyDown={handleReplyKeyDown}
+                          placeholder="Mensagem"
+                          rows={1}
+                          className="max-h-32 min-h-11 resize-none rounded-full border-0 bg-white px-4 py-3 shadow-none focus-visible:ring-1 focus-visible:ring-[#00a884]"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          className="h-11 w-11 shrink-0 rounded-full bg-[#00a884] text-white hover:bg-[#008f72]"
+                          disabled={saving || !replyText.trim()}
+                          onClick={() => void handleReply()}
+                          title="Enviar"
+                          aria-label="Enviar mensagem"
+                        >
+                          {saving ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Send className="h-5 w-5" />
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-[#54656f]">
+                          Fora da janela de 24h, o admin pode enviar somente um oi por template.
+                        </p>
+                        <Button
+                          type="button"
+                          className="bg-[#00a884] text-white hover:bg-[#008f72]"
+                          disabled={saving}
+                          onClick={() => void handleSendTemplate()}
+                        >
+                          {saving ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                          )}
+                          Enviar oi
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </>
@@ -894,6 +1480,18 @@ function ConversasPage() {
           </Card>
         </div>
       )}
+
+      <Dialog open={Boolean(expandedImageUrl)} onOpenChange={(open) => !open && setExpandedImageUrl(null)}>
+        <DialogContent className="max-w-5xl border-0 bg-black/95 p-2 shadow-2xl">
+          {expandedImageUrl ? (
+            <img
+              src={expandedImageUrl}
+              alt="Imagem ampliada da conversa"
+              className="max-h-[88vh] w-full rounded-md object-contain"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

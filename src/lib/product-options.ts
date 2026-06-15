@@ -78,6 +78,20 @@ interface ProductOrderItem {
   subcategoria?: string | null;
 }
 
+const CLEANING_KEYWORDS = [
+  "limpeza",
+  "lixo",
+  "detergente",
+  "desinfetante",
+  "agua sanitaria",
+  "sabao",
+  "esponja",
+  "pano",
+  "vassoura",
+  "rodo",
+  "balde",
+] as const;
+
 export function normalizeProductSearchValue(value: string | null | undefined) {
   return String(value || "")
     .normalize("NFD")
@@ -137,7 +151,7 @@ function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
   const searchable = `${subcategory} ${name}`;
 
   if (category.includes("aliment") || category.includes("limpeza")) {
-    if (searchable.includes("limpeza")) return 1;
+    if (isCleaningProduct(item)) return 1;
     if (searchable.includes("aliment") || searchable.includes("genero")) return 0;
     return 0;
   }
@@ -153,7 +167,7 @@ function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
 
 export function isCleaningProduct(item: ProductOrderItem) {
   const searchable = `${normalizeProductSearchValue(item.subcategoria)} ${normalizeProductSearchValue(item.nome)}`;
-  return searchable.includes("limpeza");
+  return CLEANING_KEYWORDS.some((keyword) => searchable.includes(keyword));
 }
 
 export function isMedicationProduct(item: ProductOrderItem) {

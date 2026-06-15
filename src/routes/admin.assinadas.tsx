@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, Eye, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Eye, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/request-return-feedback";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
+import { downloadSignedRequestsMonthlyPdf } from "@/lib/signed-requests-monthly-pdf";
 
 export const Route = createFileRoute("/admin/assinadas")({
   component: AssinadasPage,
@@ -131,6 +132,7 @@ function AssinadasPage() {
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
+  const [downloadingMonthlyPdf, setDownloadingMonthlyPdf] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -198,6 +200,31 @@ function AssinadasPage() {
   const selectedRequests = selected
     ? (grouped.find(([local]) => local === selected)?.[1] ?? [])
     : [];
+
+  const downloadMonthlyPdf = async () => {
+    if (filteredData.length === 0) return;
+
+    setDownloadingMonthlyPdf(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      await downloadSignedRequestsMonthlyPdf(
+        selectedMonth,
+        filteredData.map((request) => ({
+          code: request.saida_codigo || codeByRequestId.get(request.id) || "-",
+          requester: request.solicitante || "-",
+          location: request.setor || "Sem local",
+          requestDate: request.data || "-",
+        })),
+      );
+      setMessage("PDF mensal gerado com sucesso.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar PDF mensal.");
+    } finally {
+      setDownloadingMonthlyPdf(false);
+    }
+  };
 
   const openReview = (request: RequisicaoAssinada, mode: ReviewMode) => {
     setReviewingRequest(request);
@@ -387,18 +414,35 @@ function AssinadasPage() {
       </div>
 
       <Card className="p-4">
-        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-          Mes
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => {
-              setSelectedMonth(event.target.value || getCurrentMonth());
-              setSelected(null);
-            }}
-            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
-          />
-        </label>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+            Mes
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => {
+                setSelectedMonth(event.target.value || getCurrentMonth());
+                setSelected(null);
+              }}
+              className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            disabled={loading || filteredData.length === 0 || downloadingMonthlyPdf}
+            onClick={() => void downloadMonthlyPdf()}
+          >
+            {downloadingMonthlyPdf ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Baixar PDF do mes
+          </Button>
+        </div>
       </Card>
 
       {message && <Card className="p-4 text-sm text-muted-foreground">{message}</Card>}
@@ -537,46 +581,39 @@ function AssinadasPage() {
           </div>
         </Card>
       ) : (
-        <>
-          <Card className="bg-muted/30 p-6">
-            <p className="text-sm text-muted-foreground">Primeiro passo</p>
-            <p className="text-lg text-foreground">Escolha o local para conferir os PDFs do mes</p>
-          </Card>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {grouped.map(([local, requests]) => (
-              <button
-                key={local}
-                type="button"
-                onClick={() => setSelected(local)}
-                className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
-              >
-                <p className="text-foreground">{local}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {requests.length} {requests.length === 1 ? "registro" : "registros"}
-                </p>
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {grouped.map(([local, requests]) => (
+            <button
+              key={local}
+              type="button"
+              onClick={() => setSelected(local)}
+              className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
+            >
+              <p className="text-foreground">{local}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {requests.length} {requests.length === 1 ? "registro" : "registros"}
+              </p>
+            </button>
+          ))}
+        </div>
       )}
 
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reviewMode === "devolver" ? "Devolver requisicao" : "Excluir requisicao"}
+              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
             </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
-                ? "Escolha se o erro esta na requisicao ou na saida para enviar o fluxo de volta ao ponto correto."
-                : "A requisicao saira da fila, mas o historico e o motivo ficam registrados no banco."}
+                ? "Escolha se o erro está na requisição ou na saída para devolver o fluxo ao ponto correto."
+                : "A requisição sairá da fila, mas o histórico e o motivo ficarão registrados no sistema."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Onde esta o erro?</p>
+              <p className="text-sm text-muted-foreground">Onde está o erro?</p>
               <RadioGroup
                 value={reviewTarget}
                 onValueChange={(value) => setReviewTarget(value as ReviewTarget)}
@@ -585,18 +622,18 @@ function AssinadasPage() {
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="requisicao" id="review-target-requisicao" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-requisicao">Erro na requisicao</Label>
+                    <Label htmlFor="review-target-requisicao">Erro na requisição</Label>
                     <span className="block text-xs text-muted-foreground">
-                      O usuario recebe a mesma requisicao com os itens para corrigir e reenviar.
+                      O usuário recebe a mesma requisição com os itens para corrigir e reenviar.
                     </span>
                   </span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="saida" id="review-target-saida" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-saida">Erro na saida</Label>
+                    <Label htmlFor="review-target-saida">Erro na saída</Label>
                     <span className="block text-xs text-muted-foreground">
-                      A saida volta para pendente e a requisicao assinada continua preservada.
+                      A saída volta para pendente, e a requisição assinada continua preservada.
                     </span>
                   </span>
                 </label>
@@ -620,7 +657,7 @@ function AssinadasPage() {
             </Button>
             <Button type="button" onClick={() => void submitReview()} disabled={reviewSaving}>
               {reviewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {reviewMode === "devolver" ? "Confirmar devolucao" : "Excluir"}
+              {reviewMode === "devolver" ? "Confirmar devolução" : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>

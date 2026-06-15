@@ -1,4 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
 import { formatProgramName } from "@/lib/program-options";
@@ -17,6 +19,8 @@ interface Setor {
 
 function LocaisPage() {
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isChildRoute = pathname !== "/admin/cadastros/locais";
   const { data, loading, error } = useSupabaseList<Setor>("setores");
 
   const columns: Column<Setor>[] = [
@@ -25,6 +29,10 @@ function LocaisPage() {
     { key: "programa", label: "Programa", render: (r) => formatProgramName(r.programa) || "—" },
     { key: "descricao", label: "Descrição", render: (r) => r.descricao || "—" },
   ];
+
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   return (
     <ListPage
@@ -35,9 +43,31 @@ function LocaisPage() {
       loading={loading}
       error={error}
       columns={columns}
+      actions={(local) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() =>
+            navigate({
+              to: "/admin/cadastros/locais/$localId",
+              params: { localId: String(local.id) },
+            })
+          }
+        >
+          <Pencil className="h-4 w-4" />
+          Editar
+        </Button>
+      )}
       searchKeys={["nome", "responsavel", "programa"]}
       newLabel="Novo local"
-      onNew={() => navigate({ to: "/admin/cadastros/locais/novo" })}
+      onNew={() =>
+        navigate({
+          to: "/admin/cadastros/locais/$localId",
+          params: { localId: "novo" },
+        })
+      }
     />
   );
 }

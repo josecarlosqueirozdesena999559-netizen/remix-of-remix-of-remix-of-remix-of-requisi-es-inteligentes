@@ -8,7 +8,8 @@ export interface AttachmentFile {
   publicUrl?: string;
   signedUrl?: string;
   uploadedAt?: string;
-  kind?: "request" | "output";
+  mimeType?: string;
+  kind?: "request" | "output" | "audio" | "image" | "video";
 }
 
 interface SignedAttachmentPayload extends AttachmentFile {
@@ -32,7 +33,16 @@ function toAttachmentFile(value: unknown): AttachmentFile | null {
   if (typeof value.publicUrl === "string") attachment.publicUrl = value.publicUrl;
   if (typeof value.signedUrl === "string") attachment.signedUrl = value.signedUrl;
   if (typeof value.uploadedAt === "string") attachment.uploadedAt = value.uploadedAt;
-  if (value.kind === "request" || value.kind === "output") attachment.kind = value.kind;
+  if (typeof value.mimeType === "string") attachment.mimeType = value.mimeType;
+  if (
+    value.kind === "request" ||
+    value.kind === "output" ||
+    value.kind === "audio" ||
+    value.kind === "image" ||
+    value.kind === "video"
+  ) {
+    attachment.kind = value.kind;
+  }
 
   return Object.keys(attachment).length > 0 ? attachment : null;
 }

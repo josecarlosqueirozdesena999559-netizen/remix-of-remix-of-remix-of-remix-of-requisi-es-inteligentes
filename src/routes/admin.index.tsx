@@ -1,18 +1,58 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CheckCircle2, FileSignature, Loader2 } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+} from "@/lib/attachments";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminHome,
 });
 
+type PendingSignatureRequest = {
+  id: string;
+  saida_codigo: string | null;
+  solicitante?: string | null;
+  status: string;
+  signed_attachment: unknown;
+};
+
+type PendingNoticeItem = {
+  key: string;
+  label: string;
+};
+
+function getRequestDisplayCode(request: PendingSignatureRequest) {
+  return request.saida_codigo?.trim() || request.id.slice(0, 8);
+}
+
+function buildPendingNoticeItem(request: PendingSignatureRequest, includeRequester = false): PendingNoticeItem {
+  const code = getRequestDisplayCode(request);
+  const requester = request.solicitante?.trim();
+
+  return {
+    key: request.id,
+    label: includeRequester && requester ? `Requisição ${code} - ${requester}` : `Requisição ${code}`,
+  };
+}
+
+function needsSignature(request: PendingSignatureRequest) {
+  if (request.status === "aguardando_assinatura_saida") {
+    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+  }
+
+  return !getRequestSignedAttachment(request.signed_attachment, request.status);
+}
+
 function AdminHome() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [pendingNoticeItems, setPendingNoticeItems] = useState<PendingNoticeItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +68,7 @@ function AdminHome() {
           if (active) {
             setIsAdmin(false);
             setPendingCount(0);
+            setPendingNoticeItems([]);
           }
           return;
         }
@@ -37,38 +78,47 @@ function AdminHome() {
         }
 
         if (profile.is_admin) {
-          const { count, error } = await supabase
+          const { data, count, error } = await supabase
             .from("requisicoes")
-            .select("id", { count: "exact", head: true })
-            .in("status", ["recebido", "requisicao_assinada"]);
+            .select("id,saida_codigo,solicitante,status,signed_attachment", { count: "exact" })
+            .in("status", ["recebido", "requisicao_assinada"])
+            .order("updated_at", { ascending: false });
 
           if (error) throw new Error(error.message);
           if (!active) return;
 
-          setPendingCount(count ?? 0);
+          const pendingRequests = count ? ((data ?? []) as PendingSignatureRequest[]) : [];
+          setPendingCount(count ?? pendingRequests.length);
+          setPendingNoticeItems(pendingRequests.map((request) => buildPendingNoticeItem(request, true)));
           return;
         }
 
         if (!profile.cpf) {
-          if (active) setPendingCount(0);
+          if (active) {
+            setPendingCount(0);
+            setPendingNoticeItems([]);
+          }
           return;
         }
 
-        const { count, error } = await supabase
+        const { data, error } = await supabase
           .from("requisicoes")
-          .select("id", { count: "exact", head: true })
+          .select("id,saida_codigo,status,signed_attachment")
           .eq("solicitante_cpf", profile.cpf)
           .in("status", [
             "aguardando_assinatura",
             "aguardando_assinatura_requisicao",
             "aguardando_assinatura_saida",
             "correcao_requisicao",
-          ]);
+          ])
+          .order("updated_at", { ascending: false });
 
         if (error) throw new Error(error.message);
         if (!active) return;
 
-        setPendingCount(count ?? 0);
+        const pendingRequests = ((data ?? []) as PendingSignatureRequest[]).filter(needsSignature);
+        setPendingCount(pendingRequests.length);
+        setPendingNoticeItems(pendingRequests.map((request) => buildPendingNoticeItem(request)));
       } finally {
         if (active) setLoading(false);
       }
@@ -81,14 +131,15 @@ function AdminHome() {
     };
   }, []);
 
-  const notificationTitle = isAdmin ? "Solicitações Pendentes" : "Assinaturas";
   const notificationMessage = isAdmin
     ? pendingCount > 0
-      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "requisição pendente" : "requisições pendentes"}.`
-      : "Você não tem requisições pendentes no momento."
+      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "solicitação pendente" : "solicitações pendentes"}.`
+      : "Você não tem solicitações pendentes no momento."
     : pendingCount > 0
-      ? `Você tem ${pendingCount} ${pendingCount === 1 ? "assinatura pendente" : "assinaturas pendentes"}.`
-      : "Você não tem assinaturas pendentes no momento.";
+      ? `Você tem ${pendingCount} ${
+          pendingCount === 1 ? "requisição pendente de assinatura" : "requisições pendentes de assinatura"
+        }.`
+      : "Você não tem requisições pendentes de assinatura no momento.";
 
   return (
     <div className="space-y-4">
@@ -106,29 +157,31 @@ function AdminHome() {
         <button
           type="button"
           onClick={() => navigate({ to: isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas" })}
-          className={`w-full rounded-md border-l-4 p-5 text-left shadow-sm transition-colors hover:brightness-[0.98] ${
-            pendingCount > 0
-              ? "border-amber-500 bg-amber-50 text-amber-950"
-              : "border-emerald-500 bg-emerald-50 text-emerald-950"
+          className={`group flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-lg px-4 py-3 text-left text-black shadow-sm transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-16 sm:px-5 ${
+            pendingCount > 0 ? "bg-amber-400" : "bg-emerald-400"
           }`}
         >
-          <div className="flex items-start gap-3">
-            <span
-              className={`rounded-md p-2 ${
-                pendingCount > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
-              }`}
-            >
-              {pendingCount > 0 ? (
-                <FileSignature className="h-5 w-5" />
-              ) : (
-                <CheckCircle2 className="h-5 w-5" />
-              )}
+          <span className="min-w-0 flex-1 space-y-2 text-sm font-medium leading-snug sm:text-base">
+            <span className="block">
+              {notificationMessage}{" "}
+              <span className="cursor-pointer whitespace-nowrap underline decoration-1 underline-offset-4">
+                Clique aqui
+              </span>
             </span>
-            <span>
-              <span className="block text-sm font-medium">{notificationTitle}</span>
-              <span className="mt-1 block text-sm opacity-80">{notificationMessage}</span>
-            </span>
-          </div>
+            {pendingNoticeItems.length > 0 ? (
+              <span className="block space-y-1 text-sm font-normal">
+                {pendingNoticeItems.map((item) => (
+                  <span key={item.key} className="block">
+                    {item.label}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+          </span>
+          <ChevronRight
+            className="size-5 shrink-0 transition-transform group-hover:translate-x-1"
+            strokeWidth={2.5}
+          />
         </button>
       )}
     </div>
