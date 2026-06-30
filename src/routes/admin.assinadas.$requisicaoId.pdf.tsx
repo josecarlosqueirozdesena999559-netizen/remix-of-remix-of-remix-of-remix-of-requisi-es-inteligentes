@@ -4,16 +4,11 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import type { RequestPdfItem } from "@/lib/request-pdf";
 import {
-  getAttachmentFile,
-  getOutputSignedAttachment,
-  getRequestSignedAttachment,
-  resolveAttachmentUrl,
-  type AttachmentFile,
-} from "@/lib/attachments";
-import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
-import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
-import { resolveRequestForPdf } from "@/lib/request-resolver";
+  createSignedRequestProcessPdfBlob,
+  getSignedRequestProcessCode,
+} from "@/lib/signed-request-process-pdf";
 
 export const Route = createFileRoute("/admin/assinadas/$requisicaoId/pdf")({
   component: PdfAssinadoCompletoPage,
@@ -77,28 +72,11 @@ function PdfAssinadoCompletoPage() {
       }
 
       const request = requestResult.data as RequisicaoAssinada;
-      const code = request.saida_codigo || request.id;
-      const requestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
-      const outputAttachment =
-        getOutputSignedAttachment(request.signed_attachment, request.status) ||
-        getAttachmentFile(request.admin_attachment) as AttachmentFile | null;
-
-      const [outputUrl, requestUrl] = await Promise.all([
-        resolveAttachmentUrl(outputAttachment),
-        resolveAttachmentUrl(requestAttachment),
-      ]);
-
-      const blob = outputUrl || requestUrl
-        ? await createCombinedSignedPdfBlob(outputUrl, requestUrl)
-        : await createRequestPdfBlob(
-            await resolveRequestForPdf(
-              {
-                ...request,
-                items: request.items as RequestPdfItem[] | null,
-              },
-              code,
-            ),
-          );
+      const code = getSignedRequestProcessCode(request);
+      const blob = await createSignedRequestProcessPdfBlob({
+        ...request,
+        items: request.items as RequestPdfItem[] | null,
+      });
       createdUrl = URL.createObjectURL(blob);
 
       if (!active) {

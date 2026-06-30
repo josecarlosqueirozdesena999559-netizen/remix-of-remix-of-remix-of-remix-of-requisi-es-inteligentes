@@ -264,6 +264,15 @@ function AdminLayout() {
               Assinadas
             </Link>
           ) : null}
+          {hasAdminSectionAccess(profile, "backup") ? (
+            <Link
+              to="/admin/backup"
+              className={itemCls}
+              activeProps={{ className: `${itemCls} ${activeCls}` }}
+            >
+              Backup
+            </Link>
+          ) : null}
           {hasAdminSectionAccess(profile, "controle_assinaturas") ? (
             <Link
               to="/admin/controle-assinaturas"

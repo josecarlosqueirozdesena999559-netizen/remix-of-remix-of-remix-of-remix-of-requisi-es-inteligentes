@@ -23,6 +23,7 @@ import { Route as AdminControleEntradasRouteImport } from './routes/admin.contro
 import { Route as AdminControleAssinaturasRouteImport } from './routes/admin.controle-assinaturas'
 import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
 import { Route as AdminCompletarCadastroRouteImport } from './routes/admin.completar-cadastro'
+import { Route as AdminBackupRouteImport } from './routes/admin.backup'
 import { Route as AdminAssinadasRouteImport } from './routes/admin.assinadas'
 import { Route as AdminCadastrosUsuariosRouteImport } from './routes/admin.cadastros.usuarios'
 import { Route as AdminCadastrosProgramasRouteImport } from './routes/admin.cadastros.programas'
@@ -32,7 +33,9 @@ import { Route as AdminSolicitacoesRequisicaoIdPdfRouteImport } from './routes/a
 import { Route as AdminMinhasAssinaturasRequisicaoIdPdfRouteImport } from './routes/admin.minhas-assinaturas.$requisicaoId.pdf'
 import { Route as AdminMeusAssinadosRequisicaoIdPdfRouteImport } from './routes/admin.meus-assinados.$requisicaoId.pdf'
 import { Route as AdminCadastrosUsuariosUsuarioIdRouteImport } from './routes/admin.cadastros.usuarios.$usuarioId'
+import { Route as AdminCadastrosProgramasProgramaIdRouteImport } from './routes/admin.cadastros.programas.$programaId'
 import { Route as AdminCadastrosProdutosProdutoIdRouteImport } from './routes/admin.cadastros.produtos.$produtoId'
+import { Route as AdminCadastrosLocaisLocalIdRouteImport } from './routes/admin.cadastros.locais.$localId'
 import { Route as AdminAssinadasRequisicaoIdPdfRouteImport } from './routes/admin.assinadas.$requisicaoId.pdf'
 
 const AdminRoute = AdminRouteImport.update({
@@ -106,6 +109,11 @@ const AdminCompletarCadastroRoute = AdminCompletarCadastroRouteImport.update({
   path: '/completar-cadastro',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminBackupRoute = AdminBackupRouteImport.update({
+  id: '/backup',
+  path: '/backup',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAssinadasRoute = AdminAssinadasRouteImport.update({
   id: '/assinadas',
   path: '/assinadas',
@@ -155,11 +163,23 @@ const AdminCadastrosUsuariosUsuarioIdRoute =
     path: '/$usuarioId',
     getParentRoute: () => AdminCadastrosUsuariosRoute,
   } as any)
+const AdminCadastrosProgramasProgramaIdRoute =
+  AdminCadastrosProgramasProgramaIdRouteImport.update({
+    id: '/$programaId',
+    path: '/$programaId',
+    getParentRoute: () => AdminCadastrosProgramasRoute,
+  } as any)
 const AdminCadastrosProdutosProdutoIdRoute =
   AdminCadastrosProdutosProdutoIdRouteImport.update({
     id: '/$produtoId',
     path: '/$produtoId',
     getParentRoute: () => AdminCadastrosProdutosRoute,
+  } as any)
+const AdminCadastrosLocaisLocalIdRoute =
+  AdminCadastrosLocaisLocalIdRouteImport.update({
+    id: '/$localId',
+    path: '/$localId',
+    getParentRoute: () => AdminCadastrosLocaisRoute,
   } as any)
 const AdminAssinadasRequisicaoIdPdfRoute =
   AdminAssinadasRequisicaoIdPdfRouteImport.update({
@@ -172,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin/assinadas': typeof AdminAssinadasRouteWithChildren
+  '/admin/backup': typeof AdminBackupRoute
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
@@ -184,12 +205,14 @@ export interface FileRoutesByFullPath {
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin/': typeof AdminIndexRoute
-  '/admin/cadastros/locais': typeof AdminCadastrosLocaisRoute
+  '/admin/cadastros/locais': typeof AdminCadastrosLocaisRouteWithChildren
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
-  '/admin/cadastros/programas': typeof AdminCadastrosProgramasRoute
+  '/admin/cadastros/programas': typeof AdminCadastrosProgramasRouteWithChildren
   '/admin/cadastros/usuarios': typeof AdminCadastrosUsuariosRouteWithChildren
   '/admin/assinadas/$requisicaoId/pdf': typeof AdminAssinadasRequisicaoIdPdfRoute
+  '/admin/cadastros/locais/$localId': typeof AdminCadastrosLocaisLocalIdRoute
   '/admin/cadastros/produtos/$produtoId': typeof AdminCadastrosProdutosProdutoIdRoute
+  '/admin/cadastros/programas/$programaId': typeof AdminCadastrosProgramasProgramaIdRoute
   '/admin/cadastros/usuarios/$usuarioId': typeof AdminCadastrosUsuariosUsuarioIdRoute
   '/admin/meus-assinados/$requisicaoId/pdf': typeof AdminMeusAssinadosRequisicaoIdPdfRoute
   '/admin/minhas-assinaturas/$requisicaoId/pdf': typeof AdminMinhasAssinaturasRequisicaoIdPdfRoute
@@ -198,6 +221,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/assinadas': typeof AdminAssinadasRouteWithChildren
+  '/admin/backup': typeof AdminBackupRoute
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
@@ -210,12 +234,14 @@ export interface FileRoutesByTo {
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin': typeof AdminIndexRoute
-  '/admin/cadastros/locais': typeof AdminCadastrosLocaisRoute
+  '/admin/cadastros/locais': typeof AdminCadastrosLocaisRouteWithChildren
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
-  '/admin/cadastros/programas': typeof AdminCadastrosProgramasRoute
+  '/admin/cadastros/programas': typeof AdminCadastrosProgramasRouteWithChildren
   '/admin/cadastros/usuarios': typeof AdminCadastrosUsuariosRouteWithChildren
   '/admin/assinadas/$requisicaoId/pdf': typeof AdminAssinadasRequisicaoIdPdfRoute
+  '/admin/cadastros/locais/$localId': typeof AdminCadastrosLocaisLocalIdRoute
   '/admin/cadastros/produtos/$produtoId': typeof AdminCadastrosProdutosProdutoIdRoute
+  '/admin/cadastros/programas/$programaId': typeof AdminCadastrosProgramasProgramaIdRoute
   '/admin/cadastros/usuarios/$usuarioId': typeof AdminCadastrosUsuariosUsuarioIdRoute
   '/admin/meus-assinados/$requisicaoId/pdf': typeof AdminMeusAssinadosRequisicaoIdPdfRoute
   '/admin/minhas-assinaturas/$requisicaoId/pdf': typeof AdminMinhasAssinaturasRequisicaoIdPdfRoute
@@ -226,6 +252,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/admin/assinadas': typeof AdminAssinadasRouteWithChildren
+  '/admin/backup': typeof AdminBackupRoute
   '/admin/completar-cadastro': typeof AdminCompletarCadastroRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/controle-assinaturas': typeof AdminControleAssinaturasRoute
@@ -238,12 +265,14 @@ export interface FileRoutesById {
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin/': typeof AdminIndexRoute
-  '/admin/cadastros/locais': typeof AdminCadastrosLocaisRoute
+  '/admin/cadastros/locais': typeof AdminCadastrosLocaisRouteWithChildren
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
-  '/admin/cadastros/programas': typeof AdminCadastrosProgramasRoute
+  '/admin/cadastros/programas': typeof AdminCadastrosProgramasRouteWithChildren
   '/admin/cadastros/usuarios': typeof AdminCadastrosUsuariosRouteWithChildren
   '/admin/assinadas/$requisicaoId/pdf': typeof AdminAssinadasRequisicaoIdPdfRoute
+  '/admin/cadastros/locais/$localId': typeof AdminCadastrosLocaisLocalIdRoute
   '/admin/cadastros/produtos/$produtoId': typeof AdminCadastrosProdutosProdutoIdRoute
+  '/admin/cadastros/programas/$programaId': typeof AdminCadastrosProgramasProgramaIdRoute
   '/admin/cadastros/usuarios/$usuarioId': typeof AdminCadastrosUsuariosUsuarioIdRoute
   '/admin/meus-assinados/$requisicaoId/pdf': typeof AdminMeusAssinadosRequisicaoIdPdfRoute
   '/admin/minhas-assinaturas/$requisicaoId/pdf': typeof AdminMinhasAssinaturasRequisicaoIdPdfRoute
@@ -255,6 +284,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/admin/assinadas'
+    | '/admin/backup'
     | '/admin/completar-cadastro'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
@@ -272,7 +302,9 @@ export interface FileRouteTypes {
     | '/admin/cadastros/programas'
     | '/admin/cadastros/usuarios'
     | '/admin/assinadas/$requisicaoId/pdf'
+    | '/admin/cadastros/locais/$localId'
     | '/admin/cadastros/produtos/$produtoId'
+    | '/admin/cadastros/programas/$programaId'
     | '/admin/cadastros/usuarios/$usuarioId'
     | '/admin/meus-assinados/$requisicaoId/pdf'
     | '/admin/minhas-assinaturas/$requisicaoId/pdf'
@@ -281,6 +313,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin/assinadas'
+    | '/admin/backup'
     | '/admin/completar-cadastro'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
@@ -298,7 +331,9 @@ export interface FileRouteTypes {
     | '/admin/cadastros/programas'
     | '/admin/cadastros/usuarios'
     | '/admin/assinadas/$requisicaoId/pdf'
+    | '/admin/cadastros/locais/$localId'
     | '/admin/cadastros/produtos/$produtoId'
+    | '/admin/cadastros/programas/$programaId'
     | '/admin/cadastros/usuarios/$usuarioId'
     | '/admin/meus-assinados/$requisicaoId/pdf'
     | '/admin/minhas-assinaturas/$requisicaoId/pdf'
@@ -308,6 +343,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/admin/assinadas'
+    | '/admin/backup'
     | '/admin/completar-cadastro'
     | '/admin/configuracoes'
     | '/admin/controle-assinaturas'
@@ -325,7 +361,9 @@ export interface FileRouteTypes {
     | '/admin/cadastros/programas'
     | '/admin/cadastros/usuarios'
     | '/admin/assinadas/$requisicaoId/pdf'
+    | '/admin/cadastros/locais/$localId'
     | '/admin/cadastros/produtos/$produtoId'
+    | '/admin/cadastros/programas/$programaId'
     | '/admin/cadastros/usuarios/$usuarioId'
     | '/admin/meus-assinados/$requisicaoId/pdf'
     | '/admin/minhas-assinaturas/$requisicaoId/pdf'
@@ -437,6 +475,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCompletarCadastroRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/backup': {
+      id: '/admin/backup'
+      path: '/backup'
+      fullPath: '/admin/backup'
+      preLoaderRoute: typeof AdminBackupRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/assinadas': {
       id: '/admin/assinadas'
       path: '/assinadas'
@@ -500,12 +545,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCadastrosUsuariosUsuarioIdRouteImport
       parentRoute: typeof AdminCadastrosUsuariosRoute
     }
+    '/admin/cadastros/programas/$programaId': {
+      id: '/admin/cadastros/programas/$programaId'
+      path: '/$programaId'
+      fullPath: '/admin/cadastros/programas/$programaId'
+      preLoaderRoute: typeof AdminCadastrosProgramasProgramaIdRouteImport
+      parentRoute: typeof AdminCadastrosProgramasRoute
+    }
     '/admin/cadastros/produtos/$produtoId': {
       id: '/admin/cadastros/produtos/$produtoId'
       path: '/$produtoId'
       fullPath: '/admin/cadastros/produtos/$produtoId'
       preLoaderRoute: typeof AdminCadastrosProdutosProdutoIdRouteImport
       parentRoute: typeof AdminCadastrosProdutosRoute
+    }
+    '/admin/cadastros/locais/$localId': {
+      id: '/admin/cadastros/locais/$localId'
+      path: '/$localId'
+      fullPath: '/admin/cadastros/locais/$localId'
+      preLoaderRoute: typeof AdminCadastrosLocaisLocalIdRouteImport
+      parentRoute: typeof AdminCadastrosLocaisRoute
     }
     '/admin/assinadas/$requisicaoId/pdf': {
       id: '/admin/assinadas/$requisicaoId/pdf'
@@ -567,6 +626,17 @@ const AdminSolicitacoesRouteChildren: AdminSolicitacoesRouteChildren = {
 const AdminSolicitacoesRouteWithChildren =
   AdminSolicitacoesRoute._addFileChildren(AdminSolicitacoesRouteChildren)
 
+interface AdminCadastrosLocaisRouteChildren {
+  AdminCadastrosLocaisLocalIdRoute: typeof AdminCadastrosLocaisLocalIdRoute
+}
+
+const AdminCadastrosLocaisRouteChildren: AdminCadastrosLocaisRouteChildren = {
+  AdminCadastrosLocaisLocalIdRoute: AdminCadastrosLocaisLocalIdRoute,
+}
+
+const AdminCadastrosLocaisRouteWithChildren =
+  AdminCadastrosLocaisRoute._addFileChildren(AdminCadastrosLocaisRouteChildren)
+
 interface AdminCadastrosProdutosRouteChildren {
   AdminCadastrosProdutosProdutoIdRoute: typeof AdminCadastrosProdutosProdutoIdRoute
 }
@@ -579,6 +649,21 @@ const AdminCadastrosProdutosRouteChildren: AdminCadastrosProdutosRouteChildren =
 const AdminCadastrosProdutosRouteWithChildren =
   AdminCadastrosProdutosRoute._addFileChildren(
     AdminCadastrosProdutosRouteChildren,
+  )
+
+interface AdminCadastrosProgramasRouteChildren {
+  AdminCadastrosProgramasProgramaIdRoute: typeof AdminCadastrosProgramasProgramaIdRoute
+}
+
+const AdminCadastrosProgramasRouteChildren: AdminCadastrosProgramasRouteChildren =
+  {
+    AdminCadastrosProgramasProgramaIdRoute:
+      AdminCadastrosProgramasProgramaIdRoute,
+  }
+
+const AdminCadastrosProgramasRouteWithChildren =
+  AdminCadastrosProgramasRoute._addFileChildren(
+    AdminCadastrosProgramasRouteChildren,
   )
 
 interface AdminCadastrosUsuariosRouteChildren {
@@ -597,6 +682,7 @@ const AdminCadastrosUsuariosRouteWithChildren =
 
 interface AdminRouteChildren {
   AdminAssinadasRoute: typeof AdminAssinadasRouteWithChildren
+  AdminBackupRoute: typeof AdminBackupRoute
   AdminCompletarCadastroRoute: typeof AdminCompletarCadastroRoute
   AdminConfiguracoesRoute: typeof AdminConfiguracoesRoute
   AdminControleAssinaturasRoute: typeof AdminControleAssinaturasRoute
@@ -609,14 +695,15 @@ interface AdminRouteChildren {
   AdminSolicitacoesRoute: typeof AdminSolicitacoesRouteWithChildren
   AdminWhatsappUsuariosRoute: typeof AdminWhatsappUsuariosRoute
   AdminIndexRoute: typeof AdminIndexRoute
-  AdminCadastrosLocaisRoute: typeof AdminCadastrosLocaisRoute
+  AdminCadastrosLocaisRoute: typeof AdminCadastrosLocaisRouteWithChildren
   AdminCadastrosProdutosRoute: typeof AdminCadastrosProdutosRouteWithChildren
-  AdminCadastrosProgramasRoute: typeof AdminCadastrosProgramasRoute
+  AdminCadastrosProgramasRoute: typeof AdminCadastrosProgramasRouteWithChildren
   AdminCadastrosUsuariosRoute: typeof AdminCadastrosUsuariosRouteWithChildren
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAssinadasRoute: AdminAssinadasRouteWithChildren,
+  AdminBackupRoute: AdminBackupRoute,
   AdminCompletarCadastroRoute: AdminCompletarCadastroRoute,
   AdminConfiguracoesRoute: AdminConfiguracoesRoute,
   AdminControleAssinaturasRoute: AdminControleAssinaturasRoute,
@@ -629,9 +716,9 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminSolicitacoesRoute: AdminSolicitacoesRouteWithChildren,
   AdminWhatsappUsuariosRoute: AdminWhatsappUsuariosRoute,
   AdminIndexRoute: AdminIndexRoute,
-  AdminCadastrosLocaisRoute: AdminCadastrosLocaisRoute,
+  AdminCadastrosLocaisRoute: AdminCadastrosLocaisRouteWithChildren,
   AdminCadastrosProdutosRoute: AdminCadastrosProdutosRouteWithChildren,
-  AdminCadastrosProgramasRoute: AdminCadastrosProgramasRoute,
+  AdminCadastrosProgramasRoute: AdminCadastrosProgramasRouteWithChildren,
   AdminCadastrosUsuariosRoute: AdminCadastrosUsuariosRouteWithChildren,
 }
 

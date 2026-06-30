@@ -15,7 +15,10 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+*.local-*
 .env
+.codex-temp/
+.npm-cache/
 
 # Wrangler / Cloudflare
 .wrangler/

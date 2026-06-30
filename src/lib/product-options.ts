@@ -1,14 +1,15 @@
 export const PRODUCT_CATEGORIES = [
-  "Gêneros alimentícios/limpeza",
+  "G\u00eaneros aliment\u00edcios/limpeza",
   "Ambulatorial",
-  "Odontológico",
+  "Odontol\u00f3gico",
+  "Laborat\u00f3rio",
   "SESB",
   "Expediente",
 ] as const;
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 export const PRODUCT_SUBCATEGORIES = [
-  "Alimentício",
+  "Aliment\u00edcio",
   "Limpeza",
   "Material Ambulatorial",
   "Medicamentos",
@@ -20,16 +21,21 @@ export type ProductSubcategory = (typeof PRODUCT_SUBCATEGORIES)[number];
 const CATEGORY_SEPARATOR = ";";
 
 const CATEGORY_ALIASES: Record<string, ProductCategory> = {
-  "Generos alimenticio/limpeza": "Gêneros alimentícios/limpeza",
-  "Gêneros alimenticio/limpeza": "Gêneros alimentícios/limpeza",
-  "Generos alimentícios/limpeza": "Gêneros alimentícios/limpeza",
-  "Gêneros alimentícios/limpeza": "Gêneros alimentícios/limpeza",
-  "GÃªneros alimentÃ­cios/limpeza": "Gêneros alimentícios/limpeza",
-  "GÃªneros alimenticio/limpeza": "Gêneros alimentícios/limpeza",
-  "Generos alimentÃ­cios/limpeza": "Gêneros alimentícios/limpeza",
-  Odontologico: "Odontológico",
-  Odontológico: "Odontológico",
-  "OdontolÃ³gico": "Odontológico",
+  "Generos alimenticio/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "G\u00eaneros alimenticio/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "Generos aliment\u00edcios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "G\u00eaneros aliment\u00edcios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "GÃªneros alimentÃ­cios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "GÃƒÂªneros alimentÃƒÂ­cios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "GÃƒÂªneros alimenticio/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  "Generos alimentÃƒÂ­cios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
+  Odontologico: "Odontol\u00f3gico",
+  "Odontológico": "Odontol\u00f3gico",
+  "OdontolÃ³gico": "Odontol\u00f3gico",
+  "OdontolÃƒÂ³gico": "Odontol\u00f3gico",
+  Laboratorio: "Laborat\u00f3rio",
+  "Laboratório": "Laborat\u00f3rio",
+  "LaboratÃ³rio": "Laborat\u00f3rio",
   Ambulatorial: "Ambulatorial",
   SESB: "SESB",
   Expediente: "Expediente",

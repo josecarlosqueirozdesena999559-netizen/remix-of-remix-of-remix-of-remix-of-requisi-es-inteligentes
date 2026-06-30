@@ -3,6 +3,7 @@ import type { CurrentUserProfile } from "@/lib/user-profile";
 export const ADMIN_SECTIONS = [
   "solicitacoes",
   "assinadas",
+  "backup",
   "controle_assinaturas",
   "conversas",
   "whatsapp_usuarios",
@@ -47,6 +48,7 @@ export function hasAdminSectionAccess(
 export function getAdminSectionFromPath(pathname: string): AdminSection | null {
   if (pathname.startsWith("/admin/solicitacoes")) return "solicitacoes";
   if (pathname.startsWith("/admin/assinadas")) return "assinadas";
+  if (pathname.startsWith("/admin/backup")) return "backup";
   if (pathname.startsWith("/admin/controle-assinaturas")) return "controle_assinaturas";
   if (pathname.startsWith("/admin/conversas")) return "conversas";
   if (pathname.startsWith("/admin/whatsapp-usuarios")) return "whatsapp_usuarios";
