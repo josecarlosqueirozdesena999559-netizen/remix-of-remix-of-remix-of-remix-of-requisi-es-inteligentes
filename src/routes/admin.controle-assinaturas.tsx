@@ -268,11 +268,11 @@ function ControleAssinaturasPage() {
             />
           </label>
           <label className="space-y-2 text-sm text-muted-foreground">
-            Código da requisição
+            Solicitação
             <Input
               value={codigoFilter}
               onChange={(event) => setCodigoFilter(event.target.value)}
-              placeholder="Filtrar por codigo"
+              placeholder="Filtrar por solicitação"
             />
           </label>
           <label className="space-y-2 text-sm text-muted-foreground">

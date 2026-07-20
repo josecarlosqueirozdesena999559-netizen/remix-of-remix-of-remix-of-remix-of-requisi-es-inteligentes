@@ -431,14 +431,14 @@ function AssinadasPage() {
               />
             </label>
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-              Código da requisição
+              Solicitação
               <Input
                 value={codigoFilter}
                 onChange={(event) => {
                   setCodigoFilter(event.target.value);
                   setSelected(null);
                 }}
-                placeholder="Filtrar por código"
+                placeholder="Filtrar por solicitação"
               />
             </label>
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
