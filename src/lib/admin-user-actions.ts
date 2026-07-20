@@ -34,6 +34,10 @@ function getAccessToken(input: unknown) {
   return cleanString((input as ServerFnAuthPayload).accessToken);
 }
 
+function hasOwnKey(input: unknown, key: string) {
+  return Boolean(input && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, key));
+}
+
 function normalizeInternalLoginSlug(usuario: string) {
   return usuario
     .normalize("NFD")
@@ -199,19 +203,26 @@ async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: str
 export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({ data }) => {
     await requireAdminFromAccessToken(data);
 
+    const hasFuncao = hasOwnKey(data, "funcao");
+    const hasSetor = hasOwnKey(data, "setor");
+    const hasUnidadeNome = hasOwnKey(data, "unidade_nome");
+    const hasCategoriasPermitidas = hasOwnKey(data, "categorias_permitidas");
     const payload = validateUserPayload(data);
     let currentProfile: {
       auth_user_id: string | null;
       email: string | null;
       is_admin: boolean;
       role: string | null;
+      funcao: string | null;
+      setor: string | null;
+      unidade_nome: string | null;
       categorias_permitidas: unknown;
     } | null = null;
 
     if (payload.id) {
       const { data: profile, error } = await (supabaseAdmin as any)
         .from("usuarios")
-        .select("auth_user_id,email,is_admin,role,categorias_permitidas")
+        .select("auth_user_id,email,is_admin,role,funcao,setor,unidade_nome,categorias_permitidas")
         .eq("id", payload.id)
         .maybeSingle();
 
@@ -303,12 +314,21 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
       usuario: payload.usuario,
       email: authPayload.email,
       cpf: payload.cpf,
-      funcao: payload.funcao,
-      setor: payload.setor,
-      unidade_nome: payload.unidade_nome,
+      funcao: hasFuncao ? payload.funcao : currentProfile?.funcao ?? null,
+      setor: hasSetor ? payload.setor : currentProfile?.setor ?? null,
+      unidade_nome: hasUnidadeNome ? payload.unidade_nome : currentProfile?.unidade_nome ?? null,
       categorias_permitidas: currentProfile?.is_admin
-        ? [...preservedAdminSections, ...(payload.categorias_permitidas ?? [])]
-        : payload.categorias_permitidas,
+        ? [
+            ...preservedAdminSections,
+            ...(hasCategoriasPermitidas
+              ? payload.categorias_permitidas ?? []
+              : Array.isArray(currentProfile.categorias_permitidas)
+                ? currentProfile.categorias_permitidas.map(String).filter((value) => !isAdminSection(value))
+                : []),
+          ]
+        : hasCategoriasPermitidas
+          ? payload.categorias_permitidas
+          : currentProfile?.categorias_permitidas ?? [],
       is_admin: currentProfile?.is_admin ?? false,
       role: currentProfile?.role || "usuario",
     };

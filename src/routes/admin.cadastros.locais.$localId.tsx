@@ -278,6 +278,16 @@ function SetorDetailPage() {
       }
     }
 
+    try {
+      await Promise.all(
+        responsaveis.map((responsavel) => syncUsuarioSetor(responsavel.usuario_id, setorId)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar responsaveis do setor.");
+      setSavingSetor(false);
+      return;
+    }
+
     setSavingSetor(false);
     setEditOpen(false);
 
