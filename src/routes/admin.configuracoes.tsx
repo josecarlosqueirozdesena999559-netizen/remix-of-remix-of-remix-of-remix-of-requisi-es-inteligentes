@@ -10,7 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getWhatsAppAdminNumbers,
+  getWhatsAppConfigSettings,
   saveWhatsAppAdminNumbers,
+  saveWhatsAppConfigSettings,
 } from "@/lib/app-settings-actions";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
@@ -34,6 +36,15 @@ interface WhatsAppAdminNumbersResult {
   result?: unknown;
 }
 
+interface WhatsAppConfigResult {
+  hasAccessToken?: boolean;
+  accessTokenPreview?: string;
+  phoneNumberId?: string;
+  graphApiVersion?: string;
+  data?: unknown;
+  result?: unknown;
+}
+
 function unwrapWhatsAppAdminNumbersResult(value: unknown): WhatsAppAdminNumbersResult {
   if (!value || typeof value !== "object") return {};
 
@@ -45,6 +56,25 @@ function unwrapWhatsAppAdminNumbersResult(value: unknown): WhatsAppAdminNumbersR
 
   if (candidate.data) return unwrapWhatsAppAdminNumbersResult(candidate.data);
   if (candidate.result) return unwrapWhatsAppAdminNumbersResult(candidate.result);
+
+  return candidate;
+}
+
+function unwrapWhatsAppConfigResult(value: unknown): WhatsAppConfigResult {
+  if (!value || typeof value !== "object") return {};
+
+  const candidate = value as WhatsAppConfigResult;
+
+  if (
+    typeof candidate.hasAccessToken === "boolean" ||
+    typeof candidate.phoneNumberId === "string" ||
+    typeof candidate.graphApiVersion === "string"
+  ) {
+    return candidate;
+  }
+
+  if (candidate.data) return unwrapWhatsAppConfigResult(candidate.data);
+  if (candidate.result) return unwrapWhatsAppConfigResult(candidate.result);
 
   return candidate;
 }
@@ -80,6 +110,13 @@ function ConfiguracoesPage() {
   const [savingAdminNumbers, setSavingAdminNumbers] = useState(false);
   const [adminNumbersMessage, setAdminNumbersMessage] = useState<string | null>(null);
   const [adminNumbersError, setAdminNumbersError] = useState<string | null>(null);
+  const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
+  const [whatsappTokenPreview, setWhatsappTokenPreview] = useState("");
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState("");
+  const [whatsappGraphApiVersion, setWhatsappGraphApiVersion] = useState("v25.0");
+  const [savingWhatsAppConfig, setSavingWhatsAppConfig] = useState(false);
+  const [whatsappConfigMessage, setWhatsappConfigMessage] = useState<string | null>(null);
+  const [whatsappConfigError, setWhatsappConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -115,6 +152,13 @@ function ConfiguracoesPage() {
 
             const result = await getWhatsAppAdminNumbers({ data: { accessToken } });
             setAdminNumbers(getAdminNumbersFromResult(result).join("\n"));
+
+            const configResult = unwrapWhatsAppConfigResult(
+              await getWhatsAppConfigSettings({ data: { accessToken } }),
+            );
+            setWhatsappTokenPreview(configResult.accessTokenPreview || "");
+            setWhatsappPhoneNumberId(configResult.phoneNumberId || "");
+            setWhatsappGraphApiVersion(configResult.graphApiVersion || "v25.0");
           } catch (error) {
             setAdminNumbersError(getErrorMessage(error, "Erro ao carregar números."));
           }
@@ -203,6 +247,42 @@ function ConfiguracoesPage() {
       setAdminNumbersError(getErrorMessage(error, "Erro ao salvar números."));
     } finally {
       setSavingAdminNumbers(false);
+    }
+  };
+
+  const handleWhatsAppConfigSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setWhatsappConfigError(null);
+    setWhatsappConfigMessage(null);
+    setSavingWhatsAppConfig(true);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw new Error(sessionError.message);
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+
+      const result = unwrapWhatsAppConfigResult(
+        await saveWhatsAppConfigSettings({
+          data: {
+            accessToken,
+            whatsappAccessToken,
+            phoneNumberId: whatsappPhoneNumberId,
+            graphApiVersion: whatsappGraphApiVersion,
+          },
+        }),
+      );
+
+      setWhatsappAccessToken("");
+      setWhatsappTokenPreview(result.accessTokenPreview || "");
+      setWhatsappPhoneNumberId(result.phoneNumberId || "");
+      setWhatsappGraphApiVersion(result.graphApiVersion || "v25.0");
+      setWhatsappConfigMessage("Configuracao do WhatsApp salva.");
+    } catch (error) {
+      setWhatsappConfigError(getErrorMessage(error, "Erro ao salvar configuracao do WhatsApp."));
+    } finally {
+      setSavingWhatsAppConfig(false);
     }
   };
 
@@ -323,6 +403,77 @@ function ConfiguracoesPage() {
           </Card>
 
           {isAdmin && (
+            <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Smartphone className="h-5 w-5 text-primary" />
+                  WhatsApp API
+                </CardTitle>
+                <CardDescription>Credenciais usadas para enviar mensagens pelo WhatsApp.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-4" onSubmit={handleWhatsAppConfigSubmit}>
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp-access-token">Token de acesso</Label>
+                    <Input
+                      id="whatsapp-access-token"
+                      type="password"
+                      value={whatsappAccessToken}
+                      onChange={(event) => setWhatsappAccessToken(event.target.value)}
+                      placeholder={
+                        whatsappTokenPreview ? `Token salvo: ${whatsappTokenPreview}` : "Cole o novo token da Meta"
+                      }
+                    />
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsapp-phone-number-id">ID do numero</Label>
+                      <Input
+                        id="whatsapp-phone-number-id"
+                        value={whatsappPhoneNumberId}
+                        onChange={(event) => setWhatsappPhoneNumberId(event.target.value)}
+                        placeholder="Ex: 123456789012345"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="whatsapp-graph-version">Versao da API</Label>
+                      <Input
+                        id="whatsapp-graph-version"
+                        value={whatsappGraphApiVersion}
+                        onChange={(event) => setWhatsappGraphApiVersion(event.target.value)}
+                        placeholder="v25.0"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {whatsappConfigError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{whatsappConfigError}</AlertDescription>
+                    </Alert>
+                  )}
+                  {whatsappConfigMessage && (
+                    <Alert>
+                      <AlertDescription>{whatsappConfigMessage}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={savingWhatsAppConfig}>
+                    {savingWhatsAppConfig ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Salvar WhatsApp API
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -368,6 +519,7 @@ function ConfiguracoesPage() {
                 </form>
               </CardContent>
             </Card>
+            </>
           )}
         </div>
       )}

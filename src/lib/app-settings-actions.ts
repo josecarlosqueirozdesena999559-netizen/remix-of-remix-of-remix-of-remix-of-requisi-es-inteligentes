@@ -9,9 +9,23 @@ import {
 import { sendWhatsAppTemplateMessage } from "@/lib/whatsapp.server";
 
 const WHATSAPP_ADMIN_NUMBERS_KEY = "WHATSAPP_ADMIN_NUMBERS";
+const WHATSAPP_ACCESS_TOKEN_KEY = "WHATSAPP_ACCESS_TOKEN";
+const WHATSAPP_PHONE_NUMBER_ID_KEY = "WHATSAPP_PHONE_NUMBER_ID";
+const WHATSAPP_GRAPH_API_VERSION_KEY = "WHATSAPP_GRAPH_API_VERSION";
+const WHATSAPP_CONFIG_KEYS = [
+  WHATSAPP_ACCESS_TOKEN_KEY,
+  WHATSAPP_PHONE_NUMBER_ID_KEY,
+  WHATSAPP_GRAPH_API_VERSION_KEY,
+] as const;
 
 type ServerFnAuthPayload = {
   accessToken?: string | null;
+};
+
+type WhatsAppConfigInput = ServerFnAuthPayload & {
+  whatsappAccessToken?: string | null;
+  phoneNumberId?: string | null;
+  graphApiVersion?: string | null;
 };
 
 function getAccessToken(input: unknown) {
@@ -112,6 +126,31 @@ async function getSavedAdminNumbers() {
   return parseNumbers(data?.value || "");
 }
 
+async function getSavedWhatsAppConfig() {
+  const { data, error } = await (supabaseAdmin as any)
+    .from("app_settings")
+    .select("key,value")
+    .in("key", WHATSAPP_CONFIG_KEYS);
+
+  if (error) throw new Error(error.message);
+
+  const settings = new Map(
+    ((data ?? []) as Array<{ key: string; value: string | null }>).map((setting) => [
+      setting.key,
+      setting.value || "",
+    ]),
+  );
+
+  const accessToken = settings.get(WHATSAPP_ACCESS_TOKEN_KEY)?.trim() || "";
+
+  return {
+    hasAccessToken: Boolean(accessToken),
+    accessTokenPreview: accessToken ? `${accessToken.slice(0, 8)}...${accessToken.slice(-4)}` : "",
+    phoneNumberId: settings.get(WHATSAPP_PHONE_NUMBER_ID_KEY)?.trim() || "",
+    graphApiVersion: settings.get(WHATSAPP_GRAPH_API_VERSION_KEY)?.trim() || "v25.0",
+  };
+}
+
 async function sendAdminWelcomeNotifications(
   numbers: string[],
 ): Promise<AdminWelcomeNotification[]> {
@@ -171,4 +210,53 @@ export const saveWhatsAppAdminNumbers = createServerFn({ method: "POST" }).handl
     const welcomeNotifications = await sendAdminWelcomeNotifications(newNumbers);
 
     return { numbers, welcomeNotifications };
+  });
+
+export const getWhatsAppConfigSettings = createServerFn({ method: "POST" }).handler(async ({ data }) => {
+    await requireAdminFromAccessToken(data);
+
+    return getSavedWhatsAppConfig();
+  });
+
+export const saveWhatsAppConfigSettings = createServerFn({ method: "POST" }).handler(async ({ data }) => {
+    await requireAdminFromAccessToken(data);
+
+    const input = (data && typeof data === "object" ? data : {}) as WhatsAppConfigInput;
+    const whatsappAccessToken = input.whatsappAccessToken?.trim() || "";
+    const phoneNumberId = input.phoneNumberId?.trim() || "";
+    const graphApiVersion = input.graphApiVersion?.trim() || "v25.0";
+
+    if (!phoneNumberId) throw new Error("Informe o ID do numero do WhatsApp.");
+    if (!graphApiVersion.startsWith("v")) throw new Error("A versao da API deve ficar no formato v25.0.");
+
+    const currentConfig = await getSavedWhatsAppConfig();
+    if (!whatsappAccessToken && !currentConfig.hasAccessToken) {
+      throw new Error("Informe o token de acesso do WhatsApp.");
+    }
+
+    const rows = [
+      {
+        key: WHATSAPP_PHONE_NUMBER_ID_KEY,
+        value: phoneNumberId,
+      },
+      {
+        key: WHATSAPP_GRAPH_API_VERSION_KEY,
+        value: graphApiVersion,
+      },
+    ];
+
+    if (whatsappAccessToken) {
+      rows.push({
+        key: WHATSAPP_ACCESS_TOKEN_KEY,
+        value: whatsappAccessToken,
+      });
+    }
+
+    const { error } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .upsert(rows, { onConflict: "key" });
+
+    if (error) throw new Error(error.message);
+
+    return getSavedWhatsAppConfig();
   });
