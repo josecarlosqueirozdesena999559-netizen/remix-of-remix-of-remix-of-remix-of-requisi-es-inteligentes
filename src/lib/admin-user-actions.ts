@@ -7,7 +7,7 @@ import { normalizeProductCategory } from "@/lib/product-options";
 type AdminUserPayload = {
   id?: string | null;
   nome: string;
-  usuario: string;
+  usuario?: string;
   email: string;
   cpf?: string | null;
   funcao?: string | null;
@@ -53,6 +53,10 @@ function createInternalEmail(usuario: string) {
   return `${slug || "usuario"}@usuarios.solicite.local`;
 }
 
+function createLoginFromEmail(email: string) {
+  return email.split("@")[0]?.trim() || email.trim();
+}
+
 function validateUserPayload(input: unknown): AdminUserPayload {
   if (!input || typeof input !== "object") {
     throw new Error("Dados do usuario invalidos.");
@@ -60,10 +64,13 @@ function validateUserPayload(input: unknown): AdminUserPayload {
 
   const data = input as Partial<AdminUserPayload>;
   const nome = cleanString(data.nome);
-  const usuario = cleanString(data.usuario);
-  const email = createInternalEmail(usuario);
+  const rawEmail = cleanString(data.email).toLowerCase();
+  const usuario = cleanString(data.usuario) || createLoginFromEmail(rawEmail);
+  const email = rawEmail || createInternalEmail(usuario);
 
   if (!nome) throw new Error("Informe o nome do usuario.");
+  if (!email) throw new Error("Informe o email do usuario.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Informe um email valido.");
   if (!usuario) throw new Error("Informe o usuario de acesso.");
 
   const categorias = Array.isArray(data.categorias_permitidas)

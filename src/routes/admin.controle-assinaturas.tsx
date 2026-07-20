@@ -28,6 +28,7 @@ interface UsuarioBase {
 interface RequisicaoControle {
   id: string;
   saida_codigo: string | null;
+  saida_vinculada_codigo: string | null;
   setor: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
@@ -74,6 +75,7 @@ function ControleAssinaturasPage() {
   const [localidadeFilter, setLocalidadeFilter] = useState("");
   const [nomeFilter, setNomeFilter] = useState("");
   const [codigoFilter, setCodigoFilter] = useState("");
+  const [saidaFilter, setSaidaFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,7 +96,7 @@ function ControleAssinaturasPage() {
             .order("nome", { ascending: true }),
           supabase
             .from("requisicoes")
-            .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status")
+            .select("id,saida_codigo,saida_vinculada_codigo,setor,solicitante,solicitante_cpf,data,created_at,status")
             .in("status", [...pendingStatuses])
             .order("updated_at", { ascending: false }),
           supabase
@@ -193,6 +195,7 @@ function ControleAssinaturasPage() {
 
   const filteredSetores = useMemo(() => {
     const codeQuery = codigoFilter.trim().toLowerCase();
+    const saidaQuery = saidaFilter.trim().toLowerCase();
 
     return data
       .map((setor) => ({
@@ -205,8 +208,10 @@ function ControleAssinaturasPage() {
             !nomeFilter.trim() ||
             request.usuarioNome.toLowerCase().includes(nomeFilter.trim().toLowerCase());
           const code = (request.saida_codigo || codeByRequestId.get(request.id) || request.id).toLowerCase();
+          const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
           const codigoMatch = !codeQuery || code.includes(codeQuery);
-          return localidadeMatch && nomeMatch && codigoMatch;
+          const saidaMatch = !saidaQuery || linkedOutputCode.includes(saidaQuery);
+          return localidadeMatch && nomeMatch && codigoMatch && saidaMatch;
         }),
       }))
       .filter((setor) => setor.requests.length > 0)
@@ -214,7 +219,7 @@ function ControleAssinaturasPage() {
         ...setor,
         pendencias: setor.requests.length,
       }));
-  }, [codeByRequestId, codigoFilter, data, localidadeFilter, nomeFilter]);
+  }, [codeByRequestId, codigoFilter, data, localidadeFilter, nomeFilter, saidaFilter]);
 
   const totalPendencias = useMemo(
     () => data.reduce((total, setor) => total + setor.pendencias, 0),
@@ -245,7 +250,7 @@ function ControleAssinaturasPage() {
           <Search className="h-4 w-4 text-primary" />
           Filtros
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-2 text-sm text-muted-foreground">
             Setor
             <Input
@@ -268,6 +273,14 @@ function ControleAssinaturasPage() {
               value={codigoFilter}
               onChange={(event) => setCodigoFilter(event.target.value)}
               placeholder="Filtrar por codigo"
+            />
+          </label>
+          <label className="space-y-2 text-sm text-muted-foreground">
+            Codigo da saida
+            <Input
+              value={saidaFilter}
+              onChange={(event) => setSaidaFilter(event.target.value)}
+              placeholder="Filtrar por saida"
             />
           </label>
         </div>
@@ -318,7 +331,14 @@ function ControleAssinaturasPage() {
 
                     return (
                       <tr key={request.id} className="border-t hover:bg-muted/30">
-                        <td className="px-4 py-3 text-foreground">{code}</td>
+                        <td className="px-4 py-3 text-foreground">
+                          <div>{code}</div>
+                          {request.saida_vinculada_codigo ? (
+                            <div className="text-xs text-muted-foreground">
+                              Saida: {request.saida_vinculada_codigo}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="px-4 py-3 text-foreground">{request.usuarioNome}</td>
                         <td className="px-4 py-3 text-muted-foreground">{request.data || "-"}</td>
                         <td className="px-4 py-3 text-muted-foreground">{getStatusLabel(request.status)}</td>

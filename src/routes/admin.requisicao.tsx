@@ -14,6 +14,7 @@ import {
   productHasSubcategory,
   productHasCategory,
   sortProductsByMaterialGroup,
+  PRODUCT_CATEGORIES,
 } from "@/lib/product-options";
 import {
   isMissingReturnFeedbackColumnError,
@@ -81,6 +82,16 @@ interface RequestSection {
   order: number;
 }
 
+interface SetorPermissionRow {
+  categorias_permitidas: unknown;
+}
+
+interface ResponsibleSectorProgramRow {
+  programas: {
+    nome: string | null;
+  } | null;
+}
+
 const requestSelectWithFeedback = "id,categoria,status,items,return_reason";
 const requestSelectFallback = "id,categoria,status,items";
 
@@ -88,6 +99,69 @@ function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
   return categories.filter((category, index) => category && categories.indexOf(category) === index);
+}
+
+function normalizeAllowedCategories(raw: unknown) {
+  const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
+  return categories.filter((category, index) => category && categories.indexOf(category) === index);
+}
+
+async function getAllowedCategoriesForRequest(profile: CurrentUserProfile | null) {
+  if (!profile) return [];
+
+  const sectorCandidates = [profile.unidade_nome, profile.setor]
+    .map((value) => String(value || "").trim())
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+
+  for (const sectorName of sectorCandidates) {
+    const { data, error } = await supabase
+      .from("setores")
+      .select("categorias_permitidas")
+      .eq("nome", sectorName)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    const sectorCategories = normalizeAllowedCategories(
+      (data as SetorPermissionRow | null)?.categorias_permitidas,
+    );
+
+    if (sectorCategories.length > 0) {
+      return sectorCategories;
+    }
+  }
+
+  return getAllowedCategories(profile);
+}
+
+async function getResponsibleSectorProgramKeys(profile: CurrentUserProfile | null) {
+  if (!profile?.id) return [];
+
+  const { data: setorLinks, error: setorLinksError } = await supabase
+    .from("setor_responsaveis")
+    .select("setor_id")
+    .eq("usuario_id", profile.id);
+
+  if (setorLinksError) throw new Error(setorLinksError.message);
+
+  const setorIds = (setorLinks ?? [])
+    .map((link) => link.setor_id)
+    .filter((id, index, ids) => id != null && ids.indexOf(id) === index);
+
+  if (setorIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("setor_programas")
+    .select("programas(nome)")
+    .in("setor_id", setorIds);
+
+  if (error) throw new Error(error.message);
+
+  const programKeys = ((data ?? []) as ResponsibleSectorProgramRow[]).flatMap((link) =>
+    getComparableProgramKeys(link.programas?.nome),
+  );
+
+  return programKeys.filter((key, index, keys) => key && keys.indexOf(key) === index);
 }
 
 function formatToday() {
@@ -202,6 +276,7 @@ function isItemAllowedForProfileProgram(
   item: ItemRow,
   profile: CurrentUserProfile | null,
   section: RequestSection,
+  allowedProgramKeys: string[],
 ) {
   const linkedProgramRows = item.programa_produtos ?? [];
   if (linkedProgramRows.length === 0) return true;
@@ -212,6 +287,10 @@ function isItemAllowedForProfileProgram(
 
   const sectionPrograms = getComparableProgramKeys(section.baseCategory);
   if (sectionPrograms.some((programKey) => linkedPrograms.includes(programKey))) return true;
+
+  if (allowedProgramKeys.length > 0) {
+    return linkedPrograms.some((programKey) => allowedProgramKeys.includes(programKey));
+  }
 
   const profilePrograms = [profile?.setor, profile?.unidade_nome]
     .flatMap((value) => getComparableProgramKeys(value));
@@ -367,6 +446,8 @@ function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
+  const [allowedCategories, setAllowedCategories] = useState<string[]>([]);
+  const [allowedProgramKeys, setAllowedProgramKeys] = useState<string[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -455,10 +536,19 @@ function CriarRequisicaoPage() {
           }
         }
 
-        const categories = getAllowedCategories(profile);
+        const [profileCategories, profileProgramKeys] = await Promise.all([
+          getAllowedCategoriesForRequest(profile),
+          getResponsibleSectorProgramKeys(profile),
+        ]);
+        const categories =
+          profileCategories.length > 0 || profileProgramKeys.length === 0
+            ? profileCategories
+            : [...PRODUCT_CATEGORIES];
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
 
         setProfile(profile);
+        setAllowedCategories(categories);
+        setAllowedProgramKeys(profileProgramKeys);
         setItems(loadedItems);
         setEditingRequestStatus(editableRequest?.status || null);
         setReturnReason(editableRequest?.return_reason || null);
@@ -500,7 +590,7 @@ function CriarRequisicaoPage() {
     };
   }, [editingRequestId]);
 
-  const categories = useMemo(() => getAllowedCategories(profile), [profile]);
+  const categories = allowedCategories;
   const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
   const isCorrectionEdit = editingRequestStatus === "correcao_requisicao";
   const returnPath = editingRequestId ? "/admin/minhas-assinaturas" : "/admin";
@@ -526,7 +616,7 @@ function CriarRequisicaoPage() {
     return sortProductsByMaterialGroup(
       items.filter((item) => {
         if (!itemMatchesSection(item, selectedSection)) return false;
-        if (!isItemAllowedForProfileProgram(item, profile, selectedSection)) return false;
+        if (!isItemAllowedForProfileProgram(item, profile, selectedSection, allowedProgramKeys)) return false;
         if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
 
         return productMatchesSearch(
@@ -542,7 +632,7 @@ function CriarRequisicaoPage() {
       }),
       selectedSection.baseCategory,
     );
-  }, [items, profile, searchQuery, selectedSection]);
+  }, [allowedProgramKeys, items, profile, searchQuery, selectedSection]);
 
   const handleQuantityChange = (itemId: string, value: string) => {
     setQuantities((current) => ({ ...current, [itemId]: value }));

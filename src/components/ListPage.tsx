@@ -134,7 +134,7 @@ export function ListPage<T>({
                     {c.label}
                   </TableHead>
                 ))}
-                {actions && <TableHead className="w-28 text-right">Ações</TableHead>}
+                {actions && <TableHead className="w-40 text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>

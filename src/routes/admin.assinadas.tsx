@@ -42,6 +42,7 @@ export const Route = createFileRoute("/admin/assinadas")({
 interface RequisicaoAssinada {
   id: string;
   saida_codigo: string | null;
+  saida_vinculada_codigo: string | null;
   setor: string | null;
   solicitante: string | null;
   data: string | null;
@@ -85,7 +86,7 @@ async function fetchCompletedRequests() {
     const { data, error } = await supabase
       .from("requisicoes")
       .select(
-        "id,saida_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at",
+        "id,saida_codigo,saida_vinculada_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at",
       )
       .eq("status", "concluido")
       .order("updated_at", { ascending: false })
@@ -115,6 +116,7 @@ function AssinadasPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
   const [codigoFilter, setCodigoFilter] = useState("");
+  const [saidaFilter, setSaidaFilter] = useState("");
   const [reviewingRequest, setReviewingRequest] = useState<RequisicaoAssinada | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode>("devolver");
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget>("saida");
@@ -170,15 +172,18 @@ function AssinadasPage() {
 
   const filteredData = useMemo(() => {
     const codeQuery = codigoFilter.trim().toLowerCase();
+    const saidaQuery = saidaFilter.trim().toLowerCase();
 
     return (data ?? []).filter((request) => {
       if (getRequestArchiveMonth(request) !== selectedMonth) return false;
-      if (!codeQuery) return true;
 
       const code = (request.saida_codigo || codeByRequestId.get(request.id) || "-").toLowerCase();
-      return code.includes(codeQuery);
+      const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
+      const codigoMatch = !codeQuery || code.includes(codeQuery);
+      const saidaMatch = !saidaQuery || linkedOutputCode.includes(saidaQuery);
+      return codigoMatch && saidaMatch;
     });
-  }, [codeByRequestId, codigoFilter, data, selectedMonth]);
+  }, [codeByRequestId, codigoFilter, data, saidaFilter, selectedMonth]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, RequisicaoAssinada[]>();
@@ -412,7 +417,7 @@ function AssinadasPage() {
 
       <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
               Mes
               <input
@@ -434,6 +439,17 @@ function AssinadasPage() {
                   setSelected(null);
                 }}
                 placeholder="Filtrar por codigo"
+              />
+            </label>
+            <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+              Codigo da saida
+              <Input
+                value={saidaFilter}
+                onChange={(event) => {
+                  setSaidaFilter(event.target.value);
+                  setSelected(null);
+                }}
+                placeholder="Filtrar por saida"
               />
             </label>
           </div>
@@ -518,7 +534,14 @@ function AssinadasPage() {
                       <tr key={request.id} className="border-t">
                         <td className="px-3 py-2 text-foreground">{request.solicitante || "-"}</td>
                         <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
-                        <td className="px-3 py-2 text-foreground">{code}</td>
+                        <td className="px-3 py-2 text-foreground">
+                          <div>{code}</div>
+                          {request.saida_vinculada_codigo ? (
+                            <div className="text-xs text-muted-foreground">
+                              Saida: {request.saida_vinculada_codigo}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {getStatusLabel(request.status)}
                         </td>

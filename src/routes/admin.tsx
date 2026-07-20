@@ -347,7 +347,7 @@ function AdminLayout() {
                       className={itemCls}
                       activeProps={{ className: `${itemCls} ${activeCls}` }}
                     >
-                      Locais
+                      Setores
                     </Link>
                   </div>
                 </div>

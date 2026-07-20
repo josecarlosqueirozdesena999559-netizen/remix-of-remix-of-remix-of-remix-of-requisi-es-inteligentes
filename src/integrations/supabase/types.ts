@@ -194,6 +194,7 @@ export type Database = {
           return_target: string | null
           returned_at: string | null
           saida_codigo: string | null
+          saida_vinculada_codigo: string | null
           setor: string | null
           signed_attachment: Json | null
           solicitante: string | null
@@ -215,6 +216,7 @@ export type Database = {
           return_target?: string | null
           returned_at?: string | null
           saida_codigo?: string | null
+          saida_vinculada_codigo?: string | null
           setor?: string | null
           signed_attachment?: Json | null
           solicitante?: string | null
@@ -236,6 +238,7 @@ export type Database = {
           return_target?: string | null
           returned_at?: string | null
           saida_codigo?: string | null
+          saida_vinculada_codigo?: string | null
           setor?: string | null
           signed_attachment?: Json | null
           solicitante?: string | null
@@ -249,30 +252,108 @@ export type Database = {
       }
       setores: {
         Row: {
+          categorias_permitidas: Json
           created_at: string
           descricao: string | null
           id: number
           nome: string
           programa: string | null
           responsavel: string | null
+          responsavel_cpf: string | null
         }
         Insert: {
+          categorias_permitidas?: Json
           created_at?: string
           descricao?: string | null
           id?: number
           nome: string
           programa?: string | null
           responsavel?: string | null
+          responsavel_cpf?: string | null
         }
         Update: {
+          categorias_permitidas?: Json
           created_at?: string
           descricao?: string | null
           id?: number
           nome?: string
           programa?: string | null
           responsavel?: string | null
+          responsavel_cpf?: string | null
         }
         Relationships: []
+      }
+      setor_responsaveis: {
+        Row: {
+          created_at: string
+          id: string
+          setor_id: number
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          setor_id: number
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          setor_id?: number
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setor_responsaveis_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "setor_responsaveis_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      setor_programas: {
+        Row: {
+          created_at: string
+          id: string
+          programa_id: string
+          setor_id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          programa_id: string
+          setor_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          programa_id?: string
+          setor_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setor_programas_programa_id_fkey"
+            columns: ["programa_id"]
+            isOneToOne: false
+            referencedRelation: "programas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "setor_programas_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       unidades_medida: {
         Row: {

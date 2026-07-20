@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -43,6 +44,7 @@ export const Route = createFileRoute("/admin/solicitacoes")({
 interface Requisicao {
   id: string;
   saida_codigo: string | null;
+  saida_vinculada_codigo: string | null;
   setor: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
@@ -98,6 +100,7 @@ function Solicitacoes() {
   const [selected, setSelected] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
@@ -116,7 +119,7 @@ function Solicitacoes() {
       const [pendingResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at")
+          .select("id,saida_codigo,saida_vinculada_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at")
           .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("updated_at", { ascending: false }),
         supabase
@@ -164,8 +167,7 @@ function Solicitacoes() {
 
         const pendingOutputRequests = requests.filter(needsAdminOutput);
 
-        setData(
-          pendingOutputRequests.map((request) => {
+        const displayRequests = pendingOutputRequests.map((request) => {
             const displaySetor = resolveCanonicalLocationNameFromCandidates(
               [
                 request.setor?.trim(),
@@ -181,7 +183,13 @@ function Solicitacoes() {
               status: "recebido",
               displaySetor: formatProgramName(displaySetor) || displaySetor,
             };
-          }),
+          });
+
+        setData(displayRequests);
+        setOutputCodes(
+          Object.fromEntries(
+            displayRequests.map((request) => [request.id, request.saida_vinculada_codigo || ""]),
+          ),
         );
         setCodeByRequestId(buildGlobalRequestCodes(pendingOutputRequests));
       }
@@ -235,7 +243,12 @@ function Solicitacoes() {
       return;
     }
 
-    const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
+    const linkedOutputCode = (outputCodes[request.id] || request.saida_vinculada_codigo || "").trim();
+    if (!linkedOutputCode) {
+      setUploadMessage("Informe o codigo da saida vinculada antes de anexar o PDF.");
+      return;
+    }
+
     const safeName = sanitizeFileName(file.name) || "documento-saida.pdf";
     const storagePath = `saidas/${request.id}/${Date.now()}-${safeName}`;
     const attachment = {
@@ -262,7 +275,7 @@ function Solicitacoes() {
 
       const payload = {
         admin_attachment: attachment,
-        saida_codigo: request.saida_codigo || code,
+        saida_vinculada_codigo: linkedOutputCode,
         status: "aguardando_assinatura_saida",
         return_reason: null,
         return_target: null,
@@ -500,6 +513,17 @@ function Solicitacoes() {
                           onDragLeave={(event) => handleDragLeave(event, r.id)}
                           onDrop={(event) => handleDrop(event, r)}
                         >
+                          <Input
+                            value={outputCodes[r.id] ?? r.saida_vinculada_codigo ?? ""}
+                            onChange={(event) =>
+                              setOutputCodes((current) => ({
+                                ...current,
+                                [r.id]: event.target.value,
+                              }))
+                            }
+                            placeholder="Codigo da saida"
+                            className="h-8 w-40"
+                          />
                           {getAttachmentFile(r.admin_attachment) ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
                               <CheckCircle2 className="h-4 w-4" />
