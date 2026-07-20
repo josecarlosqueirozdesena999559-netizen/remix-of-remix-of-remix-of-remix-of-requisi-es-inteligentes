@@ -10,8 +10,6 @@ const PDF_SIGNATURE_SECTION_HEIGHT = 58;
 const PDF_SIGNATURE_SECTION_GAP = 6;
 const PDF_SIGNATURE_PAGE_START_Y = 24;
 
-const WAREHOUSE_RESPONSIBLE_NAME = "JOSE CARLOS QUEIROZ DE SENA";
-const WAREHOUSE_RESPONSIBLE_CPF = "07465636396";
 const WAREHOUSE_RESPONSIBLE_ROLE = "Responsável pelo almoxarifado";
 
 let pdfLogoDataUrlPromise: Promise<string | null> | null = null;
@@ -257,6 +255,7 @@ function drawSignatureBlock(
   cpf: string,
   roleLabel: string,
   showGovLabel = true,
+  showIdentity = true,
 ) {
   const boxWidth = 76;
   const boxHeight = 18;
@@ -283,13 +282,15 @@ function drawSignatureBlock(
   doc.line(centerX - 40, topY + 30, centerX + 40, topY + 30);
 
   doc.setTextColor(20, 24, 28);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 80 });
+  if (showIdentity) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 80 });
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.9);
-  doc.text(toPdfAscii(`CPF: ${String(cpf || "-")}`), centerX, topY + 43, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.9);
+    doc.text(toPdfAscii(`CPF: ${String(cpf || "-")}`), centerX, topY + 43, { align: "center" });
+  }
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
@@ -392,9 +393,10 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     doc,
     pageWidth - PDF_MARGIN - 40,
     footerTopY,
-    WAREHOUSE_RESPONSIBLE_NAME,
-    WAREHOUSE_RESPONSIBLE_CPF,
+    "",
+    "",
     WAREHOUSE_RESPONSIBLE_ROLE,
+    false,
     false,
   );
 
