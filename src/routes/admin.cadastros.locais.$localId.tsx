@@ -54,6 +54,8 @@ interface UsuarioRow {
   nome: string;
   cpf: string | null;
   email: string | null;
+  setor: string | null;
+  unidade_nome: string | null;
 }
 
 interface ResponsavelRow {
@@ -66,6 +68,14 @@ interface SetorProgramaRow {
   id: string;
   programa_id: string;
   programas: ProgramaRow | null;
+}
+
+interface SetorResponsavelSyncRow {
+  setores: {
+    id: number;
+    nome: string;
+    programa: string | null;
+  } | null;
 }
 
 const EMPTY_PROGRAM_VALUE = "__none__";
@@ -106,7 +116,7 @@ function SetorDetailPage() {
 
     const [programasResult, usuariosResult, setorResult, responsaveisResult, setorProgramasResult] = await Promise.all([
       supabase.from("programas").select("id,nome").order("nome", { ascending: true }),
-      supabase.from("usuarios").select("id,nome,cpf,email").order("nome", { ascending: true }),
+      supabase.from("usuarios").select("id,nome,cpf,email,setor,unidade_nome").order("nome", { ascending: true }),
       isNew
         ? Promise.resolve({ data: null, error: null })
         : supabase
@@ -118,7 +128,7 @@ function SetorDetailPage() {
         ? Promise.resolve({ data: [], error: null })
         : supabase
             .from("setor_responsaveis")
-            .select("id,usuario_id,usuarios(id,nome,cpf,email)")
+            .select("id,usuario_id,usuarios(id,nome,cpf,email,setor,unidade_nome)")
             .eq("setor_id", Number(localId))
             .order("created_at", { ascending: true }),
       isNew
@@ -184,6 +194,32 @@ function SetorDetailPage() {
   useEffect(() => {
     void loadData();
   }, [isNew, localId]);
+
+  const syncUsuarioSetor = async (usuarioId: string, preferredSetorId?: number) => {
+    const { data, error } = await supabase
+      .from("setor_responsaveis")
+      .select("setores(id,nome,programa)")
+      .eq("usuario_id", usuarioId)
+      .order("created_at", { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    const linkedSetores = ((data ?? []) as SetorResponsavelSyncRow[])
+      .map((item) => item.setores)
+      .filter((item): item is NonNullable<SetorResponsavelSyncRow["setores"]> => Boolean(item?.nome));
+    const nextSetor =
+      linkedSetores.find((item) => item.id === preferredSetorId) ?? linkedSetores[0] ?? null;
+
+    const updateResult = await supabase
+      .from("usuarios")
+      .update({
+        setor: nextSetor?.programa || nextSetor?.nome || null,
+        unidade_nome: nextSetor?.nome || null,
+      })
+      .eq("id", usuarioId);
+
+    if (updateResult.error) throw new Error(updateResult.error.message);
+  };
 
   const handleSaveSetor = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -292,16 +328,33 @@ function SetorDetailPage() {
       return;
     }
 
+    try {
+      await syncUsuarioSetor(selectedUsuarioId, Number(localId));
+    } catch (err) {
+      setResponsavelError(err instanceof Error ? err.message : "Erro ao atualizar setor do usuário.");
+      setSavingResponsavel(false);
+      return;
+    }
+
     setSelectedUsuarioId("");
     setSavingResponsavel(false);
     await loadData();
   };
 
   const handleRemoveResponsavel = async (id: string) => {
+    const responsavel = responsaveis.find((item) => item.id === id);
     const result = await supabase.from("setor_responsaveis").delete().eq("id", id);
     if (result.error) {
       setResponsavelError(result.error.message);
       return;
+    }
+    if (responsavel?.usuario_id) {
+      try {
+        await syncUsuarioSetor(responsavel.usuario_id);
+      } catch (err) {
+        setResponsavelError(err instanceof Error ? err.message : "Erro ao atualizar setor do usuário.");
+        return;
+      }
     }
     setResponsaveis((current) => current.filter((item) => item.id !== id));
   };
