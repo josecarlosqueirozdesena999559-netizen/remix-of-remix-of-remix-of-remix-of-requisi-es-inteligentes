@@ -268,7 +268,7 @@ function ControleAssinaturasPage() {
             />
           </label>
           <label className="space-y-2 text-sm text-muted-foreground">
-            Codigo da requisicao
+            Código da requisição
             <Input
               value={codigoFilter}
               onChange={(event) => setCodigoFilter(event.target.value)}
@@ -276,7 +276,7 @@ function ControleAssinaturasPage() {
             />
           </label>
           <label className="space-y-2 text-sm text-muted-foreground">
-            Codigo da saida
+            Código da saída
             <Input
               value={saidaFilter}
               onChange={(event) => setSaidaFilter(event.target.value)}

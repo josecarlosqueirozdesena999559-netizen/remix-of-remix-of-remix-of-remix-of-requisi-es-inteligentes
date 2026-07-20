@@ -63,7 +63,7 @@ function getCurrentMonth() {
 
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluida";
-  if (status === "requisicao_assinada") return "Requisicao assinada";
+  if (status === "requisicao_assinada") return "Requisição assinada";
   if (status === "recebido") return "Requisicao assinada";
   if (status === "aguardando_assinatura_saida") return "Aguardando saida";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
@@ -411,15 +411,15 @@ function AssinadasPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Inicio / Assinadas</p>
-        <h2 className="text-2xl text-foreground">Requisicoes assinadas</h2>
+        <p className="text-sm text-muted-foreground">Início / Assinadas</p>
+        <h2 className="text-2xl text-foreground">Requisições assinadas</h2>
       </div>
 
       <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="grid gap-3 md:grid-cols-3">
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-              Mes
+              Mês
               <input
                 type="month"
                 value={selectedMonth}
@@ -431,18 +431,18 @@ function AssinadasPage() {
               />
             </label>
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-              Codigo da requisicao
+              Código da requisição
               <Input
                 value={codigoFilter}
                 onChange={(event) => {
                   setCodigoFilter(event.target.value);
                   setSelected(null);
                 }}
-                placeholder="Filtrar por codigo"
+                placeholder="Filtrar por código"
               />
             </label>
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-              Codigo da saida
+              Código da saída
               <Input
                 value={saidaFilter}
                 onChange={(event) => {
@@ -466,7 +466,7 @@ function AssinadasPage() {
             ) : (
               <Download className="h-4 w-4" />
             )}
-            Baixar PDF do mes
+            Baixar PDF do mês
           </Button>
         </div>
       </Card>
@@ -481,7 +481,7 @@ function AssinadasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : grouped.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisicao encontrada neste mes.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma requisição encontrada neste mês.</Card>
       ) : selected ? (
         <Card className="p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -503,18 +503,18 @@ function AssinadasPage() {
           <div className="overflow-x-auto rounded-md border">
             {selectedRequests.length === 0 ? (
               <div className="p-6 text-sm text-muted-foreground">
-                Nenhum documento visivel neste local com o filtro atual.
+                Nenhum documento visível neste local com o filtro atual.
               </div>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 text-left font-normal">Usuario</th>
+                    <th className="px-3 py-2 text-left font-normal">Usuário</th>
                     <th className="px-3 py-2 text-left font-normal">Data</th>
-                    <th className="px-3 py-2 text-left font-normal">Numero</th>
+                    <th className="px-3 py-2 text-left font-normal">Número</th>
                     <th className="px-3 py-2 text-left font-normal">Status</th>
                     <th className="px-3 py-2 text-right font-normal">PDF</th>
-                    <th className="px-3 py-2 text-right font-normal">Acoes</th>
+                    <th className="px-3 py-2 text-right font-normal">Ações</th>
                     <th className="px-3 py-2 text-left font-normal">Verificado</th>
                   </tr>
                 </thead>

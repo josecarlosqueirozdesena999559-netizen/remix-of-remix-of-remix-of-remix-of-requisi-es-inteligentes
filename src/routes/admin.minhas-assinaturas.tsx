@@ -116,7 +116,7 @@ async function removeOldAttachment(attachment: AttachmentFile | null | undefined
   try {
     await removeAttachmentFile(attachment);
   } catch (error) {
-    console.warn("Nao foi possivel remover anexo antigo.", error);
+    console.warn("Não foi possível remover anexo antigo.", error);
   }
 }
 
@@ -233,7 +233,7 @@ function MinhasAssinaturasPage() {
     setError(null);
 
     if (shouldBlockSignatureUpload(request)) {
-      setError("Esta requisicao esta sem itens e nao pode ser assinada. Refaça a requisicao com os itens corretos.");
+      setError("Esta requisição está sem itens e não pode ser assinada. Refaça a requisição com os itens corretos.");
       return;
     }
 
@@ -441,7 +441,7 @@ function MinhasAssinaturasPage() {
                           {getStageLabel(request.status)}
                           {missingItems && (
                             <span className="text-xs text-destructive">
-                              Requisicao sem itens. Refaça antes de assinar.
+                              Requisição sem itens. Refaça antes de assinar.
                             </span>
                           )}
                           {request.return_reason && request.status === "correcao_requisicao" && (

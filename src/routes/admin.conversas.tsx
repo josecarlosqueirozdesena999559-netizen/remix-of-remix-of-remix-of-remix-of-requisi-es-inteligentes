@@ -300,14 +300,14 @@ function getInitials(name: string) {
 
 function getFirstName(name: string) {
   const firstName = name.trim().split(/\s+/).filter(Boolean)[0];
-  return firstName || "usuario";
+  return firstName || "usuário";
 }
 
 function getMessagePlaceholder(messageType: string, direction: "incoming" | "outgoing") {
-  if (messageType === "audio") return direction === "incoming" ? "[audio recebido]" : "[audio enviado]";
+  if (messageType === "audio") return direction === "incoming" ? "[áudio recebido]" : "[áudio enviado]";
   if (messageType === "image") return "[imagem]";
-  if (messageType === "video") return direction === "incoming" ? "[video recebido]" : "[video enviado]";
-  if (messageType === "reaction") return "[reacao]";
+  if (messageType === "video") return direction === "incoming" ? "[vídeo recebido]" : "[vídeo enviado]";
+  if (messageType === "reaction") return "[reação]";
   return "[mensagem sem texto]";
 }
 
@@ -366,7 +366,7 @@ function getMicrophoneAccessMessage(error: unknown) {
   }
 
   if (errorMessage) return errorMessage;
-  return "Nao foi possivel acessar o microfone.";
+  return "Não foi possível acessar o microfone.";
 }
 
 const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
@@ -419,7 +419,7 @@ async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[
     throw new Error("Não foi possível identificar o usuário desta conversa para buscar as assinaturas pendentes.");
   }
 
-  const nome = matchedUser.nome?.trim() || "usuario";
+  const nome = matchedUser.nome?.trim() || "usuário";
   const candidateCpfs = new Set(
     candidateUsers
       .map((user) => user.cpf?.trim() || "")
@@ -634,7 +634,7 @@ function ConversasPage() {
         const base64 = result.includes(",") ? result.split(",").pop() || "" : result;
         resolve(base64);
       };
-      reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo de audio."));
+      reader.onerror = () => reject(new Error("Não foi possível ler o arquivo de áudio."));
       reader.readAsDataURL(file);
     });
   }
@@ -1075,7 +1075,7 @@ function ConversasPage() {
       setError(
         presetError instanceof Error
           ? presetError.message
-          : "Nao foi possivel montar a mensagem padrao.",
+          : "Não foi possível montar a mensagem padrão.",
       );
     }
   };
@@ -1193,7 +1193,7 @@ function ConversasPage() {
       }
       if (!result?.ok) throw new Error(result?.error || "Erro ao enviar template.");
 
-      setNotice("Oi enviado ao usuario por template.");
+      setNotice("Oi enviado ao usuário por template.");
       await loadConversations();
       closeConversation();
     } catch (sendError) {
@@ -1205,12 +1205,12 @@ function ConversasPage() {
 
   const handleEnableNotifications = async () => {
     if (typeof Notification === "undefined") {
-      setError("Seu navegador nao suporta notificacoes.");
+      setError("Seu navegador não suporta notificações.");
       return;
     }
 
     if (Notification.permission === "granted") {
-      setNotice("As notificacoes ja estao ativadas.");
+      setNotice("As notificações já estão ativadas.");
       return;
     }
 
@@ -1224,7 +1224,7 @@ function ConversasPage() {
     }
 
     setNotice(null);
-    setError("Permita as notificacoes do site no navegador para receber alertas de novas mensagens.");
+    setError("Permita as notificações do site no navegador para receber alertas de novas mensagens.");
   };
 
   const handleAudioSelected = async (file: File | null | undefined) => {
@@ -1232,12 +1232,12 @@ function ConversasPage() {
     if (!file) return;
 
     if (!phone) {
-      setError("Selecione uma conversa para enviar audio.");
+      setError("Selecione uma conversa para enviar áudio.");
       return;
     }
 
     if (!file.type.startsWith("audio/")) {
-      setError("Selecione um arquivo de audio valido.");
+      setError("Selecione um arquivo de áudio válido.");
       return;
     }
 
@@ -1274,11 +1274,11 @@ function ConversasPage() {
         throw new Error(await getFunctionInvokeErrorMessage(replyError, result?.error || null));
       }
 
-      if (!result?.ok) throw new Error(result?.error || "Erro ao enviar audio.");
+      if (!result?.ok) throw new Error(result?.error || "Erro ao enviar áudio.");
 
       await loadConversations();
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : "Erro ao enviar audio.");
+      setError(sendError instanceof Error ? sendError.message : "Erro ao enviar áudio.");
     } finally {
       if (audioInputRef.current) audioInputRef.current.value = "";
       setSaving(false);
@@ -1290,13 +1290,13 @@ function ConversasPage() {
       try {
         mediaRecorderRef.current?.stop();
       } catch {
-        setError("Nao foi possivel finalizar a gravacao.");
+        setError("Não foi possível finalizar a gravação.");
       }
       return;
     }
 
     if (!selectedConversation?.phone) {
-      setError("Selecione uma conversa para gravar audio.");
+      setError("Selecione uma conversa para gravar áudio.");
       return;
     }
 
@@ -1306,12 +1306,12 @@ function ConversasPage() {
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Seu navegador nao suporta gravacao de audio. Use o clipe para enviar um arquivo.");
+      setError("Seu navegador não suporta gravação de áudio. Use o clipe para enviar um arquivo.");
       return;
     }
 
     if (typeof MediaRecorder === "undefined") {
-      setError("Seu navegador nao suporta gravacao direta. Use o clipe para enviar um arquivo.");
+      setError("Seu navegador não suporta gravação direta. Use o clipe para enviar um arquivo.");
       return;
     }
 
@@ -1350,7 +1350,7 @@ function ConversasPage() {
       recorder.onerror = () => {
         setRecording(false);
         stopRecordingTracks();
-        setError("Erro ao gravar audio.");
+        setError("Erro ao gravar áudio.");
       };
 
       recorder.onstop = () => {
@@ -1373,7 +1373,7 @@ function ConversasPage() {
 
       recorder.start();
       setRecording(true);
-      setNotice("Gravando audio... clique no quadrado para enviar.");
+      setNotice("Gravando áudio... clique no quadrado para enviar.");
     } catch (error) {
       stopRecordingTracks();
       setRecording(false);
@@ -1659,8 +1659,8 @@ function ConversasPage() {
                             }`}
                             disabled={saving}
                             onClick={() => void handleRecordAudio()}
-                            title={recording ? "Parar gravacao" : "Gravar audio"}
-                            aria-label={recording ? "Parar gravacao" : "Gravar audio"}
+                            title={recording ? "Parar gravação" : "Gravar áudio"}
+                            aria-label={recording ? "Parar gravação" : "Gravar áudio"}
                           >
                             {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                           </Button>
@@ -1671,8 +1671,8 @@ function ConversasPage() {
                             className="h-11 w-11 shrink-0 rounded-full border-0 bg-white text-[#54656f] hover:bg-white/90"
                             disabled={saving || recording}
                             onClick={() => audioInputRef.current?.click()}
-                            title="Enviar audio"
-                            aria-label="Enviar audio"
+                            title="Enviar áudio"
+                            aria-label="Enviar áudio"
                           >
                             <Paperclip className="h-5 w-5" />
                           </Button>

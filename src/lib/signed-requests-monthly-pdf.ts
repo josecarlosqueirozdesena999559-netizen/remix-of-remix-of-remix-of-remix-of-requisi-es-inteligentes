@@ -67,18 +67,18 @@ export async function createSignedRequestsMonthlyPdfBlob(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
-  doc.text(toPdfText("Requisicoes assinadas do mes"), PAGE_MARGIN, 18);
+  doc.text(toPdfText("Requisições assinadas do mês"), PAGE_MARGIN, 18);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
-  doc.text(toPdfText(`Mes: ${monthLabel}`), PAGE_MARGIN, 26);
+  doc.text(toPdfText(`Mês: ${monthLabel}`), PAGE_MARGIN, 26);
   doc.text(toPdfText(`Total: ${sortedRows.length}`), PAGE_MARGIN, 32);
   doc.text(toPdfText(`Gerado em: ${generatedAt}`), PAGE_MARGIN, 38);
 
   autoTable(doc, {
     startY: 46,
     head: [[
-      toPdfText("Numero"),
+      toPdfText("Número"),
       toPdfText("Requisitante"),
       toPdfText("Local"),
       toPdfText("Data"),
@@ -90,7 +90,7 @@ export async function createSignedRequestsMonthlyPdfBlob(
           toPdfText(row.location || "-"),
           toPdfText(row.requestDate || "-"),
         ])
-      : [[toPdfText("-"), toPdfText("Nenhuma requisicao encontrada"), "-", "-"]],
+      : [[toPdfText("-"), toPdfText("Nenhuma requisição encontrada"), "-", "-"]],
     theme: "grid",
     margin: { left: PAGE_MARGIN, right: PAGE_MARGIN, bottom: 16 },
     headStyles: {

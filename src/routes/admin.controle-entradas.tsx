@@ -240,7 +240,7 @@ function ControleEntradasPage() {
   };
 
   const handleCsv = () => {
-    const header = ["Data", "Numero", "Tipo de material", "Solicitante", "Pedido"];
+    const header = ["Data", "Número", "Tipo de material", "Solicitante", "Pedido"];
     const rows = reportRows.map((request) => [
       formatCreatedDate(request.created_at),
       request.saida_codigo || request.id,
@@ -261,14 +261,14 @@ function ControleEntradasPage() {
   return (
     <div className="space-y-4">
       <div className="print:hidden">
-        <p className="text-sm text-muted-foreground">Inicio / Controle de Entradas</p>
+        <p className="text-sm text-muted-foreground">Início / Controle de Entradas</p>
         <h2 className="text-2xl text-foreground">Controle de Entradas</h2>
       </div>
 
       <Card className="p-4 print:hidden">
         <div className="grid gap-4 lg:grid-cols-[180px_minmax(220px,1fr)_auto] lg:items-end">
           <div className="space-y-2">
-            <Label htmlFor="month">Mes</Label>
+            <Label htmlFor="month">Mês</Label>
             <Input
               id="month"
               type="month"
@@ -348,7 +348,7 @@ function ControleEntradasPage() {
                 <thead>
                   <tr className="bg-muted/50 text-muted-foreground">
                     <th className="border px-2 py-2 text-left font-normal">Data</th>
-                    <th className="border px-2 py-2 text-left font-normal">Numero</th>
+                    <th className="border px-2 py-2 text-left font-normal">Número</th>
                     <th className="border px-2 py-2 text-left font-normal">Tipo de material</th>
                     <th className="border px-2 py-2 text-left font-normal">Solicitante</th>
                     <th className="border px-2 py-2 text-left font-normal">Pedido</th>
@@ -367,7 +367,7 @@ function ControleEntradasPage() {
                   {reportRows.length === 0 && (
                     <tr>
                       <td className="border px-2 py-8 text-center text-muted-foreground" colSpan={5}>
-                        Nenhuma requisicao criada para os filtros selecionados.
+                        Nenhuma requisição criada para os filtros selecionados.
                       </td>
                     </tr>
                   )}
@@ -378,7 +378,7 @@ function ControleEntradasPage() {
         </div>
       ) : (
         <Card className="p-6 text-muted-foreground print:hidden">
-          Selecione o mes e o local, depois gere o documento para conferencia.
+          Selecione o mês e o local, depois gere o documento para conferência.
         </Card>
       )}
     </div>

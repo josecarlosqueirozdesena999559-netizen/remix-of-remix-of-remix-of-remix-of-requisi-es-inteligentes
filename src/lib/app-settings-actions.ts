@@ -99,18 +99,18 @@ async function requireAdmin(userId: string, email?: string | null) {
     if (profileByEmail?.is_admin) return;
   }
 
-  throw new Error("Apenas administradores podem alterar esta configuracao.");
+  throw new Error("Apenas administradores podem alterar esta configuração.");
 }
 
 async function requireAdminFromAccessToken(input: unknown) {
   const accessToken = getAccessToken(input);
-  if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+  if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
 
   const { data, error } = await (supabaseAdmin as any).auth.getUser(accessToken);
   if (error) throw new Error(error.message);
 
   const user = data.user;
-  if (!user?.id) throw new Error("Sessao expirada. Entre novamente.");
+  if (!user?.id) throw new Error("Sessão expirada. Entre novamente.");
 
   await requireAdmin(user.id, user.email);
 }
@@ -226,8 +226,8 @@ export const saveWhatsAppConfigSettings = createServerFn({ method: "POST" }).han
     const phoneNumberId = input.phoneNumberId?.trim() || "";
     const graphApiVersion = input.graphApiVersion?.trim() || "v25.0";
 
-    if (!phoneNumberId) throw new Error("Informe o ID do numero do WhatsApp.");
-    if (!graphApiVersion.startsWith("v")) throw new Error("A versao da API deve ficar no formato v25.0.");
+    if (!phoneNumberId) throw new Error("Informe o ID do número do WhatsApp.");
+    if (!graphApiVersion.startsWith("v")) throw new Error("A versão da API deve ficar no formato v25.0.");
 
     const currentConfig = await getSavedWhatsAppConfig();
     if (!whatsappAccessToken && !currentConfig.hasAccessToken) {

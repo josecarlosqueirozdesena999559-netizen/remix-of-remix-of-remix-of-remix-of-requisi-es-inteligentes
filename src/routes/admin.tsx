@@ -208,7 +208,7 @@ function AdminLayout() {
 
   const handleCreateRequestClick = async () => {
     if (!profile) {
-      setCreateRequestError("Nao foi possivel validar suas assinaturas pendentes.");
+      setCreateRequestError("Não foi possível validar suas assinaturas pendentes.");
       return;
     }
 

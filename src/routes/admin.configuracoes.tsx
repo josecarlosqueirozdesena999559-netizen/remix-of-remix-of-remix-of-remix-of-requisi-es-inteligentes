@@ -261,7 +261,7 @@ function ConfiguracoesPage() {
       if (sessionError) throw new Error(sessionError.message);
 
       const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
 
       const result = unwrapWhatsAppConfigResult(
         await saveWhatsAppConfigSettings({
@@ -278,9 +278,9 @@ function ConfiguracoesPage() {
       setWhatsappTokenPreview(result.accessTokenPreview || "");
       setWhatsappPhoneNumberId(result.phoneNumberId || "");
       setWhatsappGraphApiVersion(result.graphApiVersion || "v25.0");
-      setWhatsappConfigMessage("Configuracao do WhatsApp salva.");
+      setWhatsappConfigMessage("Configuração do WhatsApp salva.");
     } catch (error) {
-      setWhatsappConfigError(getErrorMessage(error, "Erro ao salvar configuracao do WhatsApp."));
+      setWhatsappConfigError(getErrorMessage(error, "Erro ao salvar configuração do WhatsApp."));
     } finally {
       setSavingWhatsAppConfig(false);
     }
@@ -429,7 +429,7 @@ function ConfiguracoesPage() {
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="whatsapp-phone-number-id">ID do numero</Label>
+                      <Label htmlFor="whatsapp-phone-number-id">ID do número</Label>
                       <Input
                         id="whatsapp-phone-number-id"
                         value={whatsappPhoneNumberId}
@@ -440,7 +440,7 @@ function ConfiguracoesPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="whatsapp-graph-version">Versao da API</Label>
+                      <Label htmlFor="whatsapp-graph-version">Versão da API</Label>
                       <Input
                         id="whatsapp-graph-version"
                         value={whatsappGraphApiVersion}

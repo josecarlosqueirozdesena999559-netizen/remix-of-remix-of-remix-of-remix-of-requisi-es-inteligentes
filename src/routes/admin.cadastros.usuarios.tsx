@@ -35,15 +35,15 @@ function UsuariosPage() {
 
   return (
     <ListPage
-      breadcrumb="Cadastros / Usuarios"
-      title="Usuarios"
-      description="Cadastro basico de usuarios do sistema."
+      breadcrumb="Cadastros / Usuários"
+      title="Usuários"
+      description="Cadastro básico de usuários do sistema."
       data={data}
       loading={loading}
       error={error}
       columns={columns}
       searchKeys={["nome", "cpf", "email"]}
-      newLabel="Novo usuario"
+      newLabel="Novo usuário"
       onNew={() =>
         navigate({
           to: "/admin/cadastros/usuarios/$usuarioId",

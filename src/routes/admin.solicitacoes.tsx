@@ -234,7 +234,7 @@ function Solicitacoes() {
     setUploadMessage(null);
 
     if (!hasRequestItems(request)) {
-      setUploadMessage("Esta requisicao esta sem itens e nao pode seguir para a saida. Devolva para ser refeita com os itens corretos.");
+      setUploadMessage("Esta requisição está sem itens e não pode seguir para a saída. Devolva para ser refeita com os itens corretos.");
       return;
     }
 
@@ -245,7 +245,7 @@ function Solicitacoes() {
 
     const linkedOutputCode = (outputCodes[request.id] || request.saida_vinculada_codigo || "").trim();
     if (!linkedOutputCode) {
-      setUploadMessage("Informe o codigo da saida vinculada antes de anexar o PDF.");
+      setUploadMessage("Informe o código da saída vinculada antes de anexar o PDF.");
       return;
     }
 
@@ -374,7 +374,7 @@ function Solicitacoes() {
       );
       setUploadMessage("Marcado como impresso.");
     } catch (err) {
-      setUploadMessage(err instanceof Error ? err.message : "Erro ao atualizar impressao.");
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao atualizar impressão.");
     } finally {
       setPrintingRequestId(null);
     }
@@ -521,7 +521,7 @@ function Solicitacoes() {
                                 [r.id]: event.target.value,
                               }))
                             }
-                            placeholder="Codigo da saida"
+                            placeholder="Código da saída"
                             className="h-8 w-40"
                           />
                           {getAttachmentFile(r.admin_attachment) ? (
@@ -534,7 +534,7 @@ function Solicitacoes() {
                           )}
                           {missingItems && (
                             <span className="text-xs text-destructive">
-                              Requisicao sem itens
+                              Requisição sem itens
                             </span>
                           )}
                           <input

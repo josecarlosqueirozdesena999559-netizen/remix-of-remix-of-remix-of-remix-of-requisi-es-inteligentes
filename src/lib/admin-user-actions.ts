@@ -59,7 +59,7 @@ function createLoginFromEmail(email: string) {
 
 function validateUserPayload(input: unknown): AdminUserPayload {
   if (!input || typeof input !== "object") {
-    throw new Error("Dados do usuario invalidos.");
+    throw new Error("Dados do usuário inválidos.");
   }
 
   const data = input as Partial<AdminUserPayload>;
@@ -68,10 +68,10 @@ function validateUserPayload(input: unknown): AdminUserPayload {
   const usuario = cleanString(data.usuario) || createLoginFromEmail(rawEmail);
   const email = rawEmail || createInternalEmail(usuario);
 
-  if (!nome) throw new Error("Informe o nome do usuario.");
-  if (!email) throw new Error("Informe o email do usuario.");
+  if (!nome) throw new Error("Informe o nome do usuário.");
+  if (!email) throw new Error("Informe o email do usuário.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Informe um email valido.");
-  if (!usuario) throw new Error("Informe o usuario de acesso.");
+  if (!usuario) throw new Error("Informe o usuário de acesso.");
 
   const categorias = Array.isArray(data.categorias_permitidas)
     ? data.categorias_permitidas
@@ -118,7 +118,7 @@ async function requireAdmin(userId: string, email?: string | null) {
     if (profileByEmail?.is_admin) return;
   }
 
-  throw new Error("Apenas administradores podem gerenciar usuarios.");
+  throw new Error("Apenas administradores podem gerenciar usuários.");
 }
 
 async function requireAdminFromAccessToken(input: unknown) {
@@ -191,7 +191,7 @@ async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: str
   });
 
   if (error) throw new Error(error.message);
-  if (!data.user?.id) throw new Error("Nao foi possivel criar o login do usuario.");
+  if (!data.user?.id) throw new Error("Não foi possível criar o login do usuário.");
 
   return data.user.id;
 }
@@ -216,7 +216,7 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
         .maybeSingle();
 
       if (error) throw new Error(error.message);
-      if (!profile) throw new Error("Usuario nao encontrado.");
+      if (!profile) throw new Error("Usuário não encontrado.");
       currentProfile = profile;
     }
 
@@ -237,7 +237,7 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
     );
 
     if (duplicatedUser) {
-      throw new Error("Ja existe um usuario com este login. Informe outro usuario de acesso.");
+      throw new Error("Já existe um usuário com este login. Informe outro usuário de acesso.");
     }
 
     const compactLoginKey = createCompactLoginKey(payload.usuario);
@@ -256,7 +256,7 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
 
     if (ambiguousCompactLogin) {
       throw new Error(
-        `Ja existe um usuario com login equivalente (${ambiguousCompactLogin.usuario}). Use outro usuario sem variar apenas espacos.`,
+        `Já existe um usuário com login equivalente (${ambiguousCompactLogin.usuario}). Use outro usuário sem variar apenas espaços.`,
       );
     }
 
@@ -275,7 +275,7 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
 
     if (duplicatedInternalEmail) {
       throw new Error(
-        `O usuario de acesso informado gera o mesmo login interno de ${duplicatedInternalEmail.usuario}. Escolha outro usuario de acesso.`,
+        `O usuário de acesso informado gera o mesmo login interno de ${duplicatedInternalEmail.usuario}. Escolha outro usuário de acesso.`,
       );
     }
 
@@ -331,7 +331,7 @@ export const deleteAdminUser = createServerFn({ method: "POST" }).handler(async 
     await requireAdminFromAccessToken(data);
 
     const id = cleanString((data as { id?: string } | undefined)?.id);
-    if (!id) throw new Error("Usuario nao informado.");
+    if (!id) throw new Error("Usuário não informado.");
 
     const { data: profile, error } = await (supabaseAdmin as any)
       .from("usuarios")
@@ -340,8 +340,8 @@ export const deleteAdminUser = createServerFn({ method: "POST" }).handler(async 
       .maybeSingle();
 
     if (error) throw new Error(error.message);
-    if (!profile) throw new Error("Usuario nao encontrado.");
-    if (profile.is_admin) throw new Error("Nao e possivel excluir um administrador por aqui.");
+    if (!profile) throw new Error("Usuário não encontrado.");
+    if (profile.is_admin) throw new Error("Não é possível excluir um administrador por aqui.");
 
     const authUserId =
       profile.auth_user_id || (await findAuthUserByEmail(profile.email))?.id || null;

@@ -153,8 +153,8 @@ function ProdutosPage() {
   const availableBulkSubcategories = useMemo(() => {
     const options: string[] = [];
 
-    if (bulkCategories.includes("GÃªneros alimentÃ­cios/limpeza")) {
-      options.push("Alimentício", "Limpeza");
+    if (bulkCategories.includes("G\u00eaneros aliment\u00edcios/limpeza")) {
+      options.push("Aliment\u00edcio", "Limpeza");
     }
 
     if (bulkCategories.includes("Ambulatorial")) {

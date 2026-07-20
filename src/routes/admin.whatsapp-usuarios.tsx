@@ -190,7 +190,7 @@ async function getFunctionInvokeErrorMessage(error: unknown, fallback?: string |
     }
   }
 
-  return maybeError?.message?.trim() || "Nao foi possivel abrir a conversa do WhatsApp.";
+  return maybeError?.message?.trim() || "Não foi possível abrir a conversa do WhatsApp.";
 }
 
 function WhatsAppUsuariosPage() {
@@ -377,7 +377,7 @@ function WhatsAppUsuariosPage() {
           throw new Error(result?.error || "Erro ao enviar o template do WhatsApp.");
         }
 
-        setActionNotice("Template enviado ao usuario. A conversa pode ser aberta quando ele responder.");
+        setActionNotice("Template enviado ao usuário. A conversa pode ser aberta quando ele responder.");
         return;
       }
 
@@ -389,7 +389,7 @@ function WhatsAppUsuariosPage() {
       setActionError(
         openError instanceof Error
           ? openError.message
-          : "Nao foi possivel abrir a conversa do WhatsApp.",
+          : "Não foi possível abrir a conversa do WhatsApp.",
       );
     } finally {
       setOpeningPhone((current) => (current === row.whatsapp ? null : current));

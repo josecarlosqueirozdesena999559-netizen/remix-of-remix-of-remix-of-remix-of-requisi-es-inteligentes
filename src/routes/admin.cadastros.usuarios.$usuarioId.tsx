@@ -43,7 +43,7 @@ function UsuarioFormPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const title = useMemo(() => (isNew ? "Novo usuario" : "Editar usuario"), [isNew]);
+  const title = useMemo(() => (isNew ? "Novo usuário" : "Editar usuário"), [isNew]);
 
   useEffect(() => {
     let active = true;
@@ -72,7 +72,7 @@ function UsuarioFormPage() {
       }
 
       if (!data) {
-        setError("Usuario nao encontrado.");
+        setError("Usuário não encontrado.");
         setLoading(false);
         return;
       }
@@ -120,13 +120,13 @@ function UsuarioFormPage() {
       if (sessionError) throw new Error(sessionError.message);
 
       const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
 
       await saveAdminUser({ data: { ...payload, accessToken } });
       setSaving(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar usuario.");
+      setError(err instanceof Error ? err.message : "Erro ao salvar usuário.");
       setSaving(false);
     }
   };
@@ -142,13 +142,13 @@ function UsuarioFormPage() {
       if (sessionError) throw new Error(sessionError.message);
 
       const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
+      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
 
       await deleteAdminUser({ data: { id: usuarioId, accessToken } });
       setDeleteOpen(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao excluir usuario.");
+      setError(err instanceof Error ? err.message : "Erro ao excluir usuário.");
     } finally {
       setDeleting(false);
     }
@@ -158,7 +158,7 @@ function UsuarioFormPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-muted-foreground">Cadastros / Usuarios</p>
+          <p className="text-sm text-muted-foreground">Cadastros / Usuários</p>
           <h2 className="text-2xl text-foreground">{title}</h2>
         </div>
         <Button
@@ -244,7 +244,7 @@ function UsuarioFormPage() {
                   onClick={() => setDeleteOpen(true)}
                 >
                   <Trash2 className="h-4 w-4" />
-                  Excluir usuario
+                  Excluir usuário
                 </Button>
               )}
             </div>
@@ -255,9 +255,9 @@ function UsuarioFormPage() {
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excluir usuario</DialogTitle>
+            <DialogTitle>Excluir usuário</DialogTitle>
             <DialogDescription>
-              Esta acao remove o cadastro e o login do usuario.
+              Esta ação remove o cadastro e o login do usuário.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

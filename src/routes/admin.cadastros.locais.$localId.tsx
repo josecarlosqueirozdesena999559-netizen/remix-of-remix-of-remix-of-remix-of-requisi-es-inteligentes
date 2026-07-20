@@ -168,7 +168,7 @@ function SetorDetailPage() {
     }
 
     if (!setorResult.data) {
-      setError("Setor nao encontrado.");
+      setError("Setor não encontrado.");
       setLoading(false);
       return;
     }
@@ -375,7 +375,7 @@ function SetorDetailPage() {
         <Card className="space-y-4 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-64 flex-1 space-y-2">
-              <Label>Adicionar responsavel</Label>
+              <Label>Adicionar responsável</Label>
               <Select
                 value={selectedUsuarioId || EMPTY_USER_VALUE}
                 onValueChange={(value) =>
@@ -383,10 +383,10 @@ function SetorDetailPage() {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione um usuario" />
+                  <SelectValue placeholder="Selecione um usuário" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={EMPTY_USER_VALUE}>Selecione um usuario</SelectItem>
+                  <SelectItem value={EMPTY_USER_VALUE}>Selecione um usuário</SelectItem>
                   {availableUsuarios.map((usuario) => (
                     <SelectItem key={usuario.id} value={usuario.id}>
                       {usuario.nome}
@@ -406,7 +406,7 @@ function SetorDetailPage() {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              Salvar responsavel
+              Salvar responsável
             </Button>
           </div>
 
@@ -419,14 +419,14 @@ function SetorDetailPage() {
                   <TableHead>Nome</TableHead>
                   <TableHead>CPF</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead className="w-28 text-right">Acoes</TableHead>
+                  <TableHead className="w-28 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {responsaveis.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                      Nenhum responsavel vinculado.
+                      Nenhum responsável vinculado.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -460,7 +460,7 @@ function SetorDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{isNew ? "Novo setor" : "Editar setor"}</DialogTitle>
-            <DialogDescription>Informe os dados basicos do setor.</DialogDescription>
+            <DialogDescription>Informe os dados básicos do setor.</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSaveSetor}>
             <div className="space-y-2">

@@ -10,7 +10,7 @@ import {
 } from "@/lib/request-owner";
 
 export const BLOCK_NEW_REQUEST_MESSAGE =
-  "Voce nao pode fazer novos pedidos porque tem assinaturas pendentes.";
+  "Você não pode fazer novos pedidos porque tem assinaturas pendentes.";
 
 interface PendingSignatureRequest {
   id: string;

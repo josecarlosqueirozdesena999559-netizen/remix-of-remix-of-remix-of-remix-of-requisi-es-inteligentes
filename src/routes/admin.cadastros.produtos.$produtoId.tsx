@@ -69,8 +69,8 @@ function ProdutoFormPage() {
   const availableSubcategories = useMemo(() => {
     const options: string[] = [];
 
-    if (categorias.includes("GÃªneros alimentÃ­cios/limpeza")) {
-      options.push("Alimentício", "Limpeza");
+    if (categorias.includes("G\u00eaneros aliment\u00edcios/limpeza")) {
+      options.push("Aliment\u00edcio", "Limpeza");
     }
 
     if (categorias.includes("Ambulatorial")) {
