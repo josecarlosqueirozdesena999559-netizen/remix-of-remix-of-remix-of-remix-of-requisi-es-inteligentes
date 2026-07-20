@@ -102,7 +102,6 @@ type ConversationMessage = {
   senderName?: string | null;
   status?: "sending" | "failed" | "sent" | "delivered" | "read";
   mediaAttachment?: AttachmentFile | null;
-  senderName?: string | null;
 };
 
 type ConversationSummary = {
@@ -131,6 +130,44 @@ const CONVERSATION_STATUS_LIMIT = 5000;
 function normalizePhone(value: string | null | undefined) {
   const digits = String(value ?? "").replace(/\D/g, "");
   return digits || "";
+}
+
+async function getFunctionInvokeErrorMessage(error: unknown, fallback?: string | null) {
+  if (fallback?.trim()) return fallback.trim();
+
+  const maybeError = error as
+    | {
+        message?: string;
+        context?: {
+          json?: () => Promise<unknown>;
+          text?: () => Promise<string>;
+        };
+      }
+    | null
+    | undefined;
+
+  if (typeof maybeError?.context?.json === "function") {
+    try {
+      const payload = await maybeError.context.json();
+      if (payload && typeof payload === "object" && "error" in payload) {
+        const message = String((payload as { error?: unknown }).error || "").trim();
+        if (message) return message;
+      }
+    } catch {
+      // ignore JSON parse failures from function responses
+    }
+  }
+
+  if (typeof maybeError?.context?.text === "function") {
+    try {
+      const text = (await maybeError.context.text())?.trim();
+      if (text) return text;
+    } catch {
+      // ignore raw text read failures from function responses
+    }
+  }
+
+  return maybeError?.message?.trim() || "Erro ao enviar mensagem.";
 }
 
 function canonicalConversationPhone(value: string | null | undefined) {
@@ -1100,12 +1137,7 @@ function ConversasPage() {
       );
 
       if (replyError) {
-        throw new Error(
-          (replyError as any)?.context?.error ||
-            (replyError as any)?.context?.message ||
-            result?.error ||
-            replyError.message,
-        );
+        throw new Error(await getFunctionInvokeErrorMessage(replyError, result?.error || null));
       }
       if (!result?.ok) throw new Error(result?.error || "Erro ao enviar resposta.");
 
@@ -1157,12 +1189,7 @@ function ConversasPage() {
       );
 
       if (replyError) {
-        throw new Error(
-          (replyError as any)?.context?.error ||
-            (replyError as any)?.context?.message ||
-            result?.error ||
-            replyError.message,
-        );
+        throw new Error(await getFunctionInvokeErrorMessage(replyError, result?.error || null));
       }
       if (!result?.ok) throw new Error(result?.error || "Erro ao enviar template.");
 
@@ -1244,12 +1271,7 @@ function ConversasPage() {
       );
 
       if (replyError) {
-        throw new Error(
-          (replyError as any)?.context?.error ||
-            (replyError as any)?.context?.message ||
-            result?.error ||
-            replyError.message,
-        );
+        throw new Error(await getFunctionInvokeErrorMessage(replyError, result?.error || null));
       }
 
       if (!result?.ok) throw new Error(result?.error || "Erro ao enviar audio.");
