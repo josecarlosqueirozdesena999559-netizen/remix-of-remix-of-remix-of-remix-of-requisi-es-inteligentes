@@ -264,12 +264,7 @@ function getItemProgramKeys(item: ItemRow) {
 }
 
 function itemMatchesSection(item: ItemRow, section: RequestSection) {
-  if (productHasCategory(item.categoria, section.baseCategory)) return true;
-
-  const sectionPrograms = getComparableProgramKeys(section.baseCategory);
-  if (sectionPrograms.length === 0) return false;
-
-  return getItemProgramKeys(item).some((programKey) => sectionPrograms.includes(programKey));
+  return productHasCategory(item.categoria, section.baseCategory);
 }
 
 function isItemAllowedForProfileProgram(
