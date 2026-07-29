@@ -195,6 +195,7 @@ export type Database = {
           returned_at: string | null
           saida_codigo: string | null
           saida_vinculada_codigo: string | null
+          saida_vinculada_data: string | null
           setor: string | null
           signed_attachment: Json | null
           solicitante: string | null
@@ -217,6 +218,7 @@ export type Database = {
           returned_at?: string | null
           saida_codigo?: string | null
           saida_vinculada_codigo?: string | null
+          saida_vinculada_data?: string | null
           setor?: string | null
           signed_attachment?: Json | null
           solicitante?: string | null
@@ -239,6 +241,7 @@ export type Database = {
           returned_at?: string | null
           saida_codigo?: string | null
           saida_vinculada_codigo?: string | null
+          saida_vinculada_data?: string | null
           setor?: string | null
           signed_attachment?: Json | null
           solicitante?: string | null

@@ -29,6 +29,7 @@ interface RequisicaoControle {
   id: string;
   saida_codigo: string | null;
   saida_vinculada_codigo: string | null;
+  saida_vinculada_data: string | null;
   setor: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
@@ -67,6 +68,13 @@ function getStatusLabel(status: string) {
   return status || "-";
 }
 
+function formatOutputDate(value: string | null) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
 function ControleAssinaturasPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<SetorControle[]>([]);
@@ -96,7 +104,7 @@ function ControleAssinaturasPage() {
             .order("nome", { ascending: true }),
           supabase
             .from("requisicoes")
-            .select("id,saida_codigo,saida_vinculada_codigo,setor,solicitante,solicitante_cpf,data,created_at,status")
+            .select("id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status")
             .in("status", [...pendingStatuses])
             .order("updated_at", { ascending: false }),
           supabase
@@ -336,6 +344,9 @@ function ControleAssinaturasPage() {
                           {request.saida_vinculada_codigo ? (
                             <div className="text-xs text-muted-foreground">
                               Saida: {request.saida_vinculada_codigo}
+                              {request.saida_vinculada_data
+                                ? ` - ${formatOutputDate(request.saida_vinculada_data)}`
+                                : ""}
                             </div>
                           ) : null}
                         </td>

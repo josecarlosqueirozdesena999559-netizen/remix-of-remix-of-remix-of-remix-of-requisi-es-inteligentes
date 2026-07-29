@@ -43,6 +43,7 @@ interface RequisicaoAssinada {
   id: string;
   saida_codigo: string | null;
   saida_vinculada_codigo: string | null;
+  saida_vinculada_data: string | null;
   setor: string | null;
   solicitante: string | null;
   data: string | null;
@@ -70,6 +71,13 @@ function getStatusLabel(status: string) {
   return status || "-";
 }
 
+function formatOutputDate(value: string | null) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
 function hasOutputDocument(request: RequisicaoAssinada) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
@@ -86,7 +94,7 @@ async function fetchCompletedRequests() {
     const { data, error } = await supabase
       .from("requisicoes")
       .select(
-        "id,saida_codigo,saida_vinculada_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at",
+        "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at",
       )
       .eq("status", "concluido")
       .order("updated_at", { ascending: false })
@@ -539,6 +547,9 @@ function AssinadasPage() {
                           {request.saida_vinculada_codigo ? (
                             <div className="text-xs text-muted-foreground">
                               Saida: {request.saida_vinculada_codigo}
+                              {request.saida_vinculada_data
+                                ? ` - ${formatOutputDate(request.saida_vinculada_data)}`
+                                : ""}
                             </div>
                           ) : null}
                         </td>
