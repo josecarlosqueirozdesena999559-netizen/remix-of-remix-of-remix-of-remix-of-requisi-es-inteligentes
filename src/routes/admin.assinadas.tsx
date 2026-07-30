@@ -71,11 +71,10 @@ function getStatusLabel(status: string) {
   return status || "-";
 }
 
-function formatOutputDate(value: string | null) {
-  if (!value) return "";
-  const [year, month, day] = value.split("-");
-  if (!year || !month || !day) return value;
-  return `${day}/${month}/${year}`;
+function getOutputDateTime(request: RequisicaoAssinada) {
+  const date = request.saida_vinculada_data || request.data || request.created_at;
+  const time = new Date(date).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 
 function hasOutputDocument(request: RequisicaoAssinada) {
@@ -131,6 +130,7 @@ function AssinadasPage() {
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
+  const [savingOutputDateId, setSavingOutputDateId] = useState<string | null>(null);
   const [downloadingMonthlyPdf, setDownloadingMonthlyPdf] = useState(false);
 
   useEffect(() => {
@@ -182,15 +182,17 @@ function AssinadasPage() {
     const codeQuery = codigoFilter.trim().toLowerCase();
     const saidaQuery = saidaFilter.trim().toLowerCase();
 
-    return (data ?? []).filter((request) => {
-      if (getRequestArchiveMonth(request) !== selectedMonth) return false;
+    return (data ?? [])
+      .filter((request) => {
+        if (getRequestArchiveMonth(request) !== selectedMonth) return false;
 
-      const code = (request.saida_codigo || codeByRequestId.get(request.id) || "-").toLowerCase();
-      const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
-      const codigoMatch = !codeQuery || code.includes(codeQuery);
-      const saidaMatch = !saidaQuery || linkedOutputCode.includes(saidaQuery);
-      return codigoMatch && saidaMatch;
-    });
+        const code = (request.saida_codigo || codeByRequestId.get(request.id) || "-").toLowerCase();
+        const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
+        const codigoMatch = !codeQuery || code.includes(codeQuery);
+        const saidaMatch = !saidaQuery || linkedOutputCode.includes(saidaQuery);
+        return codigoMatch && saidaMatch;
+      })
+      .sort((left, right) => getOutputDateTime(right) - getOutputDateTime(left));
   }, [codeByRequestId, codigoFilter, data, saidaFilter, selectedMonth]);
 
   const grouped = useMemo(() => {
@@ -248,6 +250,35 @@ function AssinadasPage() {
     setReviewingRequest(null);
     setReviewReason("");
     setReviewTarget("saida");
+  };
+
+  const updateOutputDate = async (request: RequisicaoAssinada, value: string) => {
+    const outputDate = value || null;
+    if ((request.saida_vinculada_data || "") === (outputDate || "")) return;
+
+    setSavingOutputDateId(request.id);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const { error: updateError } = await supabase
+        .from("requisicoes")
+        .update({ saida_vinculada_data: outputDate })
+        .eq("id", request.id);
+
+      if (updateError) throw new Error(updateError.message);
+
+      setData((current) =>
+        current?.map((item) =>
+          item.id === request.id ? { ...item, saida_vinculada_data: outputDate } : item,
+        ),
+      );
+      setMessage("Data da saida salva.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar data da saida.");
+    } finally {
+      setSavingOutputDateId(null);
+    }
   };
 
   const togglePrinted = async (request: RequisicaoAssinada, checked: boolean) => {
@@ -520,6 +551,7 @@ function AssinadasPage() {
                     <th className="px-3 py-2 text-left font-normal">Usuário</th>
                     <th className="px-3 py-2 text-left font-normal">Data</th>
                     <th className="px-3 py-2 text-left font-normal">Número</th>
+                    <th className="px-3 py-2 text-left font-normal">Data saída</th>
                     <th className="px-3 py-2 text-left font-normal">Status</th>
                     <th className="px-3 py-2 text-right font-normal">PDF</th>
                     <th className="px-3 py-2 text-right font-normal">Ações</th>
@@ -547,11 +579,18 @@ function AssinadasPage() {
                           {request.saida_vinculada_codigo ? (
                             <div className="text-xs text-muted-foreground">
                               Saida: {request.saida_vinculada_codigo}
-                              {request.saida_vinculada_data
-                                ? ` - ${formatOutputDate(request.saida_vinculada_data)}`
-                                : ""}
                             </div>
                           ) : null}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="date"
+                            value={request.saida_vinculada_data || ""}
+                            disabled={savingOutputDateId === request.id}
+                            onChange={(event) => void updateOutputDate(request, event.target.value)}
+                            className="h-8 w-36"
+                            aria-label="Data da saída"
+                          />
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {getStatusLabel(request.status)}

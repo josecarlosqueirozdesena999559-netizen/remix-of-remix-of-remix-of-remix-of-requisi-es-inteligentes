@@ -6,6 +6,7 @@ import {
 
 interface ArchiveMonthRequest {
   data?: string | null;
+  saida_vinculada_data?: string | null;
   created_at: string;
   status?: string | null;
   signed_attachment?: unknown;
@@ -44,6 +45,7 @@ export function getRequestArchiveMonth(request: ArchiveMonthRequest) {
   const adminAttachment = getAttachmentFile(request.admin_attachment);
 
   return (
+    extractYearMonth(request.saida_vinculada_data) ||
     getOutputReferenceMonth(outputAttachment, adminAttachment) ||
     extractYearMonth(request.data) ||
     extractYearMonth(request.created_at)
