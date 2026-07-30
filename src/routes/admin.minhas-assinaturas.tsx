@@ -2,11 +2,6 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  isResourceTransferBlocked,
-  ResourceTransferLimitDialog,
-  RESOURCE_TRANSFER_LIMIT_MESSAGE,
-} from "@/components/ResourceTransferLimitDialog";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,6 +20,10 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import {
+  isResourceTransferBlocked,
+  RESOURCE_TRANSFER_LIMIT_MESSAGE,
+} from "@/lib/resource-transfer-limit";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { getCurrentUserProfile } from "@/lib/user-profile";
@@ -134,7 +133,6 @@ function MinhasAssinaturasPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [transferLimitOpen, setTransferLimitOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -237,7 +235,6 @@ function MinhasAssinaturasPage() {
 
     setMessage(null);
     if (isResourceTransferBlocked()) {
-      setTransferLimitOpen(true);
       setError(RESOURCE_TRANSFER_LIMIT_MESSAGE);
       return;
     }
@@ -406,10 +403,6 @@ function MinhasAssinaturasPage() {
 
   return (
     <div className="space-y-4">
-      <ResourceTransferLimitDialog
-        open={transferLimitOpen}
-        onOpenChange={setTransferLimitOpen}
-      />
       <div>
         <p className="text-sm text-muted-foreground">Usuário / Assinaturas</p>
         <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>

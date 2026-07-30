@@ -2,11 +2,6 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { ArrowLeft, CheckCircle2, FileText, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  isResourceTransferBlocked,
-  ResourceTransferLimitDialog,
-  RESOURCE_TRANSFER_LIMIT_MESSAGE,
-} from "@/components/ResourceTransferLimitDialog";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -40,6 +35,10 @@ import {
 import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
+import {
+  isResourceTransferBlocked,
+  RESOURCE_TRANSFER_LIMIT_MESSAGE,
+} from "@/lib/resource-transfer-limit";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/solicitacoes")({
@@ -114,7 +113,6 @@ function Solicitacoes() {
   const [selected, setSelected] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [transferLimitOpen, setTransferLimitOpen] = useState(false);
   const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
   const [outputDates, setOutputDates] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -254,7 +252,6 @@ function Solicitacoes() {
 
     setUploadMessage(null);
     if (isResourceTransferBlocked()) {
-      setTransferLimitOpen(true);
       setUploadMessage(RESOURCE_TRANSFER_LIMIT_MESSAGE);
       return;
     }
@@ -483,10 +480,6 @@ function Solicitacoes() {
 
   return (
     <div className="space-y-4">
-      <ResourceTransferLimitDialog
-        open={transferLimitOpen}
-        onOpenChange={setTransferLimitOpen}
-      />
       <div>
         <p className="text-sm text-muted-foreground">Início / Solicitações</p>
         <h2 className="text-2xl text-foreground">Solicitações Pendentes</h2>

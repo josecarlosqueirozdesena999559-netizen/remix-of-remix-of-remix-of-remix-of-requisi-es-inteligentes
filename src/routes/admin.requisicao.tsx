@@ -2,11 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Search, Send, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  isResourceTransferBlocked,
-  ResourceTransferLimitDialog,
-  RESOURCE_TRANSFER_LIMIT_MESSAGE,
-} from "@/components/ResourceTransferLimitDialog";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +25,10 @@ import {
   hasPendingRequestSignatures,
 } from "@/lib/pending-request-signatures";
 import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
+import {
+  isResourceTransferBlocked,
+  RESOURCE_TRANSFER_LIMIT_MESSAGE,
+} from "@/lib/resource-transfer-limit";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
@@ -488,7 +487,6 @@ function CriarRequisicaoPage() {
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedGroupLabel, setSelectedGroupLabel] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [transferLimitOpen, setTransferLimitOpen] = useState(false);
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -703,7 +701,6 @@ function CriarRequisicaoPage() {
     setSaving(true);
     setError(null);
     if (isResourceTransferBlocked()) {
-      setTransferLimitOpen(true);
       setError(RESOURCE_TRANSFER_LIMIT_MESSAGE);
       setSaving(false);
       return;
@@ -851,10 +848,6 @@ function CriarRequisicaoPage() {
 
   return (
     <div className="space-y-4">
-      <ResourceTransferLimitDialog
-        open={transferLimitOpen}
-        onOpenChange={setTransferLimitOpen}
-      />
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
