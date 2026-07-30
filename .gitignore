@@ -37,6 +37,7 @@ supabase/.temp/
 *.sw?
 
 # Android
+android/.gradle/
 RequisiCode/.gradle/
 RequisiCode/build/
 RequisiCode/app/build/
