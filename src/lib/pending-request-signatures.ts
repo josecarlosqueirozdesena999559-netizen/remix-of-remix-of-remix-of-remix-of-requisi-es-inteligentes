@@ -22,12 +22,21 @@ function normalizeUserKey(value: string | null | undefined) {
   return (value || "").trim().toLowerCase();
 }
 
+const PENDING_SIGNATURE_BLOCK_BYPASS_USERS = new Set(["kenedy", "kenedi"]);
+
+function isBypassUserKey(value: string) {
+  if (PENDING_SIGNATURE_BLOCK_BYPASS_USERS.has(value)) return true;
+
+  const firstToken = value.split(/[\s._-]+/)[0] || "";
+  return PENDING_SIGNATURE_BLOCK_BYPASS_USERS.has(firstToken);
+}
+
 function canBypassPendingSignatureBlock(profile: RequestOwnerProfile) {
   const usuario = normalizeUserKey(profile.usuario);
   const nome = normalizeUserKey(profile.nome);
   const emailUser = normalizeUserKey(profile.email).split("@")[0] || "";
 
-  return usuario === "kenedy" || nome === "kenedy" || emailUser === "kenedy";
+  return isBypassUserKey(usuario) || isBypassUserKey(nome) || isBypassUserKey(emailUser);
 }
 
 export function requestNeedsSignature(request: PendingSignatureRequest) {
