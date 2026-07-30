@@ -45,6 +45,7 @@ interface Requisicao {
   id: string;
   saida_codigo: string | null;
   saida_vinculada_codigo: string | null;
+  saida_vinculada_data: string | null;
   setor: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
@@ -89,6 +90,14 @@ function needsAdminOutput(request: Requisicao) {
   );
 }
 
+function getTodayInputDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function Solicitacoes() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -101,6 +110,7 @@ function Solicitacoes() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
+  const [outputDates, setOutputDates] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
@@ -119,7 +129,7 @@ function Solicitacoes() {
       const [pendingResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,saida_vinculada_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at")
+          .select("id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at")
           .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("updated_at", { ascending: false }),
         supabase
@@ -191,6 +201,11 @@ function Solicitacoes() {
             displayRequests.map((request) => [request.id, request.saida_vinculada_codigo || ""]),
           ),
         );
+        setOutputDates(
+          Object.fromEntries(
+            displayRequests.map((request) => [request.id, request.saida_vinculada_data || getTodayInputDate()]),
+          ),
+        );
         setCodeByRequestId(buildGlobalRequestCodes(pendingOutputRequests));
       }
 
@@ -249,6 +264,12 @@ function Solicitacoes() {
       return;
     }
 
+    const linkedOutputDate = (outputDates[request.id] || request.saida_vinculada_data || "").trim();
+    if (!linkedOutputDate) {
+      setUploadMessage("Informe a data da saída vinculada antes de anexar o PDF.");
+      return;
+    }
+
     const safeName = sanitizeFileName(file.name) || "documento-saida.pdf";
     const storagePath = `saidas/${request.id}/${Date.now()}-${safeName}`;
     const attachment = {
@@ -258,6 +279,7 @@ function Solicitacoes() {
       uploadedAt: new Date().toISOString(),
       kind: "output" as const,
       outputCode: linkedOutputCode,
+      outputDate: linkedOutputDate,
     };
 
     setUploadingId(request.id);
@@ -281,6 +303,7 @@ function Solicitacoes() {
       const payload = {
         admin_attachment: attachment,
         saida_vinculada_codigo: linkedOutputCode,
+        saida_vinculada_data: linkedOutputDate,
         status: "aguardando_assinatura_saida",
         return_reason: null,
         return_target: null,
@@ -528,6 +551,18 @@ function Solicitacoes() {
                             }
                             placeholder="Código da saída"
                             className="h-8 w-40"
+                          />
+                          <Input
+                            type="date"
+                            value={outputDates[r.id] ?? r.saida_vinculada_data ?? getTodayInputDate()}
+                            onChange={(event) =>
+                              setOutputDates((current) => ({
+                                ...current,
+                                [r.id]: event.target.value,
+                              }))
+                            }
+                            className="h-8 w-36"
+                            aria-label="Data da saída"
                           />
                           {getAttachmentFile(r.admin_attachment) ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
