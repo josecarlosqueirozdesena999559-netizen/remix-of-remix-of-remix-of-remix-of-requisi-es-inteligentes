@@ -18,6 +18,18 @@ interface PendingSignatureRequest {
   signed_attachment: unknown;
 }
 
+function normalizeUserKey(value: string | null | undefined) {
+  return (value || "").trim().toLowerCase();
+}
+
+function canBypassPendingSignatureBlock(profile: RequestOwnerProfile) {
+  const usuario = normalizeUserKey(profile.usuario);
+  const nome = normalizeUserKey(profile.nome);
+  const emailUser = normalizeUserKey(profile.email).split("@")[0] || "";
+
+  return usuario === "kenedy" || nome === "kenedy" || emailUser === "kenedy";
+}
+
 export function requestNeedsSignature(request: PendingSignatureRequest) {
   if (request.status === "aguardando_assinatura_saida") {
     return !getOutputSignedAttachment(request.signed_attachment, request.status);
@@ -31,6 +43,10 @@ export function requestNeedsSignature(request: PendingSignatureRequest) {
 }
 
 export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) {
+  if (canBypassPendingSignatureBlock(profile)) {
+    return false;
+  }
+
   const cpf = getRequestOwnerCpf(profile);
   const location = getRequestOwnerLocation(profile);
   const name = profile.nome?.trim() || "";

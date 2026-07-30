@@ -1,6 +1,8 @@
 export interface RequestOwnerProfile {
   cpf?: string | null;
   nome?: string | null;
+  usuario?: string | null;
+  email?: string | null;
   setor?: string | null;
   unidade_nome?: string | null;
 }
