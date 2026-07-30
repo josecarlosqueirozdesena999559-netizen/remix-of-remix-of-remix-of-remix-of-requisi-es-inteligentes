@@ -10,6 +10,10 @@ import {
   resolveCanonicalLocationNameFromCandidates,
   type LocationOption,
 } from "@/lib/location-normalizer";
+import {
+  isMissingLinkedOutputDateColumnError,
+  withLinkedOutputDateFallback,
+} from "@/lib/linked-output-date";
 import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getCurrentUserProfile } from "@/lib/user-profile";
@@ -55,6 +59,10 @@ const pendingStatuses = [
   "aguardando_assinatura_saida",
   "correcao_requisicao",
 ] as const;
+const pendingRequestsSelectWithLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status";
+const pendingRequestsSelectWithoutLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,setor,solicitante,solicitante_cpf,data,created_at,status";
 
 function isPendingStatus(status: string) {
   return pendingStatuses.includes(status as (typeof pendingStatuses)[number]);
@@ -95,7 +103,7 @@ function ControleAssinaturasPage() {
       setError(null);
 
       try {
-        const [{ profile }, usersResult, requestsResult, setoresResult] = await Promise.all([
+        let [{ profile }, usersResult, requestsResult, setoresResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("usuarios")
@@ -104,7 +112,7 @@ function ControleAssinaturasPage() {
             .order("nome", { ascending: true }),
           supabase
             .from("requisicoes")
-            .select("id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status")
+            .select(pendingRequestsSelectWithLinkedOutputDate)
             .in("status", [...pendingStatuses])
             .order("updated_at", { ascending: false }),
           supabase
@@ -112,6 +120,14 @@ function ControleAssinaturasPage() {
             .select("nome,programa")
             .order("nome", { ascending: true }),
         ]);
+
+        if (requestsResult.error && isMissingLinkedOutputDateColumnError(requestsResult.error.message)) {
+          requestsResult = await supabase
+            .from("requisicoes")
+            .select(pendingRequestsSelectWithoutLinkedOutputDate)
+            .in("status", [...pendingStatuses])
+            .order("updated_at", { ascending: false });
+        }
 
         if (!active) return;
 
@@ -131,7 +147,7 @@ function ControleAssinaturasPage() {
 
         const users = (usersResult.data ?? []) as UsuarioBase[];
         const locationOptions = (setoresResult.data ?? []) as LocationOption[];
-        const requests = ((requestsResult.data ?? []) as RequisicaoControle[]).filter((request) =>
+        const requests = (withLinkedOutputDateFallback(requestsResult.data) as RequisicaoControle[]).filter((request) =>
           isPendingStatus(request.status),
         );
         const codeMap = buildGlobalRequestCodes(requests);

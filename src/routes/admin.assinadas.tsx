@@ -27,6 +27,10 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import {
+  isMissingLinkedOutputDateColumnError,
+  withLinkedOutputDateFallback,
+} from "@/lib/linked-output-date";
+import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
@@ -38,6 +42,11 @@ import { downloadSignedRequestsMonthlyPdf } from "@/lib/signed-requests-monthly-
 export const Route = createFileRoute("/admin/assinadas")({
   component: AssinadasPage,
 });
+
+const completedRequestsSelectWithLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at";
+const completedRequestsSelectWithoutLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at";
 
 interface RequisicaoAssinada {
   id: string;
@@ -90,18 +99,28 @@ async function fetchCompletedRequests() {
   const requests: RequisicaoAssinada[] = [];
 
   while (true) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("requisicoes")
-      .select(
-        "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,data,created_at,status,signed_attachment,admin_attachment,printed_at",
-      )
+      .select(completedRequestsSelectWithLinkedOutputDate)
       .eq("status", "concluido")
       .order("updated_at", { ascending: false })
       .range(from, from + pageSize - 1);
 
+    if (error && isMissingLinkedOutputDateColumnError(error.message)) {
+      const fallbackResult = await supabase
+        .from("requisicoes")
+        .select(completedRequestsSelectWithoutLinkedOutputDate)
+        .eq("status", "concluido")
+        .order("updated_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
+
     if (error) throw new Error(error.message);
 
-    const page = (data ?? []) as RequisicaoAssinada[];
+    const page = withLinkedOutputDateFallback(data) as RequisicaoAssinada[];
     requests.push(...page);
 
     if (page.length < pageSize) break;
@@ -265,6 +284,11 @@ function AssinadasPage() {
         .from("requisicoes")
         .update({ saida_vinculada_data: outputDate })
         .eq("id", request.id);
+
+      if (updateError && isMissingLinkedOutputDateColumnError(updateError.message)) {
+        setMessage("Data da saida nao foi salva porque a coluna ainda nao existe no banco.");
+        return;
+      }
 
       if (updateError) throw new Error(updateError.message);
 

@@ -25,6 +25,10 @@ import {
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import {
+  isMissingLinkedOutputDateColumnError,
+  withLinkedOutputDateFallback,
+} from "@/lib/linked-output-date";
+import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
@@ -44,6 +48,11 @@ import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 export const Route = createFileRoute("/admin/solicitacoes")({
   component: Solicitacoes,
 });
+
+const requestsSelectWithLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at";
+const requestsSelectWithoutLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at";
 
 interface Requisicao {
   id: string;
@@ -130,10 +139,10 @@ function Solicitacoes() {
       setError(null);
       try {
 
-      const [pendingResult, setoresResult] = await Promise.all([
+      let [pendingResult, setoresResult] = await Promise.all([
         supabase
           .from("requisicoes")
-          .select("id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment,printed_at")
+          .select(requestsSelectWithLinkedOutputDate)
           .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
           .order("updated_at", { ascending: false }),
         supabase
@@ -142,12 +151,20 @@ function Solicitacoes() {
           .order("nome", { ascending: true }),
       ]);
 
+      if (pendingResult.error && isMissingLinkedOutputDateColumnError(pendingResult.error.message)) {
+        pendingResult = await supabase
+          .from("requisicoes")
+          .select(requestsSelectWithoutLinkedOutputDate)
+          .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
+          .order("updated_at", { ascending: false });
+      }
+
       if (!active) return;
 
       if (pendingResult.error || setoresResult.error) {
         setError(pendingResult.error?.message || setoresResult.error?.message || "Erro ao carregar solicitações.");
       } else {
-        const requests = (pendingResult.data ?? []) as Requisicao[];
+        const requests = withLinkedOutputDateFallback(pendingResult.data) as Requisicao[];
         const locationOptions = (setoresResult.data ?? []) as LocationOption[];
         const cpfs = Array.from(
           new Set(
@@ -311,7 +328,6 @@ function Solicitacoes() {
       const payload = {
         admin_attachment: attachment,
         saida_vinculada_codigo: linkedOutputCode,
-        saida_vinculada_data: linkedOutputDate,
         status: "aguardando_assinatura_saida",
         return_reason: null,
         return_target: null,
@@ -320,8 +336,17 @@ function Solicitacoes() {
 
       let { error: updateError } = await supabase
         .from("requisicoes")
-        .update(payload)
+        .update({ ...payload, saida_vinculada_data: linkedOutputDate })
         .eq("id", request.id);
+
+      if (updateError && isMissingLinkedOutputDateColumnError(updateError.message)) {
+        const fallbackUpdate = await supabase
+          .from("requisicoes")
+          .update(payload)
+          .eq("id", request.id);
+
+        updateError = fallbackUpdate.error;
+      }
 
       if (updateError && isMissingReturnFeedbackColumnError(updateError.message)) {
         const fallbackUpdate = await supabase
