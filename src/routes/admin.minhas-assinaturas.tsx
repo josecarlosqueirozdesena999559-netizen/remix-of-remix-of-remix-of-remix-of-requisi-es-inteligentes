@@ -230,6 +230,13 @@ function MinhasAssinaturasPage() {
     if (!file) return;
 
     setMessage(null);
+    const documentUploadsDisabled = true;
+    if (documentUploadsDisabled) {
+      setError(
+        "O envio de documentos está desativado. Limpe o banco de dados. O limite de memória RAM foi excedido ou troque seu plano.",
+      );
+      return;
+    }
     setError(null);
 
     if (shouldBlockSignatureUpload(request)) {
@@ -428,7 +435,6 @@ function MinhasAssinaturasPage() {
                 {requests.map((request) => {
                   const hasRequestSigned = Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
                   const missingItems = !hasRequestItems(request);
-                  const uploadBlocked = shouldBlockSignatureUpload(request);
                   return (
                     <tr key={request.id} className="border-t">
                       <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
@@ -527,7 +533,7 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
-                                disabled={uploadingId === request.id || uploadBlocked}
+                                disabled
                                 onChange={(event) => {
                                   void handleUpload(request, event.target.files?.[0]);
                                   event.currentTarget.value = "";
@@ -538,7 +544,8 @@ function MinhasAssinaturasPage() {
                                 variant="outline"
                                 size="sm"
                                 className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                                disabled={uploadingId === request.id || uploadBlocked}
+                                disabled
+                                title="O envio de documentos está desativado."
                                 onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
                               >
                                 {uploadingId === request.id ? (
@@ -546,7 +553,7 @@ function MinhasAssinaturasPage() {
                                 ) : (
                                   <Upload className="h-4 w-4" />
                                 )}
-                                Anexar
+                                Envio bloqueado
                               </Button>
                               {draggingId === request.id && (
                                 <span className="text-xs font-medium text-emerald-700">
