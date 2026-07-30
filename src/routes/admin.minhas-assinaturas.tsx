@@ -2,6 +2,11 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  isResourceTransferBlocked,
+  ResourceTransferLimitDialog,
+  RESOURCE_TRANSFER_LIMIT_MESSAGE,
+} from "@/components/ResourceTransferLimitDialog";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -129,6 +134,7 @@ function MinhasAssinaturasPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [transferLimitOpen, setTransferLimitOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -230,11 +236,9 @@ function MinhasAssinaturasPage() {
     if (!file) return;
 
     setMessage(null);
-    const documentUploadsDisabled = true;
-    if (documentUploadsDisabled) {
-      setError(
-        "O envio de documentos está desativado. Limpe o banco de dados. O limite de memória RAM foi excedido ou troque seu plano.",
-      );
+    if (isResourceTransferBlocked()) {
+      setTransferLimitOpen(true);
+      setError(RESOURCE_TRANSFER_LIMIT_MESSAGE);
       return;
     }
     setError(null);
@@ -402,6 +406,10 @@ function MinhasAssinaturasPage() {
 
   return (
     <div className="space-y-4">
+      <ResourceTransferLimitDialog
+        open={transferLimitOpen}
+        onOpenChange={setTransferLimitOpen}
+      />
       <div>
         <p className="text-sm text-muted-foreground">Usuário / Assinaturas</p>
         <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>
