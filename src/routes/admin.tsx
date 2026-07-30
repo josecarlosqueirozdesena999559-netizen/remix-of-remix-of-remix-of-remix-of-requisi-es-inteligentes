@@ -300,6 +300,22 @@ function AdminLayout() {
               Janelas WhatsApp
             </Link>
           ) : null}
+          {hasAdminSectionAccess(profile, "requisicao") ? (
+            <Link
+              to="/admin/requisicao"
+              className={itemCls}
+              activeProps={{ className: `${itemCls} ${activeCls}` }}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleCreateRequestClick();
+              }}
+            >
+              <span className="inline-flex items-center gap-2">
+                Criar Requisição
+                {checkingCreateRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              </span>
+            </Link>
+          ) : null}
 
           {hasAdminSectionAccess(profile, "cadastros") ? (
             <>

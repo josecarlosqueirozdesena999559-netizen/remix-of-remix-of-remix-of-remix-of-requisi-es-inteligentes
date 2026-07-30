@@ -7,6 +7,7 @@ export const ADMIN_SECTIONS = [
   "controle_assinaturas",
   "conversas",
   "whatsapp_usuarios",
+  "requisicao",
   "cadastros",
   "configuracoes",
   "controle_entradas",
@@ -52,6 +53,7 @@ export function getAdminSectionFromPath(pathname: string): AdminSection | null {
   if (pathname.startsWith("/admin/controle-assinaturas")) return "controle_assinaturas";
   if (pathname.startsWith("/admin/conversas")) return "conversas";
   if (pathname.startsWith("/admin/whatsapp-usuarios")) return "whatsapp_usuarios";
+  if (pathname.startsWith("/admin/requisicao")) return "requisicao";
   if (pathname.startsWith("/admin/cadastros")) return "cadastros";
   if (pathname.startsWith("/admin/configuracoes")) return "configuracoes";
   if (pathname.startsWith("/admin/controle-entradas")) return "controle_entradas";

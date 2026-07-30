@@ -82,6 +82,11 @@ interface RequestSection {
   order: number;
 }
 
+interface RequestSectionGroup {
+  label: string;
+  sections: RequestSection[];
+}
+
 interface SetorPermissionRow {
   categorias_permitidas: unknown;
 }
@@ -94,16 +99,25 @@ interface ResponsibleSectorProgramRow {
 
 const requestSelectWithFeedback = "id,categoria,status,items,return_reason";
 const requestSelectFallback = "id,categoria,status,items";
+const productCategorySet = new Set<string>(PRODUCT_CATEGORIES);
+
+function isProductCategory(value: string) {
+  return productCategorySet.has(value);
+}
 
 function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
-  return categories.filter((category, index) => category && categories.indexOf(category) === index);
+  return categories.filter(
+    (category, index) => category && isProductCategory(category) && categories.indexOf(category) === index,
+  );
 }
 
 function normalizeAllowedCategories(raw: unknown) {
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
-  return categories.filter((category, index) => category && categories.indexOf(category) === index);
+  return categories.filter(
+    (category, index) => category && isProductCategory(category) && categories.indexOf(category) === index,
+  );
 }
 
 async function getAllowedCategoriesForRequest(profile: CurrentUserProfile | null) {
@@ -312,7 +326,7 @@ function buildRequestSections(categories: string[]) {
       sections.push(
         {
           id: "generos-alimenticios",
-          label: "Alimentício",
+          label: "Alimentos",
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Alimentício") || !isCleaningProduct(item),
@@ -339,7 +353,7 @@ function buildRequestSections(categories: string[]) {
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Material Ambulatorial") ||
             !isMedicationProduct(item),
-          order: 2,
+          order: 3,
         },
         {
           id: "ambulatorial-medicamentos",
@@ -347,7 +361,7 @@ function buildRequestSections(categories: string[]) {
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Medicamentos") || isMedicationProduct(item),
-          order: 3,
+          order: 4,
         },
       );
       return;
@@ -357,7 +371,7 @@ function buildRequestSections(categories: string[]) {
       id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
       label: category,
       baseCategory: category,
-      order: category === "Expediente" ? 4 : 5,
+      order: category === "Expediente" ? 2 : 5,
     });
   });
 
@@ -372,7 +386,7 @@ function buildNormalizedRequestSections(categories: string[]) {
       sections.push(
         {
           id: "generos-alimenticios",
-          label: "Alimentício",
+          label: "Alimentos",
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Alimentício") || !isCleaningProduct(item),
@@ -399,7 +413,7 @@ function buildNormalizedRequestSections(categories: string[]) {
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Material Ambulatorial") ||
             !isMedicationProduct(item),
-          order: 2,
+          order: 3,
         },
         {
           id: "ambulatorial-medicamentos",
@@ -407,7 +421,7 @@ function buildNormalizedRequestSections(categories: string[]) {
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Medicamentos") || isMedicationProduct(item),
-          order: 3,
+          order: 4,
         },
       );
       return;
@@ -417,11 +431,33 @@ function buildNormalizedRequestSections(categories: string[]) {
       id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
       label: category,
       baseCategory: category,
-      order: isExpedienteCategory(category) ? 4 : 5,
+      order: isExpedienteCategory(category) ? 2 : 5,
     });
   });
 
   return sections.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "pt-BR"));
+}
+
+function getSectionGroupLabel(section: RequestSection) {
+  if (isFoodCleaningCategory(section.baseCategory)) return "Gêneros alimentícios/limpeza";
+  if (isExpedienteCategory(section.baseCategory)) return "Material de expediente";
+  if (isAmbulatorialCategory(section.baseCategory)) return "Ambulatorial";
+  return section.baseCategory;
+}
+
+function groupRequestSections(sections: RequestSection[]) {
+  return sections.reduce<RequestSectionGroup[]>((groups, section) => {
+    const label = getSectionGroupLabel(section);
+    const existingGroup = groups.find((group) => group.label === label);
+
+    if (existingGroup) {
+      existingGroup.sections.push(section);
+    } else {
+      groups.push({ label, sections: [section] });
+    }
+
+    return groups;
+  }, []);
 }
 
 function getInitialSectionId(sections: RequestSection[], categoria: string | null | undefined) {
@@ -445,6 +481,7 @@ function CriarRequisicaoPage() {
   const [allowedProgramKeys, setAllowedProgramKeys] = useState<string[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [selectedGroupLabel, setSelectedGroupLabel] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
@@ -587,11 +624,12 @@ function CriarRequisicaoPage() {
 
   const categories = allowedCategories;
   const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
+  const sectionGroups = useMemo(() => groupRequestSections(sections), [sections]);
   const isCorrectionEdit = editingRequestStatus === "correcao_requisicao";
   const returnPath = editingRequestId ? "/admin/minhas-assinaturas" : "/admin";
-  const selectedSection = useMemo(
-    () => sections.find((section) => section.id === selectedSectionId) || sections[0] || null,
-    [sections, selectedSectionId],
+  const selectedGroup = useMemo(
+    () => sectionGroups.find((group) => group.label === selectedGroupLabel) || sectionGroups[0] || null,
+    [sectionGroups, selectedGroupLabel],
   );
 
   useEffect(() => {
@@ -605,29 +643,47 @@ function CriarRequisicaoPage() {
     }
   }, [sections, selectedSectionId]);
 
-  const visibleItems = useMemo(() => {
-    if (!selectedSection) return [];
+  useEffect(() => {
+    if (!sectionGroups.length) {
+      setSelectedGroupLabel("");
+      return;
+    }
 
-    return sortProductsByMaterialGroup(
-      items.filter((item) => {
-        if (!itemMatchesSection(item, selectedSection)) return false;
-        if (!isItemAllowedForProfileProgram(item, profile, selectedSection, allowedProgramKeys)) return false;
-        if (selectedSection.matchesItem && !selectedSection.matchesItem(item)) return false;
+    if (sectionGroups.some((group) => group.label === selectedGroupLabel)) return;
 
-        return productMatchesSearch(
-          [
-            item.nome,
-            item.unidade,
-            item.categoria,
-            item.subcategoria,
-            ...(item.programa_produtos ?? []).map((link) => link.programas?.nome),
-          ],
-          searchQuery,
-        );
-      }),
-      selectedSection.baseCategory,
+    const groupForSelectedSection = sectionGroups.find((group) =>
+      group.sections.some((section) => section.id === selectedSectionId),
     );
-  }, [allowedProgramKeys, items, profile, searchQuery, selectedSection]);
+
+    setSelectedGroupLabel(groupForSelectedSection?.label || sectionGroups[0].label);
+  }, [sectionGroups, selectedGroupLabel, selectedSectionId]);
+
+  const visibleSectionTables = useMemo(() => {
+    if (!selectedGroup) return [];
+
+    return selectedGroup.sections.map((section) => ({
+      section,
+      items: sortProductsByMaterialGroup(
+        items.filter((item) => {
+          if (!itemMatchesSection(item, section)) return false;
+          if (!isItemAllowedForProfileProgram(item, profile, section, allowedProgramKeys)) return false;
+          if (section.matchesItem && !section.matchesItem(item)) return false;
+
+          return productMatchesSearch(
+            [
+              item.nome,
+              item.unidade,
+              item.categoria,
+              item.subcategoria,
+              ...(item.programa_produtos ?? []).map((link) => link.programas?.nome),
+            ],
+            searchQuery,
+          );
+        }),
+        section.baseCategory,
+      ),
+    }));
+  }, [allowedProgramKeys, items, profile, searchQuery, selectedGroup]);
 
   const handleQuantityChange = (itemId: string, value: string) => {
     setQuantities((current) => ({ ...current, [itemId]: value }));
@@ -697,7 +753,7 @@ function CriarRequisicaoPage() {
     );
 
     const payload = {
-      categoria: requestCategories.join("; ") || selectedSection?.baseCategory || null,
+      categoria: requestCategories.join("; ") || selectedGroup?.label || null,
       setor: profile.unidade_nome || profile.setor,
       solicitante: profile.nome,
       solicitante_cpf: profile.cpf?.trim() || null,
@@ -824,14 +880,17 @@ function CriarRequisicaoPage() {
 
           <Card className="p-4">
             <div className="flex flex-wrap gap-2">
-              {sections.map((section) => (
+              {sectionGroups.map((group) => (
                 <Button
-                  key={section.id}
+                  key={group.label}
                   type="button"
-                  variant={selectedSectionId === section.id ? "default" : "outline"}
-                  onClick={() => setSelectedSectionId(section.id)}
+                  variant={selectedGroup?.label === group.label ? "default" : "outline"}
+                  onClick={() => {
+                    setSelectedGroupLabel(group.label);
+                    setSelectedSectionId(group.sections[0]?.id || "");
+                  }}
                 >
-                  {section.label}
+                  {group.label}
                 </Button>
               ))}
             </div>
@@ -859,57 +918,62 @@ function CriarRequisicaoPage() {
             </div>
           </Card>
 
-          <Card className="p-4">
-            <div className="rounded-md overflow-x-auto border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-normal">Item</th>
-                    <th className="px-3 py-2 text-left font-normal">Unidade</th>
-                    <th className="px-3 py-2 text-left font-normal">Quanto tem</th>
-                    <th className="px-3 py-2 text-left font-normal">Quanto precisa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleItems.map((item) => (
-                    <tr key={item.id} className="border-t">
-                      <td className="px-3 py-2 text-foreground">{item.nome}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{item.unidade}</td>
-                      <td className="px-3 py-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={stocks[item.id] ?? ""}
-                          onChange={(event) => handleStockChange(item.id, event.target.value)}
-                          className="w-28"
-                          placeholder="0"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          value={quantities[item.id] ?? ""}
-                          onChange={(event) => handleQuantityChange(item.id, event.target.value)}
-                          className="w-28"
-                          placeholder="0"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                  {visibleItems.length === 0 && (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
-                        {searchQuery.trim()
-                          ? "Nenhum item encontrado para esta pesquisa."
-                          : "Nenhum item liberado para este tipo de material."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <div className="space-y-4">
+            {visibleSectionTables.map(({ section, items: sectionItems }) => (
+              <Card key={section.id} className="p-4">
+                <h3 className="mb-3 text-lg text-foreground">{section.label}</h3>
+                <div className="rounded-md overflow-x-auto border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-normal">Item</th>
+                        <th className="px-3 py-2 text-left font-normal">Unidade</th>
+                        <th className="px-3 py-2 text-left font-normal">Quanto tem</th>
+                        <th className="px-3 py-2 text-left font-normal">Quanto precisa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sectionItems.map((item) => (
+                        <tr key={item.id} className="border-t">
+                          <td className="px-3 py-2 text-foreground">{item.nome}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{item.unidade}</td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={stocks[item.id] ?? ""}
+                              onChange={(event) => handleStockChange(item.id, event.target.value)}
+                              className="w-28"
+                              placeholder="0"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              value={quantities[item.id] ?? ""}
+                              onChange={(event) => handleQuantityChange(item.id, event.target.value)}
+                              className="w-28"
+                              placeholder="0"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                      {sectionItems.length === 0 && (
+                        <tr>
+                          <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
+                            {searchQuery.trim()
+                              ? "Nenhum item encontrado para esta pesquisa."
+                              : "Nenhum item liberado para este tipo de material."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            ))}
+          </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
