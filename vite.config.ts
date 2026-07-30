@@ -6,6 +6,9 @@ import { defineConfig } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  server: {
+    allowedHosts: true,
+  },
   plugins: [
     tsConfigPaths(),
     tailwindcss(),
