@@ -271,7 +271,11 @@ function Solicitacoes() {
           upsert: true,
         });
 
-      if (uploadError) throw new Error(uploadError.message);
+      if (uploadError) {
+        throw new Error(
+          "Limpe o banco de dados. O limite de memória RAM foi excedido ou troque seu plano.",
+        );
+      }
 
       const payload = {
         admin_attachment: attachment,
