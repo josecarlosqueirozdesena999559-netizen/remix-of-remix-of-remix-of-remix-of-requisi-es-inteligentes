@@ -27,6 +27,7 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import {
+  formatOutputDate,
   isMissingLinkedOutputDateColumnError,
   withLinkedOutputDateFallback,
 } from "@/lib/linked-output-date";
@@ -80,16 +81,38 @@ function getStatusLabel(status: string) {
   return status || "-";
 }
 
+function parseOutputDateToTimestamp(value: string | null | undefined): number {
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+  }
+
+  const brMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (brMatch) {
+    const [, day, month, year] = brMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+  }
+
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 function getOutputDateTime(request: RequisicaoAssinada) {
-  const date = request.saida_vinculada_data || request.data || request.created_at;
-  const time = new Date(date).getTime();
-  return Number.isNaN(time) ? 0 : time;
+  return (
+    parseOutputDateToTimestamp(request.saida_vinculada_data) ||
+    parseOutputDateToTimestamp(request.data) ||
+    parseOutputDateToTimestamp(request.created_at)
+  );
 }
 
 function hasOutputDocument(request: RequisicaoAssinada) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      getAttachmentFile(request.admin_attachment),
+    getAttachmentFile(request.admin_attachment),
   );
 }
 
@@ -149,7 +172,6 @@ function AssinadasPage() {
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
-  const [savingOutputDateId, setSavingOutputDateId] = useState<string | null>(null);
   const [downloadingMonthlyPdf, setDownloadingMonthlyPdf] = useState(false);
 
   useEffect(() => {
@@ -271,40 +293,6 @@ function AssinadasPage() {
     setReviewTarget("saida");
   };
 
-  const updateOutputDate = async (request: RequisicaoAssinada, value: string) => {
-    const outputDate = value || null;
-    if ((request.saida_vinculada_data || "") === (outputDate || "")) return;
-
-    setSavingOutputDateId(request.id);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const { error: updateError } = await supabase
-        .from("requisicoes")
-        .update({ saida_vinculada_data: outputDate })
-        .eq("id", request.id);
-
-      if (updateError && isMissingLinkedOutputDateColumnError(updateError.message)) {
-        setMessage("Data da saida nao foi salva porque a coluna ainda nao existe no banco.");
-        return;
-      }
-
-      if (updateError) throw new Error(updateError.message);
-
-      setData((current) =>
-        current?.map((item) =>
-          item.id === request.id ? { ...item, saida_vinculada_data: outputDate } : item,
-        ),
-      );
-      setMessage("Data da saida salva.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar data da saida.");
-    } finally {
-      setSavingOutputDateId(null);
-    }
-  };
-
   const togglePrinted = async (request: RequisicaoAssinada, checked: boolean) => {
     if (request.printed_at || !checked) return;
 
@@ -322,7 +310,9 @@ function AssinadasPage() {
       if (updateError) throw new Error(updateError.message);
 
       setData((current) =>
-        current?.map((item) => (item.id === request.id ? { ...item, printed_at: printedAt } : item)),
+        current?.map((item) =>
+          item.id === request.id ? { ...item, printed_at: printedAt } : item,
+        ),
       );
       setMessage("Documento verificado com sucesso.");
     } catch (err) {
@@ -606,15 +596,8 @@ function AssinadasPage() {
                             </div>
                           ) : null}
                         </td>
-                        <td className="px-3 py-2">
-                          <Input
-                            type="date"
-                            value={request.saida_vinculada_data || ""}
-                            disabled={savingOutputDateId === request.id}
-                            onChange={(event) => void updateOutputDate(request, event.target.value)}
-                            className="h-8 w-36"
-                            aria-label="Data da saída"
-                          />
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatOutputDate(request.saida_vinculada_data) || "-"}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {getStatusLabel(request.status)}

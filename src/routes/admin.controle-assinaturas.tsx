@@ -1,10 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Eye, FileSignature, Loader2, Search } from "lucide-react";
+import { ArrowLeft, Eye, FileSignature, Loader2, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
   resolveCanonicalLocationNameFromCandidates,
@@ -16,6 +25,10 @@ import {
 } from "@/lib/linked-output-date";
 import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
+import {
+  isMissingReturnFeedbackColumnError,
+  omitReturnFeedbackFields,
+} from "@/lib/request-return-feedback";
 import { getCurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/controle-assinaturas")({
@@ -94,6 +107,10 @@ function ControleAssinaturasPage() {
   const [saidaFilter, setSaidaFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [deletingRequest, setDeletingRequest] = useState<RequisicaoDetalhe | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -103,7 +120,7 @@ function ControleAssinaturasPage() {
       setError(null);
 
       try {
-        let [{ profile }, usersResult, requestsResult, setoresResult] = await Promise.all([
+        const [{ profile }, usersResult, initialRequestsResult, setoresResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("usuarios")
@@ -115,13 +132,15 @@ function ControleAssinaturasPage() {
             .select(pendingRequestsSelectWithLinkedOutputDate)
             .in("status", [...pendingStatuses])
             .order("updated_at", { ascending: false }),
-          supabase
-            .from("setores")
-            .select("nome,programa")
-            .order("nome", { ascending: true }),
+          supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
         ]);
 
-        if (requestsResult.error && isMissingLinkedOutputDateColumnError(requestsResult.error.message)) {
+        let requestsResult = initialRequestsResult;
+
+        if (
+          requestsResult.error &&
+          isMissingLinkedOutputDateColumnError(requestsResult.error.message)
+        ) {
           requestsResult = await supabase
             .from("requisicoes")
             .select(pendingRequestsSelectWithoutLinkedOutputDate)
@@ -147,14 +166,16 @@ function ControleAssinaturasPage() {
 
         const users = (usersResult.data ?? []) as UsuarioBase[];
         const locationOptions = (setoresResult.data ?? []) as LocationOption[];
-        const requests = (withLinkedOutputDateFallback(requestsResult.data) as RequisicaoControle[]).filter((request) =>
-          isPendingStatus(request.status),
-        );
+        const requests = (
+          withLinkedOutputDateFallback(requestsResult.data) as RequisicaoControle[]
+        ).filter((request) => isPendingStatus(request.status));
         const codeMap = buildGlobalRequestCodes(requests);
         const bySetor = new Map<string, SetorControle>();
 
         requests.forEach((request) => {
-          const fallbackUser = users.find((user) => user.cpf && user.cpf === request.solicitante_cpf);
+          const fallbackUser = users.find(
+            (user) => user.cpf && user.cpf === request.solicitante_cpf,
+          );
           const rawLocalidade = resolveCanonicalLocationNameFromCandidates(
             [
               request.setor?.trim(),
@@ -166,9 +187,7 @@ function ControleAssinaturasPage() {
           );
           const localidade = formatProgramName(rawLocalidade) || rawLocalidade;
           const usuarioNome =
-            request.solicitante?.trim() ||
-            fallbackUser?.nome?.trim() ||
-            "Usuário sem nome";
+            request.solicitante?.trim() || fallbackUser?.nome?.trim() || "Usuário sem nome";
 
           if (!bySetor.has(localidade)) {
             bySetor.set(localidade, {
@@ -203,7 +222,9 @@ function ControleAssinaturasPage() {
         setCodeByRequestId(codeMap);
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : "Erro ao carregar controle de assinaturas.");
+          setError(
+            err instanceof Error ? err.message : "Erro ao carregar controle de assinaturas.",
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -231,7 +252,11 @@ function ControleAssinaturasPage() {
           const nomeMatch =
             !nomeFilter.trim() ||
             request.usuarioNome.toLowerCase().includes(nomeFilter.trim().toLowerCase());
-          const code = (request.saida_codigo || codeByRequestId.get(request.id) || request.id).toLowerCase();
+          const code = (
+            request.saida_codigo ||
+            codeByRequestId.get(request.id) ||
+            request.id
+          ).toLowerCase();
           const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
           const codigoMatch = !codeQuery || code.includes(codeQuery);
           const saidaMatch = !saidaQuery || linkedOutputCode.includes(saidaQuery);
@@ -251,6 +276,75 @@ function ControleAssinaturasPage() {
   );
 
   const selectedSetorData = filteredSetores.find((setor) => setor.nome === selectedSetor) || null;
+
+  const closeDeleteDialog = () => {
+    if (deleteSaving) return;
+    setDeletingRequest(null);
+    setDeleteReason("");
+  };
+
+  const removeRequestFromData = (requestId: string) => {
+    setData((current) =>
+      current
+        .map((setor) => {
+          const requests = setor.requests.filter((request) => request.id !== requestId);
+
+          return {
+            ...setor,
+            requests,
+            pendencias: requests.length,
+          };
+        })
+        .filter((setor) => setor.requests.length > 0),
+    );
+  };
+
+  const submitDelete = async () => {
+    if (!deletingRequest) return;
+
+    const reason = deleteReason.trim();
+    if (!reason) {
+      setMessage("Digite o motivo para excluir.");
+      return;
+    }
+
+    setDeleteSaving(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const payload = {
+        status: "excluida_admin",
+        return_reason: reason,
+        return_target: "requisicao",
+        returned_at: new Date().toISOString(),
+      };
+
+      let { error: updateError } = await supabase
+        .from("requisicoes")
+        .update(payload)
+        .eq("id", deletingRequest.id);
+
+      if (updateError && isMissingReturnFeedbackColumnError(updateError.message)) {
+        const fallbackUpdate = await supabase
+          .from("requisicoes")
+          .update(omitReturnFeedbackFields(payload))
+          .eq("id", deletingRequest.id);
+
+        updateError = fallbackUpdate.error;
+      }
+
+      if (updateError) throw new Error(updateError.message);
+
+      removeRequestFromData(deletingRequest.id);
+      setMessage("Solicitação excluída do controle de assinaturas.");
+      closeDeleteDialog();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Erro ao excluir solicitação.");
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -310,6 +404,8 @@ function ControleAssinaturasPage() {
         </div>
       </Card>
 
+      {message ? <Card className="p-4 text-sm text-muted-foreground">{message}</Card> : null}
+
       {loading ? (
         <div className="flex items-center gap-2 p-6 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -326,9 +422,15 @@ function ControleAssinaturasPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="destructive">
-                {selectedSetorData.requests.length} pendente{selectedSetorData.requests.length === 1 ? "" : "s"}
+                {selectedSetorData.requests.length} pendente
+                {selectedSetorData.requests.length === 1 ? "" : "s"}
               </Badge>
-              <Button type="button" variant="outline" className="gap-2" onClick={() => setSelectedSetor(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setSelectedSetor(null)}
+              >
                 <ArrowLeft className="h-4 w-4" />
                 Voltar
               </Button>
@@ -336,7 +438,9 @@ function ControleAssinaturasPage() {
           </div>
 
           {selectedSetorData.requests.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">Nenhuma requisição pendente encontrada.</div>
+            <div className="p-4 text-sm text-muted-foreground">
+              Nenhuma requisição pendente encontrada.
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
@@ -346,12 +450,13 @@ function ControleAssinaturasPage() {
                     <th className="px-4 py-3 text-left font-normal">Usuário</th>
                     <th className="px-4 py-3 text-left font-normal">Data</th>
                     <th className="px-4 py-3 text-left font-normal">Status</th>
-                    <th className="px-4 py-3 text-right font-normal">PDF</th>
+                    <th className="px-4 py-3 text-right font-normal">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedSetorData.requests.map((request) => {
-                    const code = request.saida_codigo || codeByRequestId.get(request.id) || request.id;
+                    const code =
+                      request.saida_codigo || codeByRequestId.get(request.id) || request.id;
 
                     return (
                       <tr key={request.id} className="border-t hover:bg-muted/30">
@@ -368,23 +473,41 @@ function ControleAssinaturasPage() {
                         </td>
                         <td className="px-4 py-3 text-foreground">{request.usuarioNome}</td>
                         <td className="px-4 py-3 text-muted-foreground">{request.data || "-"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{getStatusLabel(request.status)}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {getStatusLabel(request.status)}
+                        </td>
                         <td className="px-4 py-3 text-right">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() =>
-                              navigate({
-                                to: "/admin/solicitacoes/$requisicaoId/pdf",
-                                params: { requisicaoId: request.id },
-                              })
-                            }
-                          >
-                            <Eye className="h-4 w-4" />
-                            Ver/Baixar
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() =>
+                                navigate({
+                                  to: "/admin/solicitacoes/$requisicaoId/pdf",
+                                  params: { requisicaoId: request.id },
+                                })
+                              }
+                            >
+                              <Eye className="h-4 w-4" />
+                              Ver/Baixar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2 text-destructive"
+                              onClick={() => {
+                                setDeletingRequest(request);
+                                setDeleteReason("");
+                                setMessage(null);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Excluir
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -422,6 +545,54 @@ function ControleAssinaturasPage() {
           ))}
         </div>
       )}
+
+      <Dialog open={Boolean(deletingRequest)} onOpenChange={(open) => !open && closeDeleteDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir solicitação</DialogTitle>
+            <DialogDescription>
+              A solicitação será retirada do controle de assinaturas sem apagar o histórico do
+              banco.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deletingRequest ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <div className="text-foreground">
+                {deletingRequest.saida_codigo ||
+                  codeByRequestId.get(deletingRequest.id) ||
+                  deletingRequest.id}
+              </div>
+              <div className="text-muted-foreground">{deletingRequest.usuarioNome}</div>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Motivo</p>
+            <Textarea
+              value={deleteReason}
+              onChange={(event) => setDeleteReason(event.target.value)}
+              placeholder="Descreva o motivo da exclusão"
+              rows={4}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={deleteSaving}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void submitDelete()} disabled={deleteSaving}>
+              {deleteSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

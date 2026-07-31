@@ -12,10 +12,7 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
-import {
-  getRequestOwnerCpf,
-  getRequestOwnerLocation,
-} from "@/lib/request-owner";
+import { getRequestOwnerCpf, getRequestOwnerLocation } from "@/lib/request-owner";
 import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
@@ -65,7 +62,10 @@ function isRequestSignatureStatus(status: string) {
 }
 
 function canEditUnsignedRequest(request: Requisicao) {
-  return isRequestSignatureStatus(request.status) && !getRequestSignedAttachment(request.signed_attachment, request.status);
+  return (
+    isRequestSignatureStatus(request.status) &&
+    !getRequestSignedAttachment(request.signed_attachment, request.status)
+  );
 }
 
 function needsCurrentStageSignature(request: Requisicao) {
@@ -109,7 +109,10 @@ function normalizeRequestedQuantity(item: RequestPdfItem) {
 }
 
 function hasRequestItems(request: Requisicao) {
-  return Array.isArray(request.items) && request.items.some((item) => normalizeRequestedQuantity(item) > 0);
+  return (
+    Array.isArray(request.items) &&
+    request.items.some((item) => normalizeRequestedQuantity(item) > 0)
+  );
 }
 
 function shouldBlockSignatureUpload(request: Requisicao) {
@@ -162,13 +165,22 @@ function MinhasAssinaturasPage() {
       const requestsQuery = supabase
         .from("requisicoes")
         .select(`${baseSelect},return_reason,return_target`)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida", "correcao_requisicao"])
+        .in("status", [
+          "aguardando_assinatura",
+          "aguardando_assinatura_requisicao",
+          "aguardando_assinatura_saida",
+          "correcao_requisicao",
+        ])
         .order("updated_at", { ascending: false });
 
       const fallbackRequestsQuery = supabase
         .from("requisicoes")
         .select(baseSelect)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "aguardando_assinatura_saida"])
+        .in("status", [
+          "aguardando_assinatura",
+          "aguardando_assinatura_requisicao",
+          "aguardando_assinatura_saida",
+        ])
         .order("updated_at", { ascending: false });
 
       const scopedRequestsQuery = cpf
@@ -241,7 +253,9 @@ function MinhasAssinaturasPage() {
     setError(null);
 
     if (shouldBlockSignatureUpload(request)) {
-      setError("Esta requisição está sem itens e não pode ser assinada. Refaça a requisição com os itens corretos.");
+      setError(
+        "Esta requisição está sem itens e não pode ser assinada. Refaça a requisição com os itens corretos.",
+      );
       return;
     }
 
@@ -259,9 +273,10 @@ function MinhasAssinaturasPage() {
       storagePath,
       uploadedAt: new Date().toISOString(),
       sourceUploadedAt: isOutputStage
-        ? ((request.admin_attachment as AttachmentFile | null)?.uploadedAt || new Date().toISOString())
+        ? (request.admin_attachment as AttachmentFile | null)?.uploadedAt ||
+          new Date().toISOString()
         : undefined,
-      kind: isOutputStage ? "output" as const : "request" as const,
+      kind: isOutputStage ? ("output" as const) : ("request" as const),
     };
 
     setUploadingId(request.id);
@@ -289,7 +304,8 @@ function MinhasAssinaturasPage() {
 
       const payload = {
         signed_attachment: signedAttachment,
-        admin_attachment: isOutputStage ? null : request.admin_attachment,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        admin_attachment: (isOutputStage ? null : request.admin_attachment) as any,
         status: isOutputStage ? "concluido" : "recebido",
         return_reason: null,
         return_target: null,
@@ -317,7 +333,9 @@ function MinhasAssinaturasPage() {
         removeOldAttachment(previousAdminAttachment),
       ]);
 
-      const sentMessage = isOutputStage ? "Saída assinada enviada." : "Requisição assinada enviada.";
+      const sentMessage = isOutputStage
+        ? "Saída assinada enviada."
+        : "Requisição assinada enviada.";
       setMessage(sentMessage);
       try {
         const notificationResult = await notifyRequestByWhatsApp({
@@ -358,12 +376,7 @@ function MinhasAssinaturasPage() {
     void handleUpload(request, event.dataTransfer.files?.[0]);
   };
 
-  const handleDeleteUnsignedRequest = async (request: Requisicao) => {
-    if (!canEditUnsignedRequest(request)) {
-      setError("Esta requisição já foi assinada e não pode ser excluída por aqui.");
-      return;
-    }
-
+  const handleDeletePendingRequest = async (request: Requisicao) => {
     const confirmed = window.confirm("Excluir esta requisição antes da assinatura?");
     if (!confirmed) return;
 
@@ -380,14 +393,24 @@ function MinhasAssinaturasPage() {
           returned_at: null,
         })
         .eq("id", request.id)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao"]);
+        .in("status", [
+          "aguardando_assinatura",
+          "aguardando_assinatura_requisicao",
+          "aguardando_assinatura_saida",
+          "correcao_requisicao",
+        ]);
 
       if (deleteError && isMissingReturnFeedbackColumnError(deleteError.message)) {
         const fallbackDelete = await supabase
           .from("requisicoes")
           .update({ status: "excluida_usuario" })
           .eq("id", request.id)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao"]);
+          .in("status", [
+            "aguardando_assinatura",
+            "aguardando_assinatura_requisicao",
+            "aguardando_assinatura_saida",
+            "correcao_requisicao",
+          ]);
 
         deleteError = fallbackDelete.error;
       }
@@ -418,7 +441,9 @@ function MinhasAssinaturasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : requests.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhum documento aguardando sua assinatura.</Card>
+        <Card className="p-6 text-muted-foreground">
+          Nenhum documento aguardando sua assinatura.
+        </Card>
       ) : (
         <Card className="p-4">
           <div className="rounded-md overflow-x-auto border">
@@ -434,7 +459,9 @@ function MinhasAssinaturasPage() {
               </thead>
               <tbody>
                 {requests.map((request) => {
-                  const hasRequestSigned = Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
+                  const hasRequestSigned = Boolean(
+                    getRequestSignedAttachment(request.signed_attachment, request.status),
+                  );
                   const missingItems = !hasRequestItems(request);
                   return (
                     <tr key={request.id} className="border-t">
@@ -477,19 +504,33 @@ function MinhasAssinaturasPage() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         {request.status === "correcao_requisicao" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() => {
-                              if (typeof window !== "undefined") {
-                                window.location.assign(`/admin/requisicao?requisicaoId=${request.id}`);
-                              }
-                            }}
-                          >
-                            Editar
-                          </Button>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2"
+                              onClick={() => {
+                                if (typeof window !== "undefined") {
+                                  window.location.assign(
+                                    `/admin/requisicao?requisicaoId=${request.id}`,
+                                  );
+                                }
+                              }}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-2 text-destructive"
+                              onClick={() => void handleDeletePendingRequest(request)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Excluir
+                            </Button>
+                          </div>
                         ) : (
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             {canEditUnsignedRequest(request) && (
@@ -501,7 +542,9 @@ function MinhasAssinaturasPage() {
                                   className="gap-2"
                                   onClick={() => {
                                     if (typeof window !== "undefined") {
-                                      window.location.assign(`/admin/requisicao?requisicaoId=${request.id}`);
+                                      window.location.assign(
+                                        `/admin/requisicao?requisicaoId=${request.id}`,
+                                      );
                                     }
                                   }}
                                 >
@@ -513,16 +556,30 @@ function MinhasAssinaturasPage() {
                                   variant="outline"
                                   size="sm"
                                   className="gap-2 text-destructive"
-                                  onClick={() => void handleDeleteUnsignedRequest(request)}
+                                  onClick={() => void handleDeletePendingRequest(request)}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                   Excluir
                                 </Button>
                               </>
                             )}
+                            {!canEditUnsignedRequest(request) && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-2 text-destructive"
+                                onClick={() => void handleDeletePendingRequest(request)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Excluir
+                              </Button>
+                            )}
                             <div
                               className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
-                                draggingId === request.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
+                                draggingId === request.id
+                                  ? "border-emerald-500 bg-emerald-50"
+                                  : "border-transparent"
                               }`}
                               onDragEnter={() => setDraggingId(request.id)}
                               onDragOver={handleDragOver}
@@ -547,7 +604,9 @@ function MinhasAssinaturasPage() {
                                 className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
                                 disabled
                                 title="O envio de documentos está desativado."
-                                onClick={() => document.getElementById(`assinado-${request.id}`)?.click()}
+                                onClick={() =>
+                                  document.getElementById(`assinado-${request.id}`)?.click()
+                                }
                               >
                                 {uploadingId === request.id ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
