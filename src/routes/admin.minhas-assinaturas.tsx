@@ -17,10 +17,6 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
-import {
-  isResourceTransferBlocked,
-  RESOURCE_TRANSFER_LIMIT_MESSAGE,
-} from "@/lib/resource-transfer-limit";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { getCurrentUserProfile } from "@/lib/user-profile";
@@ -246,10 +242,6 @@ function MinhasAssinaturasPage() {
     if (!file) return;
 
     setMessage(null);
-    if (isResourceTransferBlocked()) {
-      setError(RESOURCE_TRANSFER_LIMIT_MESSAGE);
-      return;
-    }
     setError(null);
 
     if (shouldBlockSignatureUpload(request)) {
@@ -598,7 +590,6 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
-                                disabled
                                 onChange={(event) => {
                                   void handleUpload(request, event.target.files?.[0]);
                                   event.currentTarget.value = "";
@@ -609,8 +600,7 @@ function MinhasAssinaturasPage() {
                                 variant="outline"
                                 size="sm"
                                 className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                                disabled
-                                title="O envio de documentos está desativado."
+                                disabled={uploadingId === request.id}
                                 onClick={() =>
                                   document.getElementById(`assinado-${request.id}`)?.click()
                                 }
@@ -620,7 +610,7 @@ function MinhasAssinaturasPage() {
                                 ) : (
                                   <Upload className="h-4 w-4" />
                                 )}
-                                Envio bloqueado
+                                Enviar PDF
                               </Button>
                               {draggingId === request.id && (
                                 <span className="text-xs font-medium text-emerald-700">

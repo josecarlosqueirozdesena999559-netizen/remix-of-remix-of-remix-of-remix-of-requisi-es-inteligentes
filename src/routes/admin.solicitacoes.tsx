@@ -47,10 +47,6 @@ import {
 import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
-import {
-  isResourceTransferBlocked,
-  RESOURCE_TRANSFER_LIMIT_MESSAGE,
-} from "@/lib/resource-transfer-limit";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/solicitacoes")({
@@ -300,10 +296,6 @@ function Solicitacoes() {
     if (!file) return;
 
     setUploadMessage(null);
-    if (isResourceTransferBlocked()) {
-      setUploadMessage(RESOURCE_TRANSFER_LIMIT_MESSAGE);
-      return;
-    }
 
     if (!hasRequestItems(request)) {
       setUploadMessage(

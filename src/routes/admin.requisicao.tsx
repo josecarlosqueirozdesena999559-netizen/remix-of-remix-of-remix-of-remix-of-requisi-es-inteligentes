@@ -25,10 +25,6 @@ import {
   hasPendingRequestSignatures,
 } from "@/lib/pending-request-signatures";
 import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
-import {
-  isResourceTransferBlocked,
-  RESOURCE_TRANSFER_LIMIT_MESSAGE,
-} from "@/lib/resource-transfer-limit";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
@@ -733,11 +729,6 @@ function CriarRequisicaoPage() {
   const handleSubmit = async () => {
     setSaving(true);
     setError(null);
-    if (isResourceTransferBlocked()) {
-      setError(RESOURCE_TRANSFER_LIMIT_MESSAGE);
-      setSaving(false);
-      return;
-    }
 
     if (!profile) {
       setError("Perfil do usuário não encontrado.");
