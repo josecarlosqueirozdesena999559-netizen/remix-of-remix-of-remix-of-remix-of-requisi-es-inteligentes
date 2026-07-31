@@ -113,14 +113,16 @@ function getAllowedCategories(profile: CurrentUserProfile | null) {
   const raw = profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
   return categories.filter(
-    (category, index) => category && isProductCategory(category) && categories.indexOf(category) === index,
+    (category, index) =>
+      category && isProductCategory(category) && categories.indexOf(category) === index,
   );
 }
 
 function normalizeAllowedCategories(raw: unknown) {
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
   return categories.filter(
-    (category, index) => category && isProductCategory(category) && categories.indexOf(category) === index,
+    (category, index) =>
+      category && isProductCategory(category) && categories.indexOf(category) === index,
   );
 }
 
@@ -187,13 +189,21 @@ function formatToday() {
 }
 
 function hasRequestedQuantity(value: string | undefined) {
-  const quantity = Number(String(value ?? "").trim().replace(",", "."));
+  const quantity = Number(
+    String(value ?? "")
+      .trim()
+      .replace(",", "."),
+  );
   return Number.isFinite(quantity) && quantity > 0;
 }
 
 function canEditRequestBeforeSignature(request: EditableRequest | null) {
   if (!request) return false;
-  return request.status === "aguardando_assinatura" || request.status === "aguardando_assinatura_requisicao" || request.status === "correcao_requisicao";
+  return (
+    request.status === "aguardando_assinatura" ||
+    request.status === "aguardando_assinatura_requisicao" ||
+    request.status === "correcao_requisicao"
+  );
 }
 
 function getItemName(item: EditableRequestItem) {
@@ -214,10 +224,14 @@ function findMatchingLoadedItem(
   const itemName = getItemName(requestItem);
   if (!itemName) return null;
 
-  const normalizedUnit = String(requestItem.unit ?? requestItem.unidade ?? "").trim().toLowerCase();
+  const normalizedUnit = String(requestItem.unit ?? requestItem.unidade ?? "")
+    .trim()
+    .toLowerCase();
   const normalizedCategory = normalizeProductCategory(requestItem.categoria);
   const normalizedSubcategory = normalizeProductCategory(requestItem.subcategoria);
-  const normalizedSection = String(requestItem.request_section ?? "").trim().toLowerCase();
+  const normalizedSection = String(requestItem.request_section ?? "")
+    .trim()
+    .toLowerCase();
   const sectionOrder = requestItem.request_section_order ?? null;
 
   const candidates = loadedItems.filter((item) => item.nome.trim() === itemName);
@@ -231,7 +245,8 @@ function findMatchingLoadedItem(
     const sameCategory =
       !normalizedCategory || normalizeProductCategory(item.categoria) === normalizedCategory;
     const sameSubcategory =
-      !normalizedSubcategory || normalizeProductCategory(item.subcategoria) === normalizedSubcategory;
+      !normalizedSubcategory ||
+      normalizeProductCategory(item.subcategoria) === normalizedSubcategory;
     const sameSectionLabel =
       !normalizedSection || itemSection?.label.trim().toLowerCase() === normalizedSection;
     const sameSectionOrder = sectionOrder == null || itemSection?.order === sectionOrder;
@@ -248,7 +263,9 @@ function findMatchingLoadedItem(
         !normalizedCategory || normalizeProductCategory(item.categoria) === normalizedCategory;
 
       return sameUnit && sameCategory;
-    }) ?? candidates[0] ?? null
+    }) ??
+    candidates[0] ??
+    null
   );
 }
 
@@ -305,8 +322,9 @@ function isItemAllowedForProfileProgram(
     return linkedPrograms.some((programKey) => allowedProgramKeys.includes(programKey));
   }
 
-  const profilePrograms = [profile?.setor, profile?.unidade_nome]
-    .flatMap((value) => getComparableProgramKeys(value));
+  const profilePrograms = [profile?.setor, profile?.unidade_nome].flatMap((value) =>
+    getComparableProgramKeys(value),
+  );
 
   if (profilePrograms.length === 0) return false;
 
@@ -473,7 +491,9 @@ function getInitialSectionId(sections: RequestSection[], categoria: string | nul
 function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
   return (
     sections.find((section) => {
-      return itemMatchesSection(item, section) && (!section.matchesItem || section.matchesItem(item));
+      return (
+        itemMatchesSection(item, section) && (!section.matchesItem || section.matchesItem(item))
+      );
     }) || null
   );
 }
@@ -540,7 +560,11 @@ function CriarRequisicaoPage() {
         let requestError = requestResult.error;
         let editableRequest = requestResult.data as EditableRequest | null;
 
-        if (requestError && editingRequestId && isMissingReturnFeedbackColumnError(requestError.message)) {
+        if (
+          requestError &&
+          editingRequestId &&
+          isMissingReturnFeedbackColumnError(requestError.message)
+        ) {
           const fallbackResult = await supabase
             .from("requisicoes")
             .select(requestSelectFallback)
@@ -557,7 +581,9 @@ function CriarRequisicaoPage() {
         }
 
         if (itemsResult.error || requestError) {
-          throw new Error(itemsResult.error?.message || requestError?.message || "Erro ao carregar requisição.");
+          throw new Error(
+            itemsResult.error?.message || requestError?.message || "Erro ao carregar requisição.",
+          );
         }
 
         if (editingRequestId && !canEditRequestBeforeSignature(editableRequest)) {
@@ -600,9 +626,14 @@ function CriarRequisicaoPage() {
             const matchedItem = findMatchingLoadedItem(requestItem, loadedItems, availableSections);
             if (!matchedItem) return;
 
-            nextStocks[matchedItem.id] = String(requestItem.stock ?? requestItem.qtdDisponivel ?? "");
+            nextStocks[matchedItem.id] = String(
+              requestItem.stock ?? requestItem.qtdDisponivel ?? "",
+            );
             nextQuantities[matchedItem.id] = String(
-              requestItem.need ?? requestItem.qtdNecessaria ?? requestItem.quantidade_solicitada ?? "",
+              requestItem.need ??
+                requestItem.qtdNecessaria ??
+                requestItem.quantidade_solicitada ??
+                "",
             );
           });
 
@@ -632,7 +663,8 @@ function CriarRequisicaoPage() {
   const isCorrectionEdit = editingRequestStatus === "correcao_requisicao";
   const returnPath = editingRequestId ? "/admin/minhas-assinaturas" : "/admin";
   const selectedGroup = useMemo(
-    () => sectionGroups.find((group) => group.label === selectedGroupLabel) || sectionGroups[0] || null,
+    () =>
+      sectionGroups.find((group) => group.label === selectedGroupLabel) || sectionGroups[0] || null,
     [sectionGroups, selectedGroupLabel],
   );
 
@@ -670,7 +702,8 @@ function CriarRequisicaoPage() {
       items: sortProductsByMaterialGroup(
         items.filter((item) => {
           if (!itemMatchesSection(item, section)) return false;
-          if (!isItemAllowedForProfileProgram(item, profile, section, allowedProgramKeys)) return false;
+          if (!isItemAllowedForProfileProgram(item, profile, section, allowedProgramKeys))
+            return false;
           if (section.matchesItem && !section.matchesItem(item)) return false;
 
           return productMatchesSearch(
@@ -785,7 +818,11 @@ function CriarRequisicaoPage() {
         .from("requisicoes")
         .update(payload)
         .eq("id", editingRequestId)
-        .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"]);
+        .in("status", [
+          "aguardando_assinatura",
+          "aguardando_assinatura_requisicao",
+          "correcao_requisicao",
+        ]);
       requestError = updateResult.error;
 
       if (requestError && isMissingReturnFeedbackColumnError(requestError.message)) {
@@ -793,7 +830,11 @@ function CriarRequisicaoPage() {
           .from("requisicoes")
           .update(omitReturnFeedbackFields(payload))
           .eq("id", editingRequestId)
-          .in("status", ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"]);
+          .in("status", [
+            "aguardando_assinatura",
+            "aguardando_assinatura_requisicao",
+            "correcao_requisicao",
+          ]);
 
         requestError = fallbackResult.error;
       }
@@ -852,7 +893,11 @@ function CriarRequisicaoPage() {
         <div>
           <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
           <h2 className="text-2xl text-foreground">
-            {editingRequestId ? (isCorrectionEdit ? "Corrigir requisição" : "Editar requisição") : "Criar requisição"}
+            {editingRequestId
+              ? isCorrectionEdit
+                ? "Corrigir requisição"
+                : "Editar requisição"
+              : "Criar requisição"}
           </h2>
         </div>
         <Button
@@ -873,7 +918,9 @@ function CriarRequisicaoPage() {
           Carregando...
         </div>
       ) : error ? (
-        <Card className="p-6 border border-destructive/40 bg-destructive/10 text-destructive font-medium">{error}</Card>
+        <Card className="p-6 border border-destructive/40 bg-destructive/10 text-destructive font-medium">
+          {error}
+        </Card>
       ) : categories.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
           Nenhum tipo de material liberado para este usuário.
@@ -961,7 +1008,9 @@ function CriarRequisicaoPage() {
                               type="number"
                               min="0"
                               value={quantities[item.id] ?? ""}
-                              onChange={(event) => handleQuantityChange(item.id, event.target.value)}
+                              onChange={(event) =>
+                                handleQuantityChange(item.id, event.target.value)
+                              }
                               className="w-28"
                               placeholder="0"
                             />
@@ -993,7 +1042,11 @@ function CriarRequisicaoPage() {
           <div className="flex flex-wrap gap-2">
             <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {editingRequestId ? (isCorrectionEdit ? "Reenviar requisição" : "Salvar alterações") : "Enviar requisição"}
+              {editingRequestId
+                ? isCorrectionEdit
+                  ? "Reenviar requisição"
+                  : "Salvar alterações"
+                : "Enviar requisição"}
             </Button>
             <Button
               type="button"

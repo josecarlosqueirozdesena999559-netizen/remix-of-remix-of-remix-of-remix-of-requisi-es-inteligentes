@@ -1,5 +1,13 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, FileText, Loader2, RotateCcw, Trash2, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  RotateCcw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -79,7 +87,7 @@ function hasRequestSigned(request: Requisicao) {
 function hasOutputDocument(request: Requisicao) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      getAttachmentFile(request.admin_attachment),
+    getAttachmentFile(request.admin_attachment),
   );
 }
 
@@ -92,14 +100,18 @@ function normalizeRequestedQuantity(item: RequestPdfItem) {
 }
 
 function hasRequestItems(request: Requisicao) {
-  return Array.isArray(request.items) && request.items.some((item) => normalizeRequestedQuantity(item) > 0);
+  return (
+    Array.isArray(request.items) &&
+    request.items.some((item) => normalizeRequestedQuantity(item) > 0)
+  );
 }
 
 function needsAdminOutput(request: Requisicao) {
-  return !hasOutputDocument(request) && (
-    request.status === "recebido" ||
-    request.status === "requisicao_assinada" ||
-    hasRequestSigned(request)
+  return (
+    !hasOutputDocument(request) &&
+    (request.status === "recebido" ||
+      request.status === "requisicao_assinada" ||
+      hasRequestSigned(request))
   );
 }
 
@@ -138,67 +150,85 @@ function Solicitacoes() {
       setLoading(true);
       setError(null);
       try {
+        const [initialPendingResult, setoresResult] = await Promise.all([
+          supabase
+            .from("requisicoes")
+            .select(requestsSelectWithLinkedOutputDate)
+            .in("status", [
+              "recebido",
+              "requisicao_assinada",
+              "concluido",
+              "aguardando_assinatura_saida",
+            ])
+            .order("updated_at", { ascending: false }),
+          supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
+        ]);
 
-      let [pendingResult, setoresResult] = await Promise.all([
-        supabase
-          .from("requisicoes")
-          .select(requestsSelectWithLinkedOutputDate)
-          .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
-          .order("updated_at", { ascending: false }),
-        supabase
-          .from("setores")
-          .select("nome,programa")
-          .order("nome", { ascending: true }),
-      ]);
+        let pendingResult = initialPendingResult;
 
-      if (pendingResult.error && isMissingLinkedOutputDateColumnError(pendingResult.error.message)) {
-        pendingResult = await supabase
-          .from("requisicoes")
-          .select(requestsSelectWithoutLinkedOutputDate)
-          .in("status", ["recebido", "requisicao_assinada", "concluido", "aguardando_assinatura_saida"])
-          .order("updated_at", { ascending: false });
-      }
-
-      if (!active) return;
-
-      if (pendingResult.error || setoresResult.error) {
-        setError(pendingResult.error?.message || setoresResult.error?.message || "Erro ao carregar solicitações.");
-      } else {
-        const requests = withLinkedOutputDateFallback(pendingResult.data) as Requisicao[];
-        const locationOptions = (setoresResult.data ?? []) as LocationOption[];
-        const cpfs = Array.from(
-          new Set(
-            requests
-              .map((request) => request.solicitante_cpf?.trim())
-              .filter((cpf): cpf is string => Boolean(cpf)),
-          ),
-        );
-        const usersByCpf = new Map<string, { setor: string | null; unidade_nome: string | null }>();
-
-        if (cpfs.length > 0) {
-          const { data: usersResult, error: usersError } = await supabase
-            .from("usuarios")
-            .select("cpf,setor,unidade_nome")
-            .in("cpf", cpfs);
-
-          if (usersError) {
-            setError(usersError.message);
-            return;
-          }
-
-          (usersResult ?? []).forEach((user) => {
-            if (user.cpf) {
-              usersByCpf.set(user.cpf, {
-                setor: user.setor ?? null,
-                unidade_nome: user.unidade_nome ?? null,
-              });
-            }
-          });
+        if (
+          pendingResult.error &&
+          isMissingLinkedOutputDateColumnError(pendingResult.error.message)
+        ) {
+          pendingResult = await supabase
+            .from("requisicoes")
+            .select(requestsSelectWithoutLinkedOutputDate)
+            .in("status", [
+              "recebido",
+              "requisicao_assinada",
+              "concluido",
+              "aguardando_assinatura_saida",
+            ])
+            .order("updated_at", { ascending: false });
         }
 
-        const pendingOutputRequests = requests.filter(needsAdminOutput);
+        if (!active) return;
 
-        const displayRequests = pendingOutputRequests.map((request) => {
+        if (pendingResult.error || setoresResult.error) {
+          setError(
+            pendingResult.error?.message ||
+              setoresResult.error?.message ||
+              "Erro ao carregar solicitações.",
+          );
+        } else {
+          const requests = withLinkedOutputDateFallback(pendingResult.data) as Requisicao[];
+          const locationOptions = (setoresResult.data ?? []) as LocationOption[];
+          const cpfs = Array.from(
+            new Set(
+              requests
+                .map((request) => request.solicitante_cpf?.trim())
+                .filter((cpf): cpf is string => Boolean(cpf)),
+            ),
+          );
+          const usersByCpf = new Map<
+            string,
+            { setor: string | null; unidade_nome: string | null }
+          >();
+
+          if (cpfs.length > 0) {
+            const { data: usersResult, error: usersError } = await supabase
+              .from("usuarios")
+              .select("cpf,setor,unidade_nome")
+              .in("cpf", cpfs);
+
+            if (usersError) {
+              setError(usersError.message);
+              return;
+            }
+
+            (usersResult ?? []).forEach((user) => {
+              if (user.cpf) {
+                usersByCpf.set(user.cpf, {
+                  setor: user.setor ?? null,
+                  unidade_nome: user.unidade_nome ?? null,
+                });
+              }
+            });
+          }
+
+          const pendingOutputRequests = requests.filter(needsAdminOutput);
+
+          const displayRequests = pendingOutputRequests.map((request) => {
             const displaySetor = resolveCanonicalLocationNameFromCandidates(
               [
                 request.setor?.trim(),
@@ -216,20 +246,22 @@ function Solicitacoes() {
             };
           });
 
-        setData(displayRequests);
-        setOutputCodes(
-          Object.fromEntries(
-            displayRequests.map((request) => [request.id, request.saida_vinculada_codigo || ""]),
-          ),
-        );
-        setOutputDates(
-          Object.fromEntries(
-            displayRequests.map((request) => [request.id, request.saida_vinculada_data || getTodayInputDate()]),
-          ),
-        );
-        setCodeByRequestId(buildGlobalRequestCodes(pendingOutputRequests));
-      }
-
+          setData(displayRequests);
+          setOutputCodes(
+            Object.fromEntries(
+              displayRequests.map((request) => [request.id, request.saida_vinculada_codigo || ""]),
+            ),
+          );
+          setOutputDates(
+            Object.fromEntries(
+              displayRequests.map((request) => [
+                request.id,
+                request.saida_vinculada_data || getTodayInputDate(),
+              ]),
+            ),
+          );
+          setCodeByRequestId(buildGlobalRequestCodes(pendingOutputRequests));
+        }
       } catch (err) {
         if (active) {
           setError(err instanceof Error ? err.message : "Erro ao carregar solicitações.");
@@ -261,7 +293,7 @@ function Solicitacoes() {
   }
 
   const selectedRequests = selected
-    ? grouped.find(([setor]) => setor === selected)?.[1] ?? []
+    ? (grouped.find(([setor]) => setor === selected)?.[1] ?? [])
     : [];
 
   const handleOutputUpload = async (request: Requisicao, file: File | undefined) => {
@@ -274,7 +306,9 @@ function Solicitacoes() {
     }
 
     if (!hasRequestItems(request)) {
-      setUploadMessage("Esta requisição está sem itens e não pode seguir para a saída. Devolva para ser refeita com os itens corretos.");
+      setUploadMessage(
+        "Esta requisição está sem itens e não pode seguir para a saída. Devolva para ser refeita com os itens corretos.",
+      );
       return;
     }
 
@@ -283,7 +317,11 @@ function Solicitacoes() {
       return;
     }
 
-    const linkedOutputCode = (outputCodes[request.id] || request.saida_vinculada_codigo || "").trim();
+    const linkedOutputCode = (
+      outputCodes[request.id] ||
+      request.saida_vinculada_codigo ||
+      ""
+    ).trim();
     if (!linkedOutputCode) {
       setUploadMessage("Informe o código da saída vinculada antes de anexar o PDF.");
       return;
@@ -310,7 +348,9 @@ function Solicitacoes() {
     setUploadingId(request.id);
 
     try {
-      const previousAdminAttachment = getAttachmentFile(request.admin_attachment) as AttachmentFile | null;
+      const previousAdminAttachment = getAttachmentFile(
+        request.admin_attachment,
+      ) as AttachmentFile | null;
 
       const { error: uploadError } = await supabase.storage
         .from(REQUISICOES_BUCKET)
@@ -431,7 +471,9 @@ function Solicitacoes() {
       if (updateError) throw new Error(updateError.message);
 
       setData((current) =>
-        current?.map((item) => (item.id === request.id ? { ...item, printed_at: printedAt } : item)),
+        current?.map((item) =>
+          item.id === request.id ? { ...item, printed_at: printedAt } : item,
+        ),
       );
       setUploadMessage("Marcado como impresso.");
     } catch (err) {
@@ -454,9 +496,17 @@ function Solicitacoes() {
     setUploadMessage(null);
 
     try {
-      const requestAttachment = getRequestSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
-      const outputAttachment = getOutputSignedAttachment(reviewingRequest.signed_attachment, reviewingRequest.status);
-      const adminAttachment = getAttachmentFile(reviewingRequest.admin_attachment) as AttachmentFile | null;
+      const requestAttachment = getRequestSignedAttachment(
+        reviewingRequest.signed_attachment,
+        reviewingRequest.status,
+      );
+      const outputAttachment = getOutputSignedAttachment(
+        reviewingRequest.signed_attachment,
+        reviewingRequest.status,
+      );
+      const adminAttachment = getAttachmentFile(
+        reviewingRequest.admin_attachment,
+      ) as AttachmentFile | null;
 
       const payload = {
         status: reviewMode === "devolver" ? "correcao_requisicao" : "excluida_admin",
@@ -567,7 +617,9 @@ function Solicitacoes() {
                       <td className="px-3 py-2">
                         <div
                           className={`flex flex-wrap items-center gap-2 rounded-md border px-2 py-2 transition-colors ${
-                            draggingId === r.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"
+                            draggingId === r.id
+                              ? "border-emerald-500 bg-emerald-50"
+                              : "border-transparent"
                           }`}
                           onDragEnter={() => setDraggingId(r.id)}
                           onDragOver={handleDragOver}
@@ -587,7 +639,9 @@ function Solicitacoes() {
                           />
                           <Input
                             type="date"
-                            value={outputDates[r.id] ?? r.saida_vinculada_data ?? getTodayInputDate()}
+                            value={
+                              outputDates[r.id] ?? r.saida_vinculada_data ?? getTodayInputDate()
+                            }
                             onChange={(event) =>
                               setOutputDates((current) => ({
                                 ...current,
@@ -606,9 +660,7 @@ function Solicitacoes() {
                             <span className="text-xs text-muted-foreground">Pendente</span>
                           )}
                           {missingItems && (
-                            <span className="text-xs text-destructive">
-                              Requisição sem itens
-                            </span>
+                            <span className="text-xs text-destructive">Requisição sem itens</span>
                           )}
                           <input
                             id={`saida-${r.id}`}
@@ -646,7 +698,11 @@ function Solicitacoes() {
                       <td className="px-3 py-2 text-center">
                         {r.printed_at ? (
                           <div className="flex justify-center">
-                            <Checkbox checked disabled aria-label="Documento ja marcado como impresso" />
+                            <Checkbox
+                              checked
+                              disabled
+                              aria-label="Documento ja marcado como impresso"
+                            />
                           </div>
                         ) : (
                           <div className="flex justify-center">
@@ -678,11 +734,23 @@ function Solicitacoes() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
-                          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => openReview(r, "devolver")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => openReview(r, "devolver")}
+                          >
                             <RotateCcw className="h-4 w-4" />
                             Devolver
                           </Button>
-                          <Button type="button" variant="outline" size="sm" className="gap-2 text-destructive" onClick={() => openReview(r, "excluir")}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-destructive"
+                            onClick={() => openReview(r, "excluir")}
+                          >
                             <Trash2 className="h-4 w-4" />
                             Excluir
                           </Button>
@@ -716,7 +784,9 @@ function Solicitacoes() {
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}</DialogTitle>
+            <DialogTitle>
+              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
+            </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
                 ? "O usuário receberá a mesma requisição com os itens para corrigir e reenviar."
