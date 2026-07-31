@@ -873,7 +873,7 @@ function CriarRequisicaoPage() {
           Carregando...
         </div>
       ) : error ? (
-        <Card className="p-6 text-destructive">{error}</Card>
+        <Card className="p-6 border border-destructive/40 bg-destructive/10 text-destructive font-medium">{error}</Card>
       ) : categories.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
           Nenhum tipo de material liberado para este usuário.
@@ -984,7 +984,11 @@ function CriarRequisicaoPage() {
             ))}
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+              {error}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>

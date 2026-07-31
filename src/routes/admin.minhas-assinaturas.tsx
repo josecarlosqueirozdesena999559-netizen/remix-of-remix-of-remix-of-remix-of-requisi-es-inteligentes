@@ -439,13 +439,18 @@ function MinhasAssinaturasPage() {
           Carregando...
         </div>
       ) : error ? (
-        <Card className="p-6 text-destructive">{error}</Card>
+        <Card className="p-6 border border-destructive/40 bg-destructive/10 text-destructive font-medium">{error}</Card>
       ) : requests.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
           Nenhum documento aguardando sua assinatura.
         </Card>
       ) : (
         <Card className="p-4">
+          {error && (
+            <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+              {error}
+            </p>
+          )}
           <div className="rounded-md overflow-x-auto border">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
