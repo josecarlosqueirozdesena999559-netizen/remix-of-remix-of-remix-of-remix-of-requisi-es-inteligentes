@@ -14,7 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { getOutputSignedAttachment, getRequestSignedAttachment } from "@/lib/attachments";
+import {
+  buildSignedAttachmentPayload,
+  getOutputSignedAttachment,
+  getRequestSignedAttachment,
+} from "@/lib/attachments";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestOwnerCpf, getRequestOwnerLocation } from "@/lib/request-owner";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
@@ -113,8 +117,13 @@ function getStatusBadge(status: string) {
     case "aguardando_assinatura":
     case "aguardando_assinatura_requisicao":
       return {
-        label: "Aguardando Assinatura",
+        label: "Aguardando Assinatura do Solicitante",
         className: "bg-amber-100 text-amber-800 border border-amber-200 font-normal",
+      };
+    case "correcao_requisicao":
+      return {
+        label: "Devolvida para Correção",
+        className: "bg-rose-100 text-rose-800 border border-rose-200 font-normal",
       };
     case "recebido":
     case "requisicao_assinada":
@@ -160,6 +169,7 @@ function AdminHome() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [devolucaoReq, setDevolucaoReq] = useState<RequisicaoItem | null>(null);
+  const [devolucaoTarget, setDevolucaoTarget] = useState<"requisicao" | "saida">("requisicao");
   const [motivoDevolucao, setMotivoDevolucao] = useState("");
   const [savingDevolucao, setSavingDevolucao] = useState(false);
 
@@ -211,7 +221,9 @@ function AdminHome() {
         const items = (data ?? []) as RequisicaoItem[];
         setRequisicoes(items);
 
-        const outputPending = items.some((req) => req.status === "aguardando_assinatura_saida");
+        const outputPending = items.some(
+          (req) => req.status === "aguardando_assinatura_saida",
+        );
         setHasOutputPending(outputPending);
       } finally {
         if (active) setLoading(false);
@@ -271,10 +283,7 @@ function AdminHome() {
       return;
     }
 
-    if (
-      stagedPdfFile.type !== "application/pdf" &&
-      !stagedPdfFile.name.toLowerCase().endsWith(".pdf")
-    ) {
+    if (stagedPdfFile.type !== "application/pdf" && !stagedPdfFile.name.toLowerCase().endsWith(".pdf")) {
       alert("Envie apenas arquivo PDF.");
       return;
     }
@@ -361,10 +370,7 @@ function AdminHome() {
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile) {
-      if (
-        droppedFile.type === "application/pdf" ||
-        droppedFile.name.toLowerCase().endsWith(".pdf")
-      ) {
+      if (droppedFile.type === "application/pdf" || droppedFile.name.toLowerCase().endsWith(".pdf")) {
         setStagedPdfFile(droppedFile);
       } else {
         alert("Envie apenas arquivos no formato PDF.");
@@ -372,7 +378,15 @@ function AdminHome() {
     }
   };
 
-  // ADMIN ACTION: Devolver com Motivo Direto no Dashboard
+  // ADMIN ACTION: Open Devolver Modal
+  const handleOpenDevolucao = (req: RequisicaoItem) => {
+    setDevolucaoReq(req);
+    // Se a requisição já estiver em estágio de saída ou tiver admin_attachment, padroniza opção como saída
+    setDevolucaoTarget(req.status === "aguardando_assinatura_saida" ? "saida" : "requisicao");
+    setMotivoDevolucao("");
+  };
+
+  // ADMIN ACTION: Devolver com Motivo (Requisição vs Saída)
   const handleConfirmDevolucao = async () => {
     if (!devolucaoReq) return;
     const reason = motivoDevolucao.trim();
@@ -384,12 +398,18 @@ function AdminHome() {
     setSavingDevolucao(true);
 
     try {
+      const isSaidaReturn = devolucaoTarget === "saida";
+
+      const updatedSignedAttachment = isSaidaReturn
+        ? buildSignedAttachmentPayload(devolucaoReq.signed_attachment, { output: null })
+        : null;
+
       const payload = {
-        status: "correcao_requisicao",
-        signed_attachment: null,
-        admin_attachment: null,
+        status: isSaidaReturn ? "aguardando_assinatura_saida" : "correcao_requisicao",
+        signed_attachment: updatedSignedAttachment,
+        admin_attachment: isSaidaReturn ? devolucaoReq.admin_attachment : null,
         return_reason: reason,
-        return_target: "requisicao",
+        return_target: isSaidaReturn ? "saida" : "requisicao",
         returned_at: new Date().toISOString(),
       };
 
@@ -405,9 +425,9 @@ function AdminHome() {
           item.id === devolucaoReq.id
             ? {
                 ...item,
-                status: "correcao_requisicao",
-                signed_attachment: null,
-                admin_attachment: null,
+                status: isSaidaReturn ? "aguardando_assinatura_saida" : "correcao_requisicao",
+                signed_attachment: updatedSignedAttachment,
+                admin_attachment: isSaidaReturn ? devolucaoReq.admin_attachment : null,
               }
             : item,
         ),
@@ -415,7 +435,11 @@ function AdminHome() {
 
       setDevolucaoReq(null);
       setMotivoDevolucao("");
-      alert("Requisição devolvida para correção com sucesso!");
+      alert(
+        isSaidaReturn
+          ? "Documento de saída devolvido para a assinatura do solicitante!"
+          : "Requisição devolvida para correção com sucesso!",
+      );
     } catch (err) {
       alert(err instanceof Error ? err.message : "Erro ao devolver requisição.");
     } finally {
@@ -426,15 +450,22 @@ function AdminHome() {
   const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
   const userName = profile?.nome || "Usuário";
 
-  const currentMonthRequisicoes = requisicoes.filter((r) => isCurrentMonth(r.data, r.created_at));
+  const currentMonthRequisicoes = requisicoes.filter((r) =>
+    isCurrentMonth(r.data, r.created_at),
+  );
   const monthlyCount = currentMonthRequisicoes.length;
-  const pendingRequests = requisicoes.filter((r) =>
-    [
+
+  const pendingRequests = requisicoes.filter((r) => {
+    if (isAdmin) {
+      return r.status === "recebido" || r.status === "requisicao_assinada";
+    }
+    return [
       "aguardando_assinatura",
       "aguardando_assinatura_requisicao",
       "aguardando_assinatura_saida",
-    ].includes(r.status),
-  );
+      "correcao_requisicao",
+    ].includes(r.status);
+  });
 
   const requestCodesMap = buildGlobalRequestCodes(
     requisicoes.map((r) => ({
@@ -520,7 +551,8 @@ function AdminHome() {
                     Requisição {reqCode} - {date}
                   </span>
                   <span className="underline text-rose-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                    Ver Assinatura <ChevronRight className="w-3.5 h-3.5" />
+                    {isAdmin ? "Atender Requisição" : "Ver Assinatura"}{" "}
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
               );
@@ -531,7 +563,9 @@ function AdminHome() {
         <div className="w-full p-5 rounded-2xl border border-emerald-200/80 bg-emerald-50 text-emerald-900 shadow-2xs space-y-1">
           <h3 className="text-sm font-semibold text-emerald-800">Tudo em dia</h3>
           <p className="text-xs text-emerald-700 font-normal">
-            Você não tem requisições pendentes no momento.
+            {isAdmin
+              ? "Não há solicitações pendentes para atendimento no momento."
+              : "Você não tem requisições pendentes no momento."}
           </p>
         </div>
       )}
@@ -576,7 +610,17 @@ function AdminHome() {
                 getRequestSignedAttachment(req.signed_attachment, req.status) ||
                 (req.admin_attachment as { storageBucket?: string; storagePath?: string } | null);
 
-              const outputAttachment = getOutputSignedAttachment(req.signed_attachment, req.status);
+              const outputAttachment = getOutputSignedAttachment(
+                req.signed_attachment,
+                req.status,
+              );
+
+              // ADMIN SÓ PODE ANEXAR SAÍDA QUANDO O USUÁRIO JÁ CRIOU E ASSINOU A REQUIÇÃO
+              const isUserSigned =
+                req.status === "recebido" ||
+                req.status === "requisicao_assinada" ||
+                req.status === "aguardando_assinatura_saida" ||
+                req.status === "concluido";
 
               return (
                 <div
@@ -644,21 +688,28 @@ function AdminHome() {
                     {/* AÇÕES EXCLUSIVAS DE ADMIN: ANEXAR SAÍDA E DEVOLVER */}
                     {isAdmin && (
                       <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/60">
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="flex-1 gap-1 rounded-xl text-[11px] font-normal bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                          onClick={() => handleOpenAnexarSaida(req)}
-                        >
-                          <Send className="w-3 h-3" />
-                          Anexar Saída
-                        </Button>
+                        {isUserSigned ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="flex-1 gap-1 rounded-xl text-[11px] font-normal bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                            onClick={() => handleOpenAnexarSaida(req)}
+                          >
+                            <Send className="w-3 h-3" />
+                            Anexar Saída
+                          </Button>
+                        ) : (
+                          <span className="flex-1 text-[10px] text-amber-700 font-normal bg-amber-50 border border-amber-200/80 px-2 py-1 rounded-xl text-center">
+                            Aguardando Solicitante Assinar
+                          </span>
+                        )}
+
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           className="gap-1 rounded-xl text-[11px] font-normal border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
-                          onClick={() => setDevolucaoReq(req)}
+                          onClick={() => handleOpenDevolucao(req)}
                         >
                           <Undo2 className="w-3 h-3 text-rose-500" />
                           Devolver
@@ -833,7 +884,7 @@ function AdminHome() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL ADMIN: DEVOLVER COM MOTIVO */}
+      {/* MODAL ADMIN: DEVOLVER COM SELEÇÃO (REQUIÇÃO OU SAÍDA) E MOTIVO */}
       <Dialog
         open={Boolean(devolucaoReq)}
         onOpenChange={(open) => {
@@ -843,11 +894,41 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Devolver Requisição para Correção
+              Devolver para o Solicitante
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3 my-2">
+          <div className="space-y-4 my-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-600 font-normal">O que deseja devolver?</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={devolucaoTarget === "requisicao" ? "default" : "outline"}
+                  className={`text-xs rounded-xl ${
+                    devolucaoTarget === "requisicao"
+                      ? "bg-rose-600 text-white hover:bg-rose-700"
+                      : "border-slate-200 text-slate-700"
+                  }`}
+                  onClick={() => setDevolucaoTarget("requisicao")}
+                >
+                  📝 Devolver Requisição
+                </Button>
+                <Button
+                  type="button"
+                  variant={devolucaoTarget === "saida" ? "default" : "outline"}
+                  className={`text-xs rounded-xl ${
+                    devolucaoTarget === "saida"
+                      ? "bg-rose-600 text-white hover:bg-rose-700"
+                      : "border-slate-200 text-slate-700"
+                  }`}
+                  onClick={() => setDevolucaoTarget("saida")}
+                >
+                  📦 Devolver Saída
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="motivo_devolucao_dash" className="text-xs text-slate-600 font-normal">
                 Motivo da Devolução
@@ -855,7 +936,11 @@ function AdminHome() {
               <Textarea
                 id="motivo_devolucao_dash"
                 rows={3}
-                placeholder="Descreva o motivo para que o solicitante possa corrigir..."
+                placeholder={
+                  devolucaoTarget === "saida"
+                    ? "Descreva o motivo para o solicitante assinar a saída novamente..."
+                    : "Descreva o motivo para que o solicitante possa corrigir a requisição..."
+                }
                 value={motivoDevolucao}
                 onChange={(e) => setMotivoDevolucao(e.target.value)}
                 className="text-xs rounded-xl"

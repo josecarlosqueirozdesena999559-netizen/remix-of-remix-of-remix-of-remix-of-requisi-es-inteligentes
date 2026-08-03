@@ -138,6 +138,7 @@ function Solicitacoes() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
+  const [reviewTarget, setReviewTarget] = useState<"requisicao" | "saida">("requisicao");
   const [reviewReason, setReviewReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [printingRequestId, setPrintingRequestId] = useState<string | null>(null);
@@ -424,6 +425,7 @@ function Solicitacoes() {
   const openReview = (request: Requisicao, mode: "devolver" | "excluir") => {
     setReviewingRequest(request);
     setReviewMode(mode);
+    setReviewTarget(request.status === "aguardando_assinatura_saida" ? "saida" : "requisicao");
     setReviewReason("");
   };
 
@@ -487,12 +489,23 @@ function Solicitacoes() {
         reviewingRequest.admin_attachment,
       ) as AttachmentFile | null;
 
+      const isSaidaReturn = reviewMode === "devolver" && reviewTarget === "saida";
+
+      const updatedSignedAttachment = isSaidaReturn
+        ? buildSignedAttachmentPayload(reviewingRequest.signed_attachment, { output: null })
+        : null;
+
       const payload = {
-        status: reviewMode === "devolver" ? "correcao_requisicao" : "excluida_admin",
-        signed_attachment: null,
-        admin_attachment: null,
+        status:
+          reviewMode === "excluir"
+            ? "excluida_admin"
+            : isSaidaReturn
+              ? "aguardando_assinatura_saida"
+              : "correcao_requisicao",
+        signed_attachment: updatedSignedAttachment,
+        admin_attachment: isSaidaReturn ? reviewingRequest.admin_attachment : null,
         return_reason: reason,
-        return_target: "requisicao",
+        return_target: isSaidaReturn ? "saida" : "requisicao",
         returned_at: new Date().toISOString(),
       };
 
@@ -512,16 +525,22 @@ function Solicitacoes() {
 
       if (updateError) throw new Error(updateError.message);
 
-      await Promise.all([
-        removeAttachmentFileSafely(requestAttachment, "request attachment"),
-        removeAttachmentFileSafely(outputAttachment, "output attachment"),
-        removeAttachmentFileSafely(adminAttachment, "admin attachment"),
-      ]);
+      if (!isSaidaReturn) {
+        await Promise.all([
+          removeAttachmentFileSafely(requestAttachment, "request attachment"),
+          removeAttachmentFileSafely(outputAttachment, "output attachment"),
+          removeAttachmentFileSafely(adminAttachment, "admin attachment"),
+        ]);
+      } else {
+        await removeAttachmentFileSafely(outputAttachment, "output attachment");
+      }
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
       setUploadMessage(
         reviewMode === "devolver"
-          ? "Requisição devolvida para correção."
+          ? isSaidaReturn
+            ? "Saída devolvida para o solicitante assinar novamente."
+            : "Requisição devolvida para correção."
           : "Requisição excluída da fila.",
       );
       closeReview();
@@ -852,14 +871,53 @@ function Solicitacoes() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Motivo</p>
-            <Textarea
-              value={reviewReason}
-              onChange={(event) => setReviewReason(event.target.value)}
-              placeholder="Descreva o erro encontrado na requisição"
-              rows={4}
-            />
+          <div className="space-y-4 my-2">
+            {reviewMode === "devolver" && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground font-normal">O que deseja devolver?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={reviewTarget === "requisicao" ? "default" : "outline"}
+                    className={`text-xs rounded-xl ${
+                      reviewTarget === "requisicao"
+                        ? "bg-rose-600 text-white hover:bg-rose-700"
+                        : "border-slate-200 text-slate-700"
+                    }`}
+                    onClick={() => setReviewTarget("requisicao")}
+                  >
+                    📝 Devolver Requisição
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={reviewTarget === "saida" ? "default" : "outline"}
+                    className={`text-xs rounded-xl ${
+                      reviewTarget === "saida"
+                        ? "bg-rose-600 text-white hover:bg-rose-700"
+                        : "border-slate-200 text-slate-700"
+                    }`}
+                    onClick={() => setReviewTarget("saida")}
+                  >
+                    📦 Devolver Saída
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground font-normal">Motivo da Devolução</p>
+              <Textarea
+                value={reviewReason}
+                onChange={(event) => setReviewReason(event.target.value)}
+                placeholder={
+                  reviewTarget === "saida"
+                    ? "Descreva o motivo para o solicitante assinar a saída novamente..."
+                    : "Descreva o erro encontrado para o solicitante corrigir..."
+                }
+                rows={3}
+                className="text-xs rounded-xl"
+              />
+            </div>
           </div>
 
           <DialogFooter>
