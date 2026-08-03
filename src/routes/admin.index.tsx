@@ -221,9 +221,7 @@ function AdminHome() {
         const items = (data ?? []) as RequisicaoItem[];
         setRequisicoes(items);
 
-        const outputPending = items.some(
-          (req) => req.status === "aguardando_assinatura_saida",
-        );
+        const outputPending = items.some((req) => req.status === "aguardando_assinatura_saida");
         setHasOutputPending(outputPending);
       } finally {
         if (active) setLoading(false);
@@ -283,7 +281,10 @@ function AdminHome() {
       return;
     }
 
-    if (stagedPdfFile.type !== "application/pdf" && !stagedPdfFile.name.toLowerCase().endsWith(".pdf")) {
+    if (
+      stagedPdfFile.type !== "application/pdf" &&
+      !stagedPdfFile.name.toLowerCase().endsWith(".pdf")
+    ) {
       alert("Envie apenas arquivo PDF.");
       return;
     }
@@ -370,7 +371,10 @@ function AdminHome() {
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile) {
-      if (droppedFile.type === "application/pdf" || droppedFile.name.toLowerCase().endsWith(".pdf")) {
+      if (
+        droppedFile.type === "application/pdf" ||
+        droppedFile.name.toLowerCase().endsWith(".pdf")
+      ) {
         setStagedPdfFile(droppedFile);
       } else {
         alert("Envie apenas arquivos no formato PDF.");
@@ -450,9 +454,7 @@ function AdminHome() {
   const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
   const userName = profile?.nome || "Usuário";
 
-  const currentMonthRequisicoes = requisicoes.filter((r) =>
-    isCurrentMonth(r.data, r.created_at),
-  );
+  const currentMonthRequisicoes = requisicoes.filter((r) => isCurrentMonth(r.data, r.created_at));
   const monthlyCount = currentMonthRequisicoes.length;
 
   const pendingRequests = requisicoes.filter((r) => {
@@ -610,10 +612,7 @@ function AdminHome() {
                 getRequestSignedAttachment(req.signed_attachment, req.status) ||
                 (req.admin_attachment as { storageBucket?: string; storagePath?: string } | null);
 
-              const outputAttachment = getOutputSignedAttachment(
-                req.signed_attachment,
-                req.status,
-              );
+              const outputAttachment = getOutputSignedAttachment(req.signed_attachment, req.status);
 
               // ADMIN SÓ PODE ANEXAR SAÍDA QUANDO O USUÁRIO JÁ CRIOU E ASSINOU A REQUIÇÃO
               const isUserSigned =

@@ -117,6 +117,18 @@ function hasRequestItems(request: Requisicao) {
   );
 }
 
+function getSignedPdfUploadErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "").trim();
+
+  if (!message) return "N?o foi poss?vel enviar o PDF assinado. Tente novamente.";
+
+  if (/P0001|database|databate|1000/i.test(message)) {
+    return "N?o foi poss?vel enviar o PDF assinado. Atualize a p?gina e tente anexar o PDF novamente.";
+  }
+
+  return message;
+}
+
 function shouldBlockSignatureUpload(request: Requisicao) {
   return request.status !== "aguardando_assinatura_saida" && !hasRequestItems(request);
 }
@@ -139,7 +151,6 @@ function MinhasAssinaturasPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
-  const [confirmedV, setConfirmedV] = useState<Record<string, boolean>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -295,7 +306,11 @@ function MinhasAssinaturasPage() {
           upsert: true,
         });
 
-      if (uploadError) throw new Error(uploadError.message);
+      if (uploadError)
+        throw new Error(
+          uploadError.message ||
+            "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.",
+        );
 
       const signedAttachment = buildSignedAttachmentPayload(request.signed_attachment, {
         request: isOutputStage ? undefined : attachment,
@@ -332,7 +347,7 @@ function MinhasAssinaturasPage() {
           })
           .eq("id", request.id);
 
-        if (fallbackUpdate.error && !fallbackUpdate.error.message.includes("P0001")) {
+        if (fallbackUpdate.error) {
           throw new Error(fallbackUpdate.error.message);
         }
       }
@@ -357,7 +372,7 @@ function MinhasAssinaturasPage() {
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao enviar PDF assinado.");
+      setError(getSignedPdfUploadErrorMessage(err));
     } finally {
       setUploadingId(null);
     }
@@ -501,7 +516,7 @@ function MinhasAssinaturasPage() {
                       <td className="px-3 py-2 text-foreground">
                         <span className="inline-flex flex-wrap items-center gap-2">
                           {hasRequestSigned && request.status === "aguardando_assinatura_saida" && (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                            <CheckCircle2 className="h-4 w-4 text-orange-700" />
                           )}
                           {getStageLabel(request.status)}
                           {missingItems && (
@@ -609,7 +624,7 @@ function MinhasAssinaturasPage() {
                             <div
                               className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
                                 draggingId === request.id
-                                  ? "border-emerald-500 bg-emerald-50"
+                                  ? "border-orange-500 bg-orange-50"
                                   : "border-transparent"
                               }`}
                               onDragEnter={() => setDraggingId(request.id)}
@@ -636,71 +651,33 @@ function MinhasAssinaturasPage() {
 
                               {stagedFiles[request.id] ? (
                                 <div className="flex items-center gap-2">
+                                  <span className="max-w-44 truncate rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800">
+                                    PDF: {stagedFiles[request.id].name}
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      if (confirmedV[request.id]) {
-                                        setStagedFiles((curr) => {
-                                          const next = { ...curr };
-                                          delete next[request.id];
-                                          return next;
-                                        });
-                                        setConfirmedV((curr) => {
-                                          const next = { ...curr };
-                                          delete next[request.id];
-                                          return next;
-                                        });
-                                      } else {
-                                        setConfirmedV((curr) => ({
-                                          ...curr,
-                                          [request.id]: true,
-                                        }));
-                                      }
-                                    }}
-                                    className="p-1 bg-transparent hover:scale-110 transition-transform cursor-pointer"
-                                    title={
-                                      confirmedV[request.id]
-                                        ? "Clique para remover PDF"
-                                        : "Clique no V para reconhecer"
-                                    }
-                                  >
-                                    <Check
-                                      className={`w-6 h-6 stroke-[3.5] ${
-                                        confirmedV[request.id]
-                                          ? "text-slate-400"
-                                          : "text-emerald-600"
-                                      }`}
-                                    />
-                                  </button>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
-                                    disabled={uploadingId === request.id || !confirmedV[request.id]}
+                                    disabled={uploadingId === request.id}
                                     onClick={() => {
                                       const fileToUpload = stagedFiles[request.id];
-                                      if (fileToUpload) {
-                                        void handleUpload(request, fileToUpload);
+                                      if (!fileToUpload) return;
+
+                                      void handleUpload(request, fileToUpload).finally(() => {
                                         setStagedFiles((curr) => {
                                           const next = { ...curr };
                                           delete next[request.id];
                                           return next;
                                         });
-                                        setConfirmedV((curr) => {
-                                          const next = { ...curr };
-                                          delete next[request.id];
-                                          return next;
-                                        });
-                                      }
+                                      });
                                     }}
+                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-orange-500 text-white shadow-md shadow-orange-500/20 transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                    title="Enviar PDF assinado"
                                   >
                                     {uploadingId === request.id ? (
                                       <Loader2 className="h-4 w-4 animate-spin" />
                                     ) : (
-                                      <Upload className="h-4 w-4" />
+                                      <Check className="h-4 w-4 stroke-[3]" />
                                     )}
-                                    Enviar ao Almoxarifado
-                                  </Button>
+                                  </button>
                                 </div>
                               ) : (
                                 <Button
@@ -709,7 +686,7 @@ function MinhasAssinaturasPage() {
                                   size="sm"
                                   className={`gap-2 rounded-xl ${
                                     draggingId === request.id
-                                      ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
+                                      ? "border-orange-500 bg-orange-100 text-orange-900 hover:bg-orange-100"
                                       : ""
                                   }`}
                                   disabled={uploadingId === request.id}
@@ -722,12 +699,12 @@ function MinhasAssinaturasPage() {
                                   ) : (
                                     <Upload className="h-4 w-4" />
                                   )}
-                                  Enviar PDF
+                                  Anexar PDF
                                 </Button>
                               )}
 
                               {draggingId === request.id && (
-                                <span className="text-xs font-medium text-emerald-700">
+                                <span className="text-xs font-medium text-orange-700">
                                   Solte o PDF para reconhecer
                                 </span>
                               )}

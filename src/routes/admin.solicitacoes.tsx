@@ -341,7 +341,10 @@ function Solicitacoes() {
         });
 
       if (uploadError) {
-        throw new Error(uploadError.message || "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.");
+        throw new Error(
+          uploadError.message ||
+            "Não foi possível anexar o PDF. Verifique o arquivo e tente novamente.",
+        );
       }
 
       const payload = {
