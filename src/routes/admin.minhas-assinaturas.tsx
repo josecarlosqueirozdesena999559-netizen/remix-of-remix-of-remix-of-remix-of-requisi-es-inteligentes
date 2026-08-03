@@ -32,6 +32,7 @@ const REQUEST_FLASH_KEY = "admin_request_whatsapp_flash";
 interface Requisicao {
   id: string;
   saida_codigo: string | null;
+  saida_vinculada_codigo?: string | null;
   saida_vinculada_data?: string | null;
   setor: string | null;
   solicitante: string | null;
@@ -50,7 +51,7 @@ const baseSelect =
   "id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
 
 const baseSelectWithOutputDate =
-  "id,saida_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
+  "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
 
 function getStageLabel(status: string) {
   if (status === "aguardando_assinatura_saida") return "Assinar saída";
@@ -216,6 +217,7 @@ function MinhasAssinaturasPage() {
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,
+          saida_vinculada_codigo: null,
           saida_vinculada_data: null,
           return_reason: null,
           return_target: null,
@@ -473,15 +475,23 @@ function MinhasAssinaturasPage() {
                     getRequestSignedAttachment(request.signed_attachment, request.status),
                   );
                   const missingItems = !hasRequestItems(request);
-                  const requestDisplayCode = request.saida_codigo?.trim() || request.id.slice(0, 8);
-                  const displayDate =
-                    request.status === "aguardando_assinatura_saida"
-                      ? formatOutputDate(request.saida_vinculada_data) || request.data || "-"
-                      : request.data || "-";
+                  const requestCode = request.saida_codigo?.trim() || request.id.slice(0, 8);
+                  const linkedOutputCode = request.saida_vinculada_codigo?.trim();
+                  const isOutputStage = request.status === "aguardando_assinatura_saida";
+                  const requestDisplayCode =
+                    isOutputStage && linkedOutputCode ? linkedOutputCode : requestCode;
+                  const displayDate = isOutputStage
+                    ? formatOutputDate(request.saida_vinculada_data) || request.data || "-"
+                    : request.data || "-";
                   return (
                     <tr key={request.id} className="border-t">
                       <td className="px-3 py-2 font-semibold text-slate-800">
-                        {requestDisplayCode}
+                        <div>{requestDisplayCode}</div>
+                        {isOutputStage && linkedOutputCode && linkedOutputCode !== requestCode ? (
+                          <div className="text-xs font-normal text-muted-foreground">
+                            Requisicao: {requestCode}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{displayDate}</td>
                       <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>

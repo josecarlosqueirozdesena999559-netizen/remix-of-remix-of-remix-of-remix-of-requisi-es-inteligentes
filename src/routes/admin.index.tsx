@@ -40,45 +40,6 @@ type PendingSignatureRequest = {
   signed_attachment: unknown;
 };
 
-type PendingNoticeItem = {
-  key: string;
-  id: string;
-  code: string;
-  date: string;
-  label: string;
-};
-
-function getRequestDisplayCode(request: PendingSignatureRequest) {
-  return request.saida_codigo?.trim() || request.id.slice(0, 8);
-}
-
-function formatDateDisplay(dateStr?: string | null, createdAt?: string) {
-  if (dateStr?.trim()) return dateStr.trim();
-  if (createdAt) {
-    const d = new Date(createdAt);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-  }
-  return "-";
-}
-
-function buildPendingNoticeItem(request: PendingSignatureRequest): PendingNoticeItem {
-  const code = getRequestDisplayCode(request);
-  const dateFormatted = formatDateDisplay(request.data, request.created_at);
-
-  return {
-    key: request.id,
-    id: request.id,
-    code,
-    date: dateFormatted,
-    label: `Requisição ${code} - ${dateFormatted}`,
-  };
-}
-
 function needsSignature(request: PendingSignatureRequest) {
   if (request.status === "aguardando_assinatura_saida") {
     return !getOutputSignedAttachment(request.signed_attachment, request.status);
@@ -92,7 +53,6 @@ function AdminHome() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
-  const [pendingNoticeItems, setPendingNoticeItems] = useState<PendingNoticeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPendingModal, setShowPendingModal] = useState(false);
 
@@ -109,7 +69,6 @@ function AdminHome() {
           if (active) {
             setIsAdmin(false);
             setPendingCount(0);
-            setPendingNoticeItems([]);
           }
           return;
         }
@@ -139,7 +98,6 @@ function AdminHome() {
           const pendingRequests = count ? ((data ?? []) as PendingSignatureRequest[]) : [];
           setPendingCount(count ?? pendingRequests.length);
           setCompletedCount(completedRes.count ?? 0);
-          setPendingNoticeItems(pendingRequests.map((request) => buildPendingNoticeItem(request)));
           return;
         }
 
@@ -150,7 +108,6 @@ function AdminHome() {
         if (!cpf && !(name && location)) {
           if (active) {
             setPendingCount(0);
-            setPendingNoticeItems([]);
           }
           return;
         }
@@ -179,7 +136,6 @@ function AdminHome() {
 
         const pendingRequests = ((data ?? []) as PendingSignatureRequest[]).filter(needsSignature);
         setPendingCount(pendingRequests.length);
-        setPendingNoticeItems(pendingRequests.map((request) => buildPendingNoticeItem(request)));
       } finally {
         if (active) setLoading(false);
       }
@@ -289,15 +245,6 @@ function AdminHome() {
                 Clique aqui para abrir
               </span>
             </div>
-            {pendingNoticeItems.length > 0 && (
-              <div className="space-y-1 text-xs font-semibold pt-1 text-slate-900/90">
-                {pendingNoticeItems.map((item) => (
-                  <div key={item.key}>
-                    Requisição {item.code} - {item.date}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           <ChevronRight

@@ -219,13 +219,15 @@ function AssinadasPage() {
     };
   }, []);
 
+  const hasCodeSearch = Boolean(codigoFilter.trim() || saidaFilter.trim());
+
   const filteredData = useMemo(() => {
     const codeQuery = codigoFilter.trim().toLowerCase();
     const saidaQuery = saidaFilter.trim().toLowerCase();
 
     return (data ?? [])
       .filter((request) => {
-        if (getRequestArchiveMonth(request) !== selectedMonth) return false;
+        if (!hasCodeSearch && getRequestArchiveMonth(request) !== selectedMonth) return false;
 
         const code = (request.saida_codigo || codeByRequestId.get(request.id) || "-").toLowerCase();
         const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
@@ -234,7 +236,7 @@ function AssinadasPage() {
         return codigoMatch && saidaMatch;
       })
       .sort((left, right) => getOutputDateTime(right) - getOutputDateTime(left));
-  }, [codeByRequestId, codigoFilter, data, saidaFilter, selectedMonth]);
+  }, [codeByRequestId, codigoFilter, data, hasCodeSearch, saidaFilter, selectedMonth]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, RequisicaoAssinada[]>();
@@ -534,7 +536,11 @@ function AssinadasPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : grouped.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisição encontrada neste mês.</Card>
+        <Card className="p-6 text-muted-foreground">
+          {hasCodeSearch
+            ? "Nenhuma requisicao encontrada para este codigo."
+            : "Nenhuma requisicao encontrada neste mes."}
+        </Card>
       ) : selected ? (
         <Card className="p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
