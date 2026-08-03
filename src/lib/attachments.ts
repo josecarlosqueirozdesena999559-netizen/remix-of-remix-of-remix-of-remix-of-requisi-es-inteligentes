@@ -53,8 +53,18 @@ function hasStructuredSignedAttachmentParts(value: Record<string, unknown>) {
   return "request" in value || "output" in value;
 }
 
+export function getAttachmentFiles(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map(toAttachmentFile).filter((attachment): attachment is AttachmentFile => Boolean(attachment));
+  }
+
+  const attachment = toAttachmentFile(value);
+  return attachment ? [attachment] : [];
+}
+
 export function getAttachmentFile(value: unknown) {
-  return toAttachmentFile(value);
+  const files = getAttachmentFiles(value);
+  return files.at(-1) || null;
 }
 
 export function getSignedAttachmentParts(signedAttachment: unknown, status?: string | null) {

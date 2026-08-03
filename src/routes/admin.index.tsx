@@ -16,9 +16,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
   buildSignedAttachmentPayload,
+  getAttachmentFile,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
 } from "@/lib/attachments";
+import {
+  isMissingLinkedOutputDateColumnError,
+  omitLinkedOutputDateFields,
+  withLinkedOutputDateFallback,
+} from "@/lib/linked-output-date";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
@@ -28,6 +34,10 @@ export const Route = createFileRoute("/admin/")({
 });
 
 const REQUISICOES_BUCKET = "requisicoes";
+const dashboardRequestsSelectWithLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,solicitante,solicitante_cpf,setor,data,created_at,status,signed_attachment,admin_attachment";
+const dashboardRequestsSelectWithoutLinkedOutputDate =
+  "id,saida_codigo,saida_vinculada_codigo,solicitante,solicitante_cpf,setor,data,created_at,status,signed_attachment,admin_attachment";
 
 type RequisicaoItem = {
   id: string;
@@ -199,30 +209,39 @@ function AdminHome() {
           setIsAdmin(userProfile.is_admin === true);
         }
 
-        let query = supabase
-          .from("requisicoes")
-          .select(
-            "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,solicitante,solicitante_cpf,setor,data,created_at,status,signed_attachment,admin_attachment",
-          )
-          .order("created_at", { ascending: true });
+        const buildDashboardQuery = (selectColumns: string) => {
+          let query = supabase
+            .from("requisicoes")
+            .select(selectColumns)
+            .order("created_at", { ascending: true });
 
-        if (!userProfile.is_admin) {
-          const cpfVariants = getRequestOwnerCpfVariants(userProfile);
-          const location = getRequestOwnerLocation(userProfile);
-          const name = userProfile.nome?.trim() || "";
+          if (!userProfile.is_admin) {
+            const cpfVariants = getRequestOwnerCpfVariants(userProfile);
+            const location = getRequestOwnerLocation(userProfile);
+            const name = userProfile.nome?.trim() || "";
 
-          if (cpfVariants.length > 0) {
-            query = query.in("solicitante_cpf", cpfVariants);
-          } else if (name && location) {
-            query = query.eq("solicitante", name).eq("setor", location);
+            if (cpfVariants.length > 0) {
+              query = query.in("solicitante_cpf", cpfVariants);
+            } else if (name && location) {
+              query = query.eq("solicitante", name).eq("setor", location);
+            }
           }
+
+          return query;
+        };
+
+        let { data, error } = await buildDashboardQuery(dashboardRequestsSelectWithLinkedOutputDate);
+
+        if (error && isMissingLinkedOutputDateColumnError(error.message)) {
+          const fallbackResult = await buildDashboardQuery(dashboardRequestsSelectWithoutLinkedOutputDate);
+          data = fallbackResult.data;
+          error = fallbackResult.error;
         }
 
-        const { data, error } = await query;
         if (error) throw new Error(error.message);
         if (!active) return;
 
-        const items = (data ?? []) as RequisicaoItem[];
+        const items = withLinkedOutputDateFallback(data) as RequisicaoItem[];
         setRequisicoes(items);
 
         const outputPending = items.some((req) => req.status === "aguardando_assinatura_saida");
@@ -335,10 +354,19 @@ function AdminHome() {
         returned_at: null,
       };
 
-      const { error: updateError } = await supabase
+      let { error: updateError } = await supabase
         .from("requisicoes")
         .update(payload)
         .eq("id", attachingReq.id);
+
+      if (updateError && isMissingLinkedOutputDateColumnError(updateError.message)) {
+        const fallbackUpdate = await supabase
+          .from("requisicoes")
+          .update(omitLinkedOutputDateFields(payload))
+          .eq("id", attachingReq.id);
+
+        updateError = fallbackUpdate.error;
+      }
 
       if (updateError) throw new Error(updateError.message);
 
@@ -470,7 +498,7 @@ function AdminHome() {
 
   const pendingRequests = requisicoes.filter((r) => {
     if (isAdmin) {
-      return r.status === "recebido" || r.status === "requisicao_assinada";
+      return needsAdminOutput(r);
     }
     return [
       "aguardando_assinatura",
