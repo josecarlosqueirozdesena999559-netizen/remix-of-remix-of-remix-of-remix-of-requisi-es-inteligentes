@@ -120,10 +120,14 @@ function hasRequestItems(request: Requisicao) {
 function getSignedPdfUploadErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "").trim();
 
-  if (!message) return "N?o foi poss?vel enviar o PDF assinado. Tente novamente.";
+  if (!message) return "Não foi possível enviar o PDF assinado. Tente novamente.";
+
+  if (/DOCUMENT_UPLOADS_DISABLED|row-level security|violates row-level security|permission denied|storage/i.test(message)) {
+    return "O envio de PDF assinado ainda não está liberado no armazenamento. Atualize a página e tente novamente após a publicação da correção.";
+  }
 
   if (/P0001|database|databate|1000/i.test(message)) {
-    return "N?o foi poss?vel enviar o PDF assinado. Atualize a p?gina e tente anexar o PDF novamente.";
+    return "Não foi possível registrar o PDF assinado no banco. Atualize a página e tente anexar novamente.";
   }
 
   return message;

@@ -472,11 +472,7 @@ function AdminHome() {
     (req) => req.status === "correcao_requisicao",
   );
   const hasCorrectionPending = !isAdmin && correctionPendingRequests.length > 0;
-  const pendingTargetUrl = isAdmin
-    ? "/admin/solicitacoes"
-    : hasCorrectionPending && correctionPendingRequests.length === pendingRequests.length
-      ? `/admin/requisicao?requisicaoId=${correctionPendingRequests[0].id}`
-      : "/admin/minhas-assinaturas";
+  const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
 
   const pendingMetricLabel = isAdmin
     ? "Solicitações Pendentes para Atendimento"
@@ -513,7 +509,7 @@ function AdminHome() {
 
     if (hasCorrectionPending) {
       return correctionPendingRequests.length === pendingRequests.length
-        ? "Clique aqui para corrigir e reenviar sua requisição"
+        ? "Clique aqui para abrir as opções de editar ou excluir"
         : "Clique aqui para corrigir devoluções e assinar documentos pendentes";
     }
 
