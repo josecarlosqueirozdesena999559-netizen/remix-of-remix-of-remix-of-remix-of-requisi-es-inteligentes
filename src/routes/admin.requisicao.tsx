@@ -494,6 +494,30 @@ function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
   );
 }
 
+function getItemRequestCategory(item: ItemRow, sections: RequestSection[]) {
+  const section = getRequestSectionForItem(item, sections);
+  return section?.baseCategory || normalizeProductCategory(item.categoria);
+}
+
+function getSelectedRequestCategories(
+  items: ItemRow[],
+  quantities: Record<string, string>,
+  sections: RequestSection[],
+) {
+  return Array.from(
+    new Set(
+      items
+        .filter((item) => hasRequestedQuantity(quantities[item.id]))
+        .map((item) => getItemRequestCategory(item, sections))
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getSingleCategoryRequestMessage(category: string) {
+  return `Esta requisicao ja tem itens de ${category}. Envie primeiro e depois faca outra requisicao para outra categoria.`;
+}
+
 function CriarRequisicaoPage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
@@ -719,7 +743,25 @@ function CriarRequisicaoPage() {
   }, [allowedProgramKeys, items, profile, searchQuery, selectedGroup]);
 
   const handleQuantityChange = (itemId: string, value: string) => {
-    setQuantities((current) => ({ ...current, [itemId]: value }));
+    const item = items.find((currentItem) => currentItem.id === itemId);
+    const nextQuantities = { ...quantities, [itemId]: value };
+    const categories = getSelectedRequestCategories(items, nextQuantities, sections);
+
+    if (item && hasRequestedQuantity(value) && categories.length > 1) {
+      const existingCategory = getSelectedRequestCategories(
+        items,
+        { ...quantities, [itemId]: "" },
+        sections,
+      )[0];
+
+      setError(
+        getSingleCategoryRequestMessage(existingCategory || getItemRequestCategory(item, sections)),
+      );
+      return;
+    }
+
+    if (error) setError(null);
+    setQuantities(nextQuantities);
   };
 
   const handleStockChange = (itemId: string, value: string) => {
@@ -777,16 +819,17 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    const requestCategories = Array.from(
-      new Set(
-        selectedItems
-          .map((item) => item.request_section?.trim())
-          .filter((value): value is string => Boolean(value)),
-      ),
-    );
+    const selectedBaseCategories = getSelectedRequestCategories(items, quantities, sections);
+    if (selectedBaseCategories.length > 1) {
+      setError(getSingleCategoryRequestMessage(selectedBaseCategories[0]));
+      setSaving(false);
+      return;
+    }
+
+    const requestCategory = selectedBaseCategories[0] || selectedGroup?.sections[0]?.baseCategory || null;
 
     const payload = {
-      categoria: requestCategories.join("; ") || selectedGroup?.label || null,
+      categoria: requestCategory,
       setor: profile.unidade_nome || profile.setor,
       solicitante: profile.nome,
       solicitante_cpf: profile.cpf?.trim() || null,
