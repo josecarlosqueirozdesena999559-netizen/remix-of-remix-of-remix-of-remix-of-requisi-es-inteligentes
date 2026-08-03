@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  getRequestOwnerCpf,
+  getRequestOwnerCpfVariants,
   getRequestOwnerLocation,
   type RequestOwnerProfile,
 } from "@/lib/request-owner";
@@ -49,11 +49,11 @@ async function fetchUserRequests(profile: RequestOwnerProfile) {
   const pageSize = 1000;
   let from = 0;
   const requests: Requisicao[] = [];
-  const cpf = getRequestOwnerCpf(profile);
+  const cpfVariants = getRequestOwnerCpfVariants(profile);
   const location = getRequestOwnerLocation(profile);
   const name = profile.nome?.trim() || "";
 
-  if (!cpf && !(name && location)) {
+  if (cpfVariants.length === 0 && !(name && location)) {
     return requests;
   }
 
@@ -65,8 +65,8 @@ async function fetchUserRequests(profile: RequestOwnerProfile) {
       .order("updated_at", { ascending: false })
       .range(from, from + pageSize - 1);
 
-    if (cpf) {
-      query = query.eq("solicitante_cpf", cpf);
+    if (cpfVariants.length > 0) {
+      query = query.in("solicitante_cpf", cpfVariants);
     } else {
       query = query.eq("solicitante", name).eq("setor", location);
     }

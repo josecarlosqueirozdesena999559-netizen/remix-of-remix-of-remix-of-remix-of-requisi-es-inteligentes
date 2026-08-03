@@ -13,7 +13,7 @@ import {
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import { formatOutputDate } from "@/lib/linked-output-date";
-import { getRequestOwnerCpf, getRequestOwnerLocation } from "@/lib/request-owner";
+import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
 import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
@@ -172,11 +172,11 @@ function MinhasAssinaturasPage() {
     try {
       const { profile } = await getCurrentUserProfile();
 
-      const cpf = getRequestOwnerCpf(profile);
+      const cpfVariants = getRequestOwnerCpfVariants(profile);
       const location = getRequestOwnerLocation(profile);
       const name = profile?.nome?.trim() || "";
 
-      if (!cpf && !(name && location)) {
+      if (cpfVariants.length === 0 && !(name && location)) {
         setRequests([]);
         return;
       }
@@ -202,12 +202,12 @@ function MinhasAssinaturasPage() {
         ])
         .order("updated_at", { ascending: false });
 
-      const scopedRequestsQuery = cpf
-        ? requestsQuery.eq("solicitante_cpf", cpf)
+      const scopedRequestsQuery = cpfVariants.length > 0
+        ? requestsQuery.in("solicitante_cpf", cpfVariants)
         : requestsQuery.eq("solicitante", name).eq("setor", location);
 
-      const scopedFallbackQuery = cpf
-        ? fallbackRequestsQuery.eq("solicitante_cpf", cpf)
+      const scopedFallbackQuery = cpfVariants.length > 0
+        ? fallbackRequestsQuery.in("solicitante_cpf", cpfVariants)
         : fallbackRequestsQuery.eq("solicitante", name).eq("setor", location);
 
       const [{ data: setoresData, error: setoresError }, requestsResult] = await Promise.all([

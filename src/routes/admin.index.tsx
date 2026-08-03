@@ -20,7 +20,7 @@ import {
   getRequestSignedAttachment,
 } from "@/lib/attachments";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
-import { getRequestOwnerCpf, getRequestOwnerLocation } from "@/lib/request-owner";
+import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
@@ -153,6 +153,7 @@ function AdminHome() {
   const [requisicoes, setRequisicoes] = useState<RequisicaoItem[]>([]);
   const [hasOutputPending, setHasOutputPending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // PDF Viewer Modal
   const [pdfModal, setPdfModal] = useState<PdfModalState>({
@@ -180,6 +181,7 @@ function AdminHome() {
 
     async function loadDashboardData() {
       setLoading(true);
+      setLoadError(null);
 
       try {
         const { profile: userProfile } = await getCurrentUserProfile();
@@ -205,12 +207,12 @@ function AdminHome() {
           .order("created_at", { ascending: true });
 
         if (!userProfile.is_admin) {
-          const cpf = getRequestOwnerCpf(userProfile);
+          const cpfVariants = getRequestOwnerCpfVariants(userProfile);
           const location = getRequestOwnerLocation(userProfile);
           const name = userProfile.nome?.trim() || "";
 
-          if (cpf) {
-            query = query.eq("solicitante_cpf", cpf);
+          if (cpfVariants.length > 0) {
+            query = query.in("solicitante_cpf", cpfVariants);
           } else if (name && location) {
             query = query.eq("solicitante", name).eq("setor", location);
           }
@@ -225,6 +227,12 @@ function AdminHome() {
 
         const outputPending = items.some((req) => req.status === "aguardando_assinatura_saida");
         setHasOutputPending(outputPending);
+      } catch (err) {
+        if (active) {
+          setRequisicoes([]);
+          setHasOutputPending(false);
+          setLoadError(err instanceof Error ? err.message : "Erro ao carregar informações do dashboard.");
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -584,6 +592,10 @@ function AdminHome() {
         <Card className="flex items-center gap-2 p-6 rounded-2xl border-slate-200 bg-white text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
           Carregando avisos...
+        </Card>
+      ) : loadError ? (
+        <Card className="p-6 rounded-2xl border-destructive/40 bg-destructive/10 text-destructive font-medium">
+          {loadError}
         </Card>
       ) : pendingRequests.length > 0 ? (
         <button

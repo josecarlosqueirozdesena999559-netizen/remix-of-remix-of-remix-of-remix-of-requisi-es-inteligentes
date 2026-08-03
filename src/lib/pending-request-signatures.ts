@@ -4,7 +4,7 @@ import {
   getRequestSignedAttachment,
 } from "@/lib/attachments";
 import {
-  getRequestOwnerCpf,
+  getRequestOwnerCpfVariants,
   getRequestOwnerLocation,
   type RequestOwnerProfile,
 } from "@/lib/request-owner";
@@ -56,7 +56,7 @@ export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) 
     return false;
   }
 
-  const cpf = getRequestOwnerCpf(profile);
+  const cpfVariants = getRequestOwnerCpfVariants(profile);
   const location = getRequestOwnerLocation(profile);
   const name = profile.nome?.trim() || "";
 
@@ -71,8 +71,8 @@ export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) 
     ])
     .order("updated_at", { ascending: false });
 
-  if (cpf) {
-    query = query.eq("solicitante_cpf", cpf);
+  if (cpfVariants.length > 0) {
+    query = query.in("solicitante_cpf", cpfVariants);
   } else if (name && location) {
     query = query.eq("solicitante", name).eq("setor", location);
   } else {
