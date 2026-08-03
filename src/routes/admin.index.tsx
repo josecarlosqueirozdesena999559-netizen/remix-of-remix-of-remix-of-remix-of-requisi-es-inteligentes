@@ -112,7 +112,7 @@ function getStatusBadge(status: string) {
     case "aguardando_assinatura_saida":
       return {
         label: "Aguardando Assinatura de Saída",
-        className: "bg-rose-100 text-rose-800 border border-rose-200 font-normal",
+        className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "aguardando_assinatura":
     case "aguardando_assinatura_requisicao":
@@ -123,7 +123,7 @@ function getStatusBadge(status: string) {
     case "correcao_requisicao":
       return {
         label: "Devolvida para Correção",
-        className: "bg-rose-100 text-rose-800 border border-rose-200 font-normal",
+        className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "recebido":
     case "requisicao_assinada":
@@ -409,9 +409,9 @@ function AdminHome() {
         : null;
 
       const payload = {
-        status: isSaidaReturn ? "aguardando_assinatura_saida" : "correcao_requisicao",
+        status: isSaidaReturn ? "requisicao_assinada" : "correcao_requisicao",
         signed_attachment: updatedSignedAttachment,
-        admin_attachment: isSaidaReturn ? devolucaoReq.admin_attachment : null,
+        admin_attachment: null,
         return_reason: reason,
         return_target: isSaidaReturn ? "saida" : "requisicao",
         returned_at: new Date().toISOString(),
@@ -429,9 +429,9 @@ function AdminHome() {
           item.id === devolucaoReq.id
             ? {
                 ...item,
-                status: isSaidaReturn ? "aguardando_assinatura_saida" : "correcao_requisicao",
+                status: isSaidaReturn ? "requisicao_assinada" : "correcao_requisicao",
                 signed_attachment: updatedSignedAttachment,
-                admin_attachment: isSaidaReturn ? devolucaoReq.admin_attachment : null,
+                admin_attachment: null,
               }
             : item,
         ),
@@ -441,7 +441,7 @@ function AdminHome() {
       setMotivoDevolucao("");
       alert(
         isSaidaReturn
-          ? "Documento de saída devolvido para a assinatura do solicitante!"
+          ? "Documento de saída devolvido para o admin anexar novamente!"
           : "Requisição devolvida para correção com sucesso!",
       );
     } catch (err) {
@@ -451,7 +451,6 @@ function AdminHome() {
     }
   };
 
-  const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
   const userName = profile?.nome || "Usuário";
 
   const currentMonthRequisicoes = requisicoes.filter((r) => isCurrentMonth(r.data, r.created_at));
@@ -468,6 +467,65 @@ function AdminHome() {
       "correcao_requisicao",
     ].includes(r.status);
   });
+
+  const correctionPendingRequests = pendingRequests.filter(
+    (req) => req.status === "correcao_requisicao",
+  );
+  const hasCorrectionPending = !isAdmin && correctionPendingRequests.length > 0;
+  const pendingTargetUrl = isAdmin
+    ? "/admin/solicitacoes"
+    : hasCorrectionPending && correctionPendingRequests.length === pendingRequests.length
+      ? `/admin/requisicao?requisicaoId=${correctionPendingRequests[0].id}`
+      : "/admin/minhas-assinaturas";
+
+  const pendingMetricLabel = isAdmin
+    ? "Solicitações Pendentes para Atendimento"
+    : hasCorrectionPending
+      ? "Pendentes de Correção"
+      : "Pendentes de Assinatura";
+
+  const getPendingBannerTitle = () => {
+    if (isAdmin) {
+      return `Você tem ${pendingRequests.length} ${
+        pendingRequests.length === 1
+          ? "solicitação pendente para atendimento"
+          : "solicitações pendentes para atendimento"
+      }`;
+    }
+
+    if (hasCorrectionPending) {
+      return correctionPendingRequests.length === 1
+        ? "Você tem requisição devolvida para correção"
+        : "Você tem requisições devolvidas para correção";
+    }
+
+    if (hasOutputPending) {
+      return "Você tem requisição aguardando assinatura de saída";
+    }
+
+    return "Atenção, você precisa assinar suas requisições para prosseguir";
+  };
+
+  const getPendingBannerDescription = () => {
+    if (isAdmin) {
+      return "Clique aqui para acessar e gerenciar as solicitações pendentes de atendimento";
+    }
+
+    if (hasCorrectionPending) {
+      return correctionPendingRequests.length === pendingRequests.length
+        ? "Clique aqui para corrigir e reenviar sua requisição"
+        : "Clique aqui para corrigir devoluções e assinar documentos pendentes";
+    }
+
+    return "Clique aqui para acessar suas assinaturas e assinar os documentos";
+  };
+
+  const getPendingActionLabel = (status: string) => {
+    if (isAdmin) return "Atender Requisição";
+    if (status === "correcao_requisicao") return "Corrigir Requisição";
+    if (status === "aguardando_assinatura_saida") return "Assinar Saída";
+    return "Ver Assinatura";
+  };
 
   const requestCodesMap = buildGlobalRequestCodes(
     requisicoes.map((r) => ({
@@ -486,7 +544,7 @@ function AdminHome() {
       {/* SAUDAÇÃO INICIAL */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          Olá, {userName} 👋
+          Olá, {userName}
         </h1>
         <p className="text-xs text-slate-500 mt-1 font-normal">
           Bem-vindo ao SOLICITE JÁ - Sistema Integrado de Gestão de Requisições.
@@ -503,7 +561,7 @@ function AdminHome() {
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
           <div className="text-xs font-normal text-slate-500">
-            {isAdmin ? "Solicitações Pendentes para Atendimento" : "Pendentes de Assinatura"}
+            {pendingMetricLabel}
           </div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
             {pendingRequests.length}
@@ -521,39 +579,33 @@ function AdminHome() {
         <button
           type="button"
           onClick={() => navigate({ to: pendingTargetUrl })}
-          className="group w-full text-left p-5 rounded-2xl border border-rose-200/90 bg-rose-50 text-rose-900 shadow-2xs hover:bg-rose-100/80 transition-all cursor-pointer space-y-3"
+          className="group w-full text-left p-5 rounded-2xl border border-orange-200/90 bg-orange-50 text-orange-900 shadow-2xs hover:bg-orange-100/80 transition-all cursor-pointer space-y-3"
         >
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-rose-800">
-                {isAdmin
-                  ? `Você tem ${pendingRequests.length} ${pendingRequests.length === 1 ? "solicitação pendente para atendimento" : "solicitações pendentes para atendimento"}`
-                  : hasOutputPending
-                    ? "Você tem requisição aguardando assinatura de saída"
-                    : "Atenção, você precisa assinar suas requisições para prosseguir"}
+              <h3 className="text-sm font-semibold text-orange-800">
+                {getPendingBannerTitle()}
               </h3>
-              <p className="text-xs text-rose-600 mt-0.5 font-normal">
-                {isAdmin
-                  ? "Clique aqui para acessar e gerenciar as solicitações pendentes de atendimento"
-                  : "Clique aqui para acessar suas assinaturas e assinar os documentos"}
+              <p className="text-xs text-orange-700 mt-0.5 font-normal">
+                {getPendingBannerDescription()}
               </p>
             </div>
           </div>
 
-          <div className="space-y-1.5 pt-2 border-t border-rose-200/60 text-xs font-normal">
+          <div className="space-y-1.5 pt-2 border-t border-orange-200/70 text-xs font-normal">
             {pendingRequests.map((req) => {
               const reqCode = requestCodesMap.get(req.id) || req.id.substring(0, 8);
               const date = formatDisplayDate(req.data, req.created_at);
               return (
                 <div
                   key={req.id}
-                  className="flex items-center justify-between text-rose-900 font-normal"
+                  className="flex items-center justify-between text-orange-900 font-normal"
                 >
                   <span>
                     Requisição {reqCode} - {date}
                   </span>
-                  <span className="underline text-rose-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                    {isAdmin ? "Atender Requisição" : "Ver Assinatura"}{" "}
+                  <span className="underline text-orange-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                    {getPendingActionLabel(req.status)}{" "}
                     <ChevronRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
@@ -685,10 +737,9 @@ function AdminHome() {
                     )}
 
                     {/* AÇÕES EXCLUSIVAS DE ADMIN: ANEXAR SAÍDA E DEVOLVER */}
-                    {isAdmin && (
+                    {isAdmin && isUserSigned && (
                       <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/60">
-                        {isUserSigned ? (
-                          <Button
+                        <Button
                             type="button"
                             size="sm"
                             className="flex-1 gap-1 rounded-xl text-[11px] font-normal bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
@@ -697,20 +748,15 @@ function AdminHome() {
                             <Send className="w-3 h-3" />
                             Anexar Saída
                           </Button>
-                        ) : (
-                          <span className="flex-1 text-[10px] text-amber-700 font-normal bg-amber-50 border border-amber-200/80 px-2 py-1 rounded-xl text-center">
-                            Aguardando Solicitante Assinar
-                          </span>
-                        )}
 
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="gap-1 rounded-xl text-[11px] font-normal border-rose-200 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                          className="gap-1 rounded-xl text-[11px] font-normal border-orange-200 text-orange-700 hover:bg-orange-50 cursor-pointer"
                           onClick={() => handleOpenDevolucao(req)}
                         >
-                          <Undo2 className="w-3 h-3 text-rose-500" />
+                          <Undo2 className="w-3 h-3 text-orange-500" />
                           Devolver
                         </Button>
                       </div>
@@ -893,7 +939,7 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Devolver para o Solicitante
+              Devolver requisição
             </DialogTitle>
           </DialogHeader>
 
@@ -906,24 +952,24 @@ function AdminHome() {
                   variant={devolucaoTarget === "requisicao" ? "default" : "outline"}
                   className={`text-xs rounded-xl ${
                     devolucaoTarget === "requisicao"
-                      ? "bg-rose-600 text-white hover:bg-rose-700"
+                      ? "bg-orange-500 text-white hover:bg-orange-600"
                       : "border-slate-200 text-slate-700"
                   }`}
                   onClick={() => setDevolucaoTarget("requisicao")}
                 >
-                  📝 Devolver Requisição
+                  Devolver Requisição
                 </Button>
                 <Button
                   type="button"
                   variant={devolucaoTarget === "saida" ? "default" : "outline"}
                   className={`text-xs rounded-xl ${
                     devolucaoTarget === "saida"
-                      ? "bg-rose-600 text-white hover:bg-rose-700"
+                      ? "bg-orange-500 text-white hover:bg-orange-600"
                       : "border-slate-200 text-slate-700"
                   }`}
                   onClick={() => setDevolucaoTarget("saida")}
                 >
-                  📦 Devolver Saída
+                  Devolver Saída
                 </Button>
               </div>
             </div>
@@ -937,7 +983,7 @@ function AdminHome() {
                 rows={3}
                 placeholder={
                   devolucaoTarget === "saida"
-                    ? "Descreva o motivo para o solicitante assinar a saída novamente..."
+                    ? "Descreva o motivo para o admin anexar a saída novamente..."
                     : "Descreva o motivo para que o solicitante possa corrigir a requisição..."
                 }
                 value={motivoDevolucao}
@@ -961,7 +1007,7 @@ function AdminHome() {
             <Button
               type="button"
               size="sm"
-              className="rounded-xl text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+              className="rounded-xl text-xs bg-orange-500 hover:bg-orange-600 text-white font-semibold"
               onClick={() => void handleConfirmDevolucao()}
               disabled={savingDevolucao}
             >

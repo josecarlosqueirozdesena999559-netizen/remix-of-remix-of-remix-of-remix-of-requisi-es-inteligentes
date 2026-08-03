@@ -25,3 +25,8 @@ export function formatOutputDate(value: string | null | undefined) {
   }
   return value;
 }
+
+export function omitLinkedOutputDateFields<T extends Record<string, unknown>>(payload: T) {
+  const { saida_vinculada_data: _saidaVinculadaData, ...rest } = payload;
+  return rest;
+}

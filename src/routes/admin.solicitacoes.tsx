@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  buildSignedAttachmentPayload,
   getAttachmentFile,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
@@ -35,6 +36,7 @@ import {
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import {
   isMissingLinkedOutputDateColumnError,
+  omitLinkedOutputDateFields,
   withLinkedOutputDateFallback,
 } from "@/lib/linked-output-date";
 import {
@@ -500,10 +502,10 @@ function Solicitacoes() {
           reviewMode === "excluir"
             ? "excluida_admin"
             : isSaidaReturn
-              ? "aguardando_assinatura_saida"
+              ? "requisicao_assinada"
               : "correcao_requisicao",
         signed_attachment: updatedSignedAttachment,
-        admin_attachment: isSaidaReturn ? reviewingRequest.admin_attachment : null,
+        admin_attachment: null,
         return_reason: reason,
         return_target: isSaidaReturn ? "saida" : "requisicao",
         returned_at: new Date().toISOString(),
@@ -532,7 +534,10 @@ function Solicitacoes() {
           removeAttachmentFileSafely(adminAttachment, "admin attachment"),
         ]);
       } else {
-        await removeAttachmentFileSafely(outputAttachment, "output attachment");
+        await Promise.all([
+          removeAttachmentFileSafely(outputAttachment, "output attachment"),
+          removeAttachmentFileSafely(adminAttachment, "admin attachment"),
+        ]);
       }
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
@@ -844,24 +849,24 @@ function Solicitacoes() {
                     variant={reviewTarget === "requisicao" ? "default" : "outline"}
                     className={`text-xs rounded-xl ${
                       reviewTarget === "requisicao"
-                        ? "bg-rose-600 text-white hover:bg-rose-700"
+                        ? "bg-orange-500 text-white hover:bg-orange-600"
                         : "border-slate-200 text-slate-700"
                     }`}
                     onClick={() => setReviewTarget("requisicao")}
                   >
-                    📝 Devolver Requisição
+                    Devolver Requisição
                   </Button>
                   <Button
                     type="button"
                     variant={reviewTarget === "saida" ? "default" : "outline"}
                     className={`text-xs rounded-xl ${
                       reviewTarget === "saida"
-                        ? "bg-rose-600 text-white hover:bg-rose-700"
+                        ? "bg-orange-500 text-white hover:bg-orange-600"
                         : "border-slate-200 text-slate-700"
                     }`}
                     onClick={() => setReviewTarget("saida")}
                   >
-                    📦 Devolver Saída
+                    Devolver Saída
                   </Button>
                 </div>
               </div>
