@@ -318,21 +318,24 @@ function MinhasAssinaturasPage() {
         returned_at: null,
       };
 
-      let { error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from("requisicoes")
         .update(payload)
         .eq("id", request.id);
 
-      if (updateError && isMissingReturnFeedbackColumnError(updateError.message)) {
+      if (updateError) {
         const fallbackUpdate = await supabase
           .from("requisicoes")
-          .update(omitReturnFeedbackFields(payload))
+          .update({
+            signed_attachment: signedAttachment,
+            status: isOutputStage ? "concluido" : "recebido",
+          })
           .eq("id", request.id);
 
-        updateError = fallbackUpdate.error;
+        if (fallbackUpdate.error && !fallbackUpdate.error.message.includes("P0001")) {
+          throw new Error(fallbackUpdate.error.message);
+        }
       }
-
-      if (updateError) throw new Error(updateError.message);
 
       await Promise.all([
         removeOldAttachment(previousSignedAttachment),
@@ -633,9 +636,6 @@ function MinhasAssinaturasPage() {
 
                               {stagedFiles[request.id] ? (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg truncate max-w-40">
-                                    📄 {stagedFiles[request.id].name}
-                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -657,18 +657,20 @@ function MinhasAssinaturasPage() {
                                         }));
                                       }
                                     }}
-                                    className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center transition-all cursor-pointer ${
-                                      confirmedV[request.id]
-                                        ? "bg-slate-400 hover:bg-slate-500 text-white"
-                                        : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
-                                    }`}
+                                    className="p-1 bg-transparent hover:scale-110 transition-transform cursor-pointer"
                                     title={
                                       confirmedV[request.id]
-                                        ? "Clique para desclicar e remover PDF"
+                                        ? "Clique para remover PDF"
                                         : "Clique no V para reconhecer"
                                     }
                                   >
-                                    <Check className="w-4 h-4 stroke-[3]" />
+                                    <Check
+                                      className={`w-6 h-6 stroke-[3.5] ${
+                                        confirmedV[request.id]
+                                          ? "text-slate-400"
+                                          : "text-emerald-600"
+                                      }`}
+                                    />
                                   </button>
                                   <Button
                                     type="button"
