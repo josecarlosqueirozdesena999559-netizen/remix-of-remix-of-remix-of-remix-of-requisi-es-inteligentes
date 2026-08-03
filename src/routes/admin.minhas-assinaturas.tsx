@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
+import { Check, CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import {
   type AttachmentFile,
 } from "@/lib/attachments";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
+import { formatOutputDate } from "@/lib/linked-output-date";
 import { getRequestOwnerCpf, getRequestOwnerLocation } from "@/lib/request-owner";
 import {
   isMissingReturnFeedbackColumnError,
@@ -31,6 +32,7 @@ const REQUEST_FLASH_KEY = "admin_request_whatsapp_flash";
 interface Requisicao {
   id: string;
   saida_codigo: string | null;
+  saida_vinculada_data?: string | null;
   setor: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
@@ -46,6 +48,9 @@ interface Requisicao {
 
 const baseSelect =
   "id,saida_codigo,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
+
+const baseSelectWithOutputDate =
+  "id,saida_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
 
 function getStageLabel(status: string) {
   if (status === "aguardando_assinatura_saida") return "Assinar saída";
@@ -132,6 +137,8 @@ function MinhasAssinaturasPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
+  const [confirmedV, setConfirmedV] = useState<Record<string, boolean>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -160,7 +167,7 @@ function MinhasAssinaturasPage() {
 
       const requestsQuery = supabase
         .from("requisicoes")
-        .select(`${baseSelect},return_reason,return_target`)
+        .select(`${baseSelectWithOutputDate},return_reason,return_target`)
         .in("status", [
           "aguardando_assinatura",
           "aguardando_assinatura_requisicao",
@@ -200,11 +207,16 @@ function MinhasAssinaturasPage() {
 
       const locationOptions = (setoresData ?? []) as LocationOption[];
 
-      if (error && isMissingReturnFeedbackColumnError(error.message)) {
+      if (
+        error &&
+        (isMissingReturnFeedbackColumnError(error.message) ||
+          error.message.includes("saida_vinculada_data"))
+      ) {
         const fallbackResult = await scopedFallbackQuery;
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,
+          saida_vinculada_data: null,
           return_reason: null,
           return_target: null,
         }));
@@ -326,21 +338,16 @@ function MinhasAssinaturasPage() {
       ]);
 
       const sentMessage = isOutputStage
-        ? "Saída assinada enviada."
-        : "Requisição assinada enviada.";
+        ? "Saída assinada enviada pro Almoxarifado."
+        : "Requisição assinada enviada pro Almoxarifado.";
       setMessage(sentMessage);
       try {
-        const notificationResult = await notifyRequestByWhatsApp({
+        await notifyRequestByWhatsApp({
           requestId: request.id,
           notificationType: "requestSigned",
         });
-
-        if (notificationResult.skipped) {
-          setMessage(`${sentMessage} ${notificationResult.reason || ""}`.trim());
-        }
       } catch (notificationError) {
-        console.error(notificationError);
-        setMessage(`${sentMessage} Não foi possível enviar a notificação por WhatsApp.`);
+        console.error("Erro ao notificar WhatsApp:", notificationError);
       }
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
@@ -365,7 +372,10 @@ function MinhasAssinaturasPage() {
   const handleDrop = (event: DragEvent<HTMLDivElement>, request: Requisicao) => {
     event.preventDefault();
     setDraggingId((current) => (current === request.id ? null : current));
-    void handleUpload(request, event.dataTransfer.files?.[0]);
+    const droppedFile = event.dataTransfer.files?.[0];
+    if (droppedFile) {
+      setStagedFiles((current) => ({ ...current, [request.id]: droppedFile }));
+    }
   };
 
   const handleDeletePendingRequest = async (request: Requisicao) => {
@@ -449,6 +459,7 @@ function MinhasAssinaturasPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
+                  <th className="px-3 py-2 text-left font-normal">Número / Nota</th>
                   <th className="px-3 py-2 text-left font-normal">Data</th>
                   <th className="px-3 py-2 text-left font-normal">Local</th>
                   <th className="px-3 py-2 text-left font-normal">Etapa</th>
@@ -462,9 +473,17 @@ function MinhasAssinaturasPage() {
                     getRequestSignedAttachment(request.signed_attachment, request.status),
                   );
                   const missingItems = !hasRequestItems(request);
+                  const requestDisplayCode = request.saida_codigo?.trim() || request.id.slice(0, 8);
+                  const displayDate =
+                    request.status === "aguardando_assinatura_saida"
+                      ? formatOutputDate(request.saida_vinculada_data) || request.data || "-"
+                      : request.data || "-";
                   return (
                     <tr key={request.id} className="border-t">
-                      <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-800">
+                        {requestDisplayCode}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{displayDate}</td>
                       <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
                       <td className="px-3 py-2 text-foreground">
                         <span className="inline-flex flex-wrap items-center gap-2">
@@ -591,30 +610,113 @@ function MinhasAssinaturasPage() {
                                 accept="application/pdf,.pdf"
                                 className="hidden"
                                 onChange={(event) => {
-                                  void handleUpload(request, event.target.files?.[0]);
+                                  const picked = event.target.files?.[0];
+                                  if (picked) {
+                                    setStagedFiles((current) => ({
+                                      ...current,
+                                      [request.id]: picked,
+                                    }));
+                                  }
                                   event.currentTarget.value = "";
                                 }}
                               />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className={`gap-2 ${draggingId === request.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                                disabled={uploadingId === request.id}
-                                onClick={() =>
-                                  document.getElementById(`assinado-${request.id}`)?.click()
-                                }
-                              >
-                                {uploadingId === request.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Upload className="h-4 w-4" />
-                                )}
-                                Enviar PDF
-                              </Button>
+
+                              {stagedFiles[request.id] ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg truncate max-w-40">
+                                    📄 {stagedFiles[request.id].name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (confirmedV[request.id]) {
+                                        setStagedFiles((curr) => {
+                                          const next = { ...curr };
+                                          delete next[request.id];
+                                          return next;
+                                        });
+                                        setConfirmedV((curr) => {
+                                          const next = { ...curr };
+                                          delete next[request.id];
+                                          return next;
+                                        });
+                                      } else {
+                                        setConfirmedV((curr) => ({
+                                          ...curr,
+                                          [request.id]: true,
+                                        }));
+                                      }
+                                    }}
+                                    className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center transition-all cursor-pointer ${
+                                      confirmedV[request.id]
+                                        ? "bg-slate-400 hover:bg-slate-500 text-white"
+                                        : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                                    }`}
+                                    title={
+                                      confirmedV[request.id]
+                                        ? "Clique para desclicar e remover PDF"
+                                        : "Clique no V para reconhecer"
+                                    }
+                                  >
+                                    <Check className="w-4 h-4 stroke-[3]" />
+                                  </button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
+                                    disabled={uploadingId === request.id || !confirmedV[request.id]}
+                                    onClick={() => {
+                                      const fileToUpload = stagedFiles[request.id];
+                                      if (fileToUpload) {
+                                        void handleUpload(request, fileToUpload);
+                                        setStagedFiles((curr) => {
+                                          const next = { ...curr };
+                                          delete next[request.id];
+                                          return next;
+                                        });
+                                        setConfirmedV((curr) => {
+                                          const next = { ...curr };
+                                          delete next[request.id];
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    {uploadingId === request.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Upload className="h-4 w-4" />
+                                    )}
+                                    Enviar ao Almoxarifado
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className={`gap-2 rounded-xl ${
+                                    draggingId === request.id
+                                      ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
+                                      : ""
+                                  }`}
+                                  disabled={uploadingId === request.id}
+                                  onClick={() =>
+                                    document.getElementById(`assinado-${request.id}`)?.click()
+                                  }
+                                >
+                                  {uploadingId === request.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Upload className="h-4 w-4" />
+                                  )}
+                                  Enviar PDF
+                                </Button>
+                              )}
+
                               {draggingId === request.id && (
                                 <span className="text-xs font-medium text-emerald-700">
-                                  Solte o PDF para enviar agora
+                                  Solte o PDF para reconhecer
                                 </span>
                               )}
                             </div>

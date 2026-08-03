@@ -854,23 +854,12 @@ function CriarRequisicaoPage() {
 
     if (savedRequestId) {
       try {
-        const notificationResult = await notifyRequestByWhatsApp({
+        await notifyRequestByWhatsApp({
           requestId: savedRequestId,
           notificationType: "requestCreated",
         });
-
-        if (notificationResult.skipped) {
-          sessionStorage.setItem(
-            REQUEST_FLASH_KEY,
-            `Requisição criada, mas o WhatsApp não foi enviado. ${notificationResult.reason || ""}`.trim(),
-          );
-        }
       } catch (err) {
-        console.error(err);
-        sessionStorage.setItem(
-          REQUEST_FLASH_KEY,
-          "Requisição criada, mas não foi possível enviar a notificação por WhatsApp.",
-        );
+        console.error("Erro ao enviar notificação WhatsApp:", err);
       }
     }
 

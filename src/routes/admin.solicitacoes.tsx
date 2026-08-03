@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Check,
   CheckCircle2,
   FileText,
   Loader2,
@@ -132,6 +133,8 @@ function Solicitacoes() {
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
   const [outputDates, setOutputDates] = useState<Record<string, string>>({});
+  const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
+  const [confirmedV, setConfirmedV] = useState<Record<string, boolean>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
@@ -309,23 +312,9 @@ function Solicitacoes() {
       return;
     }
 
-    const linkedOutputCode = (
-      outputCodes[request.id] ||
-      request.saida_vinculada_codigo ||
-      ""
-    ).trim();
-    if (!linkedOutputCode) {
-      setUploadMessage("Informe o código da saída vinculada antes de anexar o PDF.");
-      return;
-    }
-
-    const linkedOutputDate = (outputDates[request.id] || request.saida_vinculada_data || "").trim();
-    if (!linkedOutputDate) {
-      setUploadMessage("Informe a data da saída vinculada antes de anexar o PDF.");
-      return;
-    }
-
-    const safeName = sanitizeFileName(file.name) || "documento-saida.pdf";
+    const linkedOutputCode = outputCodes[request.id]?.trim() || null;
+    const linkedOutputDate = outputDates[request.id]?.trim() || getTodayInputDate();
+    const safeName = sanitizeFileName(file.name) || "saida.pdf";
     const storagePath = `saidas/${request.id}/${Date.now()}-${safeName}`;
     const attachment = {
       fileName: file.name,
@@ -360,6 +349,7 @@ function Solicitacoes() {
       const payload = {
         admin_attachment: attachment,
         saida_vinculada_codigo: linkedOutputCode,
+        saida_vinculada_data: linkedOutputDate,
         status: "aguardando_assinatura_saida",
         return_reason: null,
         return_target: null,
@@ -368,13 +358,13 @@ function Solicitacoes() {
 
       let { error: updateError } = await supabase
         .from("requisicoes")
-        .update({ ...payload, saida_vinculada_data: linkedOutputDate })
+        .update(payload)
         .eq("id", request.id);
 
       if (updateError && isMissingLinkedOutputDateColumnError(updateError.message)) {
         const fallbackUpdate = await supabase
           .from("requisicoes")
-          .update(payload)
+          .update(omitLinkedOutputDateFields(payload))
           .eq("id", request.id);
 
         updateError = fallbackUpdate.error;
@@ -393,23 +383,17 @@ function Solicitacoes() {
 
       await removeAttachmentFile(previousAdminAttachment);
 
-      let notificationMessage = "";
       try {
-        const notificationResult = await notifyRequestByWhatsApp({
+        await notifyRequestByWhatsApp({
           requestId: request.id,
           notificationType: "outputAttached",
         });
-
-        if (notificationResult.skipped) {
-          notificationMessage = ` ${notificationResult.reason}`;
-        }
       } catch (notificationError) {
-        console.error(notificationError);
-        notificationMessage = " Não foi possível enviar a notificação por WhatsApp.";
+        console.error("Erro ao enviar notificação por WhatsApp:", notificationError);
       }
 
       setData((current) => current?.filter((item) => item.id !== request.id));
-      setUploadMessage(`Documento de saída enviado.${notificationMessage}`);
+      setUploadMessage("Documento de saída enviado pro Almoxarifado com sucesso.");
     } catch (err) {
       setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de saída.");
     } finally {
@@ -431,7 +415,10 @@ function Solicitacoes() {
   const handleDrop = (event: DragEvent<HTMLDivElement>, request: Requisicao) => {
     event.preventDefault();
     setDraggingId((current) => (current === request.id ? null : current));
-    void handleOutputUpload(request, event.dataTransfer.files?.[0]);
+    const droppedFile = event.dataTransfer.files?.[0];
+    if (droppedFile) {
+      setStagedFiles((current) => ({ ...current, [request.id]: droppedFile }));
+    }
   };
 
   const openReview = (request: Requisicao, mode: "devolver" | "excluir") => {
@@ -546,31 +533,36 @@ function Solicitacoes() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <p className="text-sm text-muted-foreground">Início / Solicitações</p>
-        <h2 className="text-2xl text-foreground">Solicitações Pendentes</h2>
+        <h1 className="text-xl font-bold tracking-tight text-slate-800">Solicitações Pendentes</h1>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 p-6 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
-        </div>
+        <Card className="flex items-center gap-2 p-6 rounded-2xl border-slate-200 bg-white text-slate-500">
+          <Loader2 className="h-5 w-5 animate-spin text-emerald-600" /> Carregando solicitações...
+        </Card>
       ) : error ? (
-        <Card className="p-6 text-destructive">{error}</Card>
+        <Card className="p-6 rounded-2xl border-destructive/40 bg-destructive/10 text-destructive font-medium">
+          {error}
+        </Card>
       ) : grouped.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma solicitação pendente.</Card>
+        <Card className="p-6 rounded-2xl border-slate-200 bg-white text-slate-500">
+          Nenhuma solicitação pendente.
+        </Card>
       ) : selected ? (
-        <Card className="p-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
+        <Card className="p-5 rounded-2xl border-slate-200/80 bg-white shadow-xs">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">Local selecionado</p>
-              <p className="text-lg text-foreground">{selected}</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Local selecionado
+              </p>
+              <h3 className="text-lg font-bold text-slate-800">{selected}</h3>
             </div>
             <Button
               type="button"
               variant="outline"
-              className="gap-2"
+              className="gap-2 rounded-xl"
               onClick={() => setSelected(null)}
             >
               <ArrowLeft className="h-4 w-4" />
@@ -579,22 +571,22 @@ function Solicitacoes() {
           </div>
 
           {uploadMessage && (
-            <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+            <p className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
               {uploadMessage}
             </p>
           )}
 
-          <div className="rounded-md overflow-x-auto border">
+          <div className="rounded-xl overflow-x-auto border border-slate-200">
             <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-muted-foreground">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
                 <tr>
-                  <th className="px-3 py-2 text-left font-normal">Solicitante</th>
-                  <th className="px-3 py-2 text-left font-normal">Data</th>
-                  <th className="px-3 py-2 text-left font-normal">Número</th>
-                  <th className="px-3 py-2 text-left font-normal">Documento de saída</th>
-                  <th className="px-3 py-2 text-center font-normal">Impresso</th>
-                  <th className="px-3 py-2 text-right font-normal">PDF</th>
-                  <th className="px-3 py-2 text-right font-normal">Ações</th>
+                  <th className="px-4 py-3 text-left">Solicitante</th>
+                  <th className="px-4 py-3 text-left">Data</th>
+                  <th className="px-4 py-3 text-left">Número</th>
+                  <th className="px-4 py-3 text-left">Documento de saída</th>
+                  <th className="px-4 py-3 text-center">Impresso</th>
+                  <th className="px-4 py-3 text-right">PDF</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -661,28 +653,102 @@ function Solicitacoes() {
                             className="hidden"
                             disabled={uploadingId === r.id || missingItems}
                             onChange={(event) => {
-                              void handleOutputUpload(r, event.target.files?.[0]);
+                              const picked = event.target.files?.[0];
+                              if (picked) {
+                                setStagedFiles((current) => ({ ...current, [r.id]: picked }));
+                              }
                               event.currentTarget.value = "";
                             }}
                           />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className={`gap-2 ${draggingId === r.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
-                            disabled={uploadingId === r.id || missingItems}
-                            onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
-                          >
-                            {uploadingId === r.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Upload className="h-4 w-4" />
-                            )}
-                            {getAttachmentFile(r.admin_attachment) ? "Trocar" : "Enviar PDF"}
-                          </Button>
+
+                          {stagedFiles[r.id] ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg truncate max-w-44">
+                                📄 {stagedFiles[r.id].name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirmedV[r.id]) {
+                                    setStagedFiles((curr) => {
+                                      const next = { ...curr };
+                                      delete next[r.id];
+                                      return next;
+                                    });
+                                    setConfirmedV((curr) => {
+                                      const next = { ...curr };
+                                      delete next[r.id];
+                                      return next;
+                                    });
+                                  } else {
+                                    setConfirmedV((curr) => ({ ...curr, [r.id]: true }));
+                                  }
+                                }}
+                                className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center transition-all cursor-pointer ${
+                                  confirmedV[r.id]
+                                    ? "bg-slate-400 hover:bg-slate-500 text-white"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                                }`}
+                                title={
+                                  confirmedV[r.id]
+                                    ? "Clique para desclicar e remover PDF"
+                                    : "Clique no V para reconhecer"
+                                }
+                              >
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              </button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
+                                disabled={uploadingId === r.id || missingItems || !confirmedV[r.id]}
+                                onClick={() => {
+                                  const fileToUpload = stagedFiles[r.id];
+                                  if (fileToUpload) {
+                                    void handleOutputUpload(r, fileToUpload);
+                                    setStagedFiles((current) => {
+                                      const next = { ...current };
+                                      delete next[r.id];
+                                      return next;
+                                    });
+                                    setConfirmedV((current) => {
+                                      const next = { ...current };
+                                      delete next[r.id];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                title="Enviar pro Almoxarifado"
+                              >
+                                {uploadingId === r.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Upload className="h-4 w-4" />
+                                )}
+                                Enviar pro Almoxarifado
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className={`gap-2 rounded-xl ${draggingId === r.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
+                              disabled={uploadingId === r.id || missingItems}
+                              onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
+                            >
+                              {uploadingId === r.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Upload className="h-4 w-4" />
+                              )}
+                              {getAttachmentFile(r.admin_attachment) ? "Trocar PDF" : "Anexar PDF"}
+                            </Button>
+                          )}
+
                           {draggingId === r.id && (
-                            <span className="text-xs font-medium text-emerald-700">
-                              Solte o PDF para enviar agora
+                            <span className="text-xs font-semibold text-emerald-700">
+                              Solte o PDF para reconhecer
                             </span>
                           )}
                         </div>
