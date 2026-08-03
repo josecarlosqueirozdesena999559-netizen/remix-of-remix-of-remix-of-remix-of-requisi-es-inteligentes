@@ -515,7 +515,18 @@ function getSelectedRequestCategories(
 }
 
 function getSingleCategoryRequestMessage(category: string) {
-  return `Esta requisicao ja tem itens de ${category}. Envie primeiro e depois faca outra requisicao para outra categoria.`;
+  return `Esta requisição já tem itens de ${category}. Envie primeiro e depois faça outra requisição para outra categoria.`;
+}
+
+function getRequestSaveErrorMessage(error: { code?: string; message?: string } | null) {
+  const message = String(error?.message || "").trim();
+  if (!message) return "Não foi possível enviar a requisição. Tente novamente.";
+
+  if (error?.code === "P0001" || /database|databate|1000|P0001/i.test(message)) {
+    return "Não foi possível enviar a requisição. Confira se os itens pertencem a uma única categoria e tente novamente.";
+  }
+
+  return message;
 }
 
 function CriarRequisicaoPage() {
@@ -890,7 +901,7 @@ function CriarRequisicaoPage() {
     }
 
     if (requestError) {
-      setError(requestError.message);
+      setError(getRequestSaveErrorMessage(requestError));
       setSaving(false);
       return;
     }

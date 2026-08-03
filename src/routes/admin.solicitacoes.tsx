@@ -134,7 +134,6 @@ function Solicitacoes() {
   const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
   const [outputDates, setOutputDates] = useState<Record<string, string>>({});
   const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
-  const [confirmedV, setConfirmedV] = useState<Record<string, boolean>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
@@ -342,9 +341,7 @@ function Solicitacoes() {
         });
 
       if (uploadError) {
-        throw new Error(
-          "Limpe o banco de dados. O limite de memória RAM foi excedido ou troque seu plano.",
-        );
+        throw new Error(uploadError.message || "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.");
       }
 
       const payload = {
@@ -655,7 +652,7 @@ function Solicitacoes() {
                             aria-label="Data da saída"
                           />
                           {getAttachmentFile(r.admin_attachment) ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                            <span className="inline-flex items-center gap-1 text-xs text-orange-700">
                               <CheckCircle2 className="h-4 w-4" />
                               Enviado
                             </span>
@@ -682,77 +679,40 @@ function Solicitacoes() {
 
                           {stagedFiles[r.id] ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg truncate max-w-44">
-                                📄 {stagedFiles[r.id].name}
+                              <span className="max-w-44 truncate rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800">
+                                PDF: {stagedFiles[r.id].name}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (confirmedV[r.id]) {
-                                    setStagedFiles((curr) => {
-                                      const next = { ...curr };
-                                      delete next[r.id];
-                                      return next;
-                                    });
-                                    setConfirmedV((curr) => {
-                                      const next = { ...curr };
-                                      delete next[r.id];
-                                      return next;
-                                    });
-                                  } else {
-                                    setConfirmedV((curr) => ({ ...curr, [r.id]: true }));
-                                  }
-                                }}
-                                className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center transition-all cursor-pointer ${
-                                  confirmedV[r.id]
-                                    ? "bg-slate-400 hover:bg-slate-500 text-white"
-                                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
-                                }`}
-                                title={
-                                  confirmedV[r.id]
-                                    ? "Clique para desclicar e remover PDF"
-                                    : "Clique no V para reconhecer"
-                                }
-                              >
-                                <Check className="w-4 h-4 stroke-[3]" />
-                              </button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
-                                disabled={uploadingId === r.id || missingItems || !confirmedV[r.id]}
+                                disabled={uploadingId === r.id || missingItems}
                                 onClick={() => {
                                   const fileToUpload = stagedFiles[r.id];
-                                  if (fileToUpload) {
-                                    void handleOutputUpload(r, fileToUpload);
+                                  if (!fileToUpload) return;
+
+                                  void handleOutputUpload(r, fileToUpload).finally(() => {
                                     setStagedFiles((current) => {
                                       const next = { ...current };
                                       delete next[r.id];
                                       return next;
                                     });
-                                    setConfirmedV((current) => {
-                                      const next = { ...current };
-                                      delete next[r.id];
-                                      return next;
-                                    });
-                                  }
+                                  });
                                 }}
-                                title="Enviar pro Almoxarifado"
+                                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-orange-500 text-white shadow-md shadow-orange-500/20 transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                title="Enviar ao Almoxarifado"
                               >
                                 {uploadingId === r.id ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <Upload className="h-4 w-4" />
+                                  <Check className="h-4 w-4 stroke-[3]" />
                                 )}
-                                Enviar pro Almoxarifado
-                              </Button>
+                              </button>
                             </div>
                           ) : (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className={`gap-2 rounded-xl ${draggingId === r.id ? "border-emerald-500 bg-emerald-100 text-emerald-900 hover:bg-emerald-100" : ""}`}
+                              className={`gap-2 rounded-xl ${draggingId === r.id ? "border-orange-500 bg-orange-100 text-orange-900 hover:bg-orange-100" : ""}`}
                               disabled={uploadingId === r.id || missingItems}
                               onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
                             >
@@ -766,7 +726,7 @@ function Solicitacoes() {
                           )}
 
                           {draggingId === r.id && (
-                            <span className="text-xs font-semibold text-emerald-700">
+                            <span className="text-xs font-semibold text-orange-700">
                               Solte o PDF para reconhecer
                             </span>
                           )}
