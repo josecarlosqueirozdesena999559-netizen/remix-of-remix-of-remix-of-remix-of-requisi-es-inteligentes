@@ -156,6 +156,25 @@ function getStatusBadge(status: string) {
   }
 }
 
+function hasAdminOutputDocument(request: RequisicaoItem) {
+  return Boolean(
+    getOutputSignedAttachment(request.signed_attachment, request.status) ||
+      getAttachmentFile(request.admin_attachment),
+  );
+}
+
+function hasAdminRequestSigned(request: RequisicaoItem) {
+  return Boolean(getRequestSignedAttachment(request.signed_attachment, request.status));
+}
+
+function needsAdminOutput(request: RequisicaoItem) {
+  return (
+    !hasAdminOutputDocument(request) &&
+    (request.status === "recebido" ||
+      request.status === "requisicao_assinada" ||
+      hasAdminRequestSigned(request))
+  );
+}
 function AdminHome() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
