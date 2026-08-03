@@ -34,15 +34,35 @@ function isStaleChunkError(error: unknown) {
   return STALE_CHUNK_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 
+async function clearBrowserCaches() {
+  if (typeof window === "undefined") return;
+
+  if ("caches" in window) {
+    const keys = await window.caches.keys();
+    await Promise.all(keys.map((key) => window.caches.delete(key)));
+  }
+
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  }
+}
+
+function reloadWithCacheBust() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("v", String(Date.now()));
+  window.location.replace(url.toString());
+}
+
 function reloadOnceForFreshAssets() {
   if (typeof window === "undefined") return false;
 
   const now = Date.now();
   const previousReload = Number(window.sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY) ?? 0);
-  if (now - previousReload < 30_000) return false;
+  if (now - previousReload < 10_000) return false;
 
   window.sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(now));
-  window.location.reload();
+  void clearBrowserCaches().finally(reloadWithCacheBust);
   return true;
 }
 
@@ -84,7 +104,7 @@ function NotFoundComponent() {
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            Ir para o inicio
           </Link>
         </div>
       </div>
@@ -111,14 +131,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {staleChunkError
-            ? "Uma nova versao foi publicada. Recarregue para baixar os arquivos atualizados."
+            ? "Uma nova versao foi publicada. Estamos limpando os arquivos antigos e recarregando o sistema."
             : "Something went wrong on our end. You can try refreshing or head back home."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
               if (staleChunkError) {
-                window.location.reload();
+                void clearBrowserCaches().finally(reloadWithCacheBust);
                 return;
               }
 
@@ -127,13 +147,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            Recarregar agora
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Go home
+            Ir para o inicio
           </a>
         </div>
       </div>
