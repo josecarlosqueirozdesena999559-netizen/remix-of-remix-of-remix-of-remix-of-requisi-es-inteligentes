@@ -911,22 +911,22 @@ function CriarRequisicaoPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 border-b border-slate-200/80 pb-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">Usuário / Requisição</p>
-          <h2 className="text-2xl text-foreground">
+          <p className="mt-0.5 text-xs text-slate-500">Selecione uma categoria por envio</p>
+          <h1 className="text-xl font-bold tracking-tight text-slate-800">
             {editingRequestId
               ? isCorrectionEdit
                 ? "Corrigir requisição"
                 : "Editar requisição"
               : "Criar requisição"}
-          </h2>
+          </h1>
         </div>
         <Button
           type="button"
           variant="outline"
-          className="gap-2"
+          className="gap-2 rounded-xl"
           disabled={saving}
           onClick={() => navigate({ to: returnPath })}
         >
@@ -936,28 +936,28 @@ function CriarRequisicaoPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 p-6 text-muted-foreground">
+        <Card className="flex items-center gap-2 rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" />
           Carregando...
-        </div>
+        </Card>
       ) : error ? (
-        <Card className="p-6 border border-destructive/40 bg-destructive/10 text-destructive font-medium">
+        <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 font-medium text-destructive">
           {error}
         </Card>
       ) : categories.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">
+        <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
           Nenhum tipo de material liberado para este usuário.
         </Card>
       ) : (
         <>
           {returnReason && (
-            <Card className="border-amber-200 bg-amber-50 p-4 text-amber-950">
+            <Card className="rounded-2xl border-amber-200 bg-amber-50 p-4 text-amber-950">
               <p className="text-sm font-medium">Motivo da devolução</p>
               <p className="mt-1 text-sm">{returnReason}</p>
             </Card>
           )}
 
-          <Card className="p-4">
+          <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex flex-wrap gap-2">
               {sectionGroups.map((group) => (
                 <Button
@@ -975,14 +975,14 @@ function CriarRequisicaoPage() {
             </div>
           </Card>
 
-          <Card className="p-4">
+          <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="relative max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Pesquisar item, unidade ou subcategoria..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="pl-9 pr-10"
+                className="rounded-xl pl-9 pr-10"
               />
               {searchQuery && (
                 <button
@@ -997,36 +997,36 @@ function CriarRequisicaoPage() {
             </div>
           </Card>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             {visibleSectionTables.map(({ section, items: sectionItems }) => (
-              <Card key={section.id} className="p-4">
-                <h3 className="mb-3 text-lg text-foreground">{section.label}</h3>
-                <div className="rounded-md overflow-x-auto border">
+              <Card key={section.id} className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700">{section.label}</h3>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-sm">
-                    <thead className="bg-muted/40 text-muted-foreground">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       <tr>
-                        <th className="px-3 py-2 text-left font-normal">Item</th>
-                        <th className="px-3 py-2 text-left font-normal">Unidade</th>
-                        <th className="px-3 py-2 text-left font-normal">Quanto tem</th>
-                        <th className="px-3 py-2 text-left font-normal">Quanto precisa</th>
+                        <th className="px-4 py-3 text-left">Item</th>
+                        <th className="px-4 py-3 text-left">Unidade</th>
+                        <th className="px-4 py-3 text-left">Quanto tem</th>
+                        <th className="px-4 py-3 text-left">Quanto precisa</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sectionItems.map((item) => (
                         <tr key={item.id} className="border-t">
-                          <td className="px-3 py-2 text-foreground">{item.nome}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{item.unidade}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-4 py-3 text-slate-800">{item.nome}</td>
+                          <td className="px-4 py-3 text-slate-500">{item.unidade}</td>
+                          <td className="px-4 py-3">
                             <Input
                               type="number"
                               min="0"
                               value={stocks[item.id] ?? ""}
                               onChange={(event) => handleStockChange(item.id, event.target.value)}
-                              className="w-28"
+                              className="h-9 w-28 rounded-xl"
                               placeholder="0"
                             />
                           </td>
-                          <td className="px-3 py-2">
+                          <td className="px-4 py-3">
                             <Input
                               type="number"
                               min="0"
@@ -1034,7 +1034,7 @@ function CriarRequisicaoPage() {
                               onChange={(event) =>
                                 handleQuantityChange(item.id, event.target.value)
                               }
-                              className="w-28"
+                              className="h-9 w-28 rounded-xl"
                               placeholder="0"
                             />
                           </td>
@@ -1057,13 +1057,18 @@ function CriarRequisicaoPage() {
           </div>
 
           {error && (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+            <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
               {error}
             </p>
           )}
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className="gap-2" disabled={saving} onClick={handleSubmit}>
+            <Button
+              type="button"
+              className="gap-2 rounded-xl bg-emerald-600 font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700"
+              disabled={saving}
+              onClick={handleSubmit}
+            >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {editingRequestId
                 ? isCorrectionEdit
