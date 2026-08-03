@@ -32,6 +32,8 @@ const REQUISICOES_BUCKET = "requisicoes";
 type RequisicaoItem = {
   id: string;
   saida_codigo: string | null;
+  saida_vinculada_codigo?: string | null;
+  saida_vinculada_data?: string | null;
   solicitante?: string | null;
   solicitante_cpf?: string | null;
   setor?: string | null;
@@ -198,7 +200,7 @@ function AdminHome() {
         let query = supabase
           .from("requisicoes")
           .select(
-            "id,saida_codigo,solicitante,solicitante_cpf,setor,data,created_at,status,signed_attachment,admin_attachment",
+            "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,solicitante,solicitante_cpf,setor,data,created_at,status,signed_attachment,admin_attachment",
           )
           .order("created_at", { ascending: true });
 
@@ -269,7 +271,7 @@ function AdminHome() {
   // ADMIN ACTION: Abrir Modal Anexar Saída
   const handleOpenAnexarSaida = (req: RequisicaoItem) => {
     setAttachingReq(req);
-    setSaidaCodigoInput(req.saida_codigo || "");
+    setSaidaCodigoInput(req.saida_vinculada_codigo || "");
     setSaidaDataInput(getTodayInputDate());
     setStagedPdfFile(null);
   };
@@ -317,7 +319,8 @@ function AdminHome() {
 
       const payload = {
         admin_attachment: attachment,
-        saida_codigo: linkedCode,
+        saida_vinculada_codigo: linkedCode,
+        saida_vinculada_data: linkedDate,
         status: "aguardando_assinatura_saida",
         return_reason: null,
         return_target: null,
@@ -336,7 +339,8 @@ function AdminHome() {
           item.id === attachingReq.id
             ? {
                 ...item,
-                saida_codigo: linkedCode,
+                saida_vinculada_codigo: linkedCode,
+                saida_vinculada_data: linkedDate,
                 status: "aguardando_assinatura_saida",
                 admin_attachment: attachment,
               }
@@ -532,8 +536,18 @@ function AdminHome() {
     })),
   );
 
-  // EXIBIR APENAS REQUISIÇÕES DO MÊS ATUAL NA LISTA
-  const sortedRequisicoesForDisplay = [...currentMonthRequisicoes].reverse();
+  const signedByUserStatuses = new Set([
+    "recebido",
+    "requisicao_assinada",
+    "aguardando_assinatura_saida",
+    "concluido",
+  ]);
+
+  // Mostrar apenas requisições já enviadas/assinadas; devolvidas ficam no aviso de pendência.
+  const requisicoesForDisplay = currentMonthRequisicoes.filter((req) =>
+    signedByUserStatuses.has(req.status),
+  );
+  const sortedRequisicoesForDisplay = [...requisicoesForDisplay].reverse();
 
   return (
     <div className="space-y-6">
@@ -651,10 +665,8 @@ function AdminHome() {
               const dateDisplay = formatDisplayDate(req.data, req.created_at);
               const reqCode = requestCodesMap.get(req.id) || req.id.substring(0, 8);
 
-              const showSaidaCode =
-                req.saida_codigo &&
-                req.status !== "aguardando_assinatura" &&
-                req.status !== "aguardando_assinatura_requisicao";
+              const linkedOutputCode = req.saida_vinculada_codigo?.trim() || "";
+              const showSaidaCode = Boolean(linkedOutputCode);
 
               const reqAttachment =
                 getRequestSignedAttachment(req.signed_attachment, req.status) ||
@@ -681,7 +693,7 @@ function AdminHome() {
                       </span>
                       {showSaidaCode && (
                         <span className="text-xs font-normal text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                          Saída {req.saida_codigo}
+                          Saída {linkedOutputCode}
                         </span>
                       )}
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.className}`}>
