@@ -57,8 +57,8 @@ function Index() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="flex flex-col items-center gap-3 text-primary">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <div className="flex flex-col items-center gap-3 text-emerald-700">
           <Loader2 className="h-10 w-10 animate-spin" />
           <p className="text-sm">Carregando...</p>
         </div>
@@ -67,21 +67,21 @@ function Index() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-sidebar px-4 py-8">
-      <div className="absolute -left-24 top-[-8rem] h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
-      <div className="absolute -bottom-32 right-[-5rem] h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
-      <Card className="relative w-full max-w-sm border-sidebar-border/20 bg-card p-7 shadow-2xl shadow-black/30">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8 text-slate-900">
+      <div className="absolute inset-x-0 top-0 h-48 bg-emerald-700" />
+      <div className="absolute inset-x-0 top-48 h-px bg-emerald-900/10" />
+      <Card className="relative w-full max-w-sm rounded-lg border-slate-200 bg-white p-7 shadow-xl shadow-slate-900/10">
         <div className="mb-7 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-sm">
             <Warehouse className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Almoxarifado</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Acesse o painel de requisições</p>
+          <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
+          <p className="mt-1 text-sm text-slate-500">Acesse o painel de requisições</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="nome" className="text-foreground">
+            <Label htmlFor="nome" className="text-slate-700">
               Usuário
             </Label>
             <Input
@@ -89,7 +89,7 @@ function Index() {
               type="text"
               autoComplete="username"
               placeholder="Usuário"
-              className="h-11 bg-muted/60 focus-visible:ring-primary"
+              className="h-11 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
               required
@@ -97,7 +97,7 @@ function Index() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="senha" className="text-foreground">
+            <Label htmlFor="senha" className="text-slate-700">
               Senha
             </Label>
             <Input
@@ -105,7 +105,7 @@ function Index() {
               type="password"
               autoComplete="current-password"
               placeholder="Senha"
-              className="h-11 bg-muted/60 focus-visible:ring-primary"
+              className="h-11 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
@@ -118,7 +118,10 @@ function Index() {
             </p>
           )}
 
-          <Button type="submit" className="h-11 w-full gap-2 text-sm font-semibold">
+          <Button
+            type="submit"
+            className="h-11 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800"
+          >
             <LockKeyhole className="h-4 w-4" />
             Entrar
           </Button>
