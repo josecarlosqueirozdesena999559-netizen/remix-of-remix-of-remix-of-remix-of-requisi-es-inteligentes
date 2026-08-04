@@ -141,7 +141,7 @@ function getStatusBadge(status: string) {
   switch (status) {
     case "aguardando_assinatura_saida":
       return {
-        label: "Aguardando Assinatura de RequisiÃ§Ã£o SIG",
+        label: "Aguardando Assinatura de Requisição SIG",
         className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "aguardando_assinatura":
@@ -152,18 +152,18 @@ function getStatusBadge(status: string) {
       };
     case "correcao_requisicao":
       return {
-        label: "Devolvida para CorreÃ§Ã£o",
+        label: "Devolvida para Correção",
         className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "recebido":
     case "requisicao_assinada":
       return {
-        label: "Enviada / Em SeparaÃ§Ã£o",
+        label: "Enviada / Em Separação",
         className: "bg-emerald-100 text-emerald-800 border border-emerald-200 font-normal",
       };
     case "concluido":
       return {
-        label: "ConcluÃ­do",
+        label: "Concluído",
         className: "bg-blue-100 text-blue-800 border border-blue-200 font-normal",
       };
     default:
@@ -209,7 +209,7 @@ function AdminHome() {
     title: "",
   });
 
-  // Admin Actions State (Anexar RequisiÃ§Ã£o SIG & Devolver)
+  // Admin Actions State (Anexar Requisição SIG & Devolver)
   const [attachingReq, setAttachingReq] = useState<RequisicaoItem | null>(null);
   const [saidaCodigoInput, setSaidaCodigoInput] = useState("");
   const [saidaDataInput, setSaidaDataInput] = useState(getTodayInputDate());
@@ -289,7 +289,7 @@ function AdminHome() {
         if (active) {
           setRequisicoes([]);
           setHasOutputPending(false);
-          setLoadError(err instanceof Error ? err.message : "Erro ao carregar informaÃ§Ãµes do dashboard.");
+          setLoadError(err instanceof Error ? err.message : "Erro ao carregar informações do dashboard.");
         }
       } finally {
         if (active) setLoading(false);
@@ -316,7 +316,7 @@ function AdminHome() {
     title: string,
   ) => {
     if (!attachment?.storageBucket || !attachment?.storagePath) {
-      alert("Nenhum PDF disponÃ­vel para visualizaÃ§Ã£o.");
+      alert("Nenhum PDF disponível para visualização.");
       return;
     }
 
@@ -334,7 +334,7 @@ function AdminHome() {
     }
   };
 
-  // ADMIN ACTION: Abrir Modal Anexar RequisiÃ§Ã£o SIG
+  // ADMIN ACTION: Abrir Modal Anexar Requisição SIG
   const handleOpenAnexarSaida = (req: RequisicaoItem) => {
     setAttachingReq(req);
     setSaidaCodigoInput(req.saida_vinculada_codigo || "");
@@ -345,7 +345,7 @@ function AdminHome() {
   const handleConfirmAnexarSaida = async () => {
     if (!attachingReq) return;
     if (stagedPdfFiles.length === 0) {
-      alert("Selecione ou arraste os PDFs da RequisiÃ§Ã£o SIG antes de enviar.");
+      alert("Selecione ou arraste os PDFs da Requisição SIG antes de enviar.");
       return;
     }
 
@@ -431,9 +431,9 @@ function AdminHome() {
       setAttachingReq(null);
       setStagedPdfFiles([]);
       setSaidaCodigoInput("");
-      alert("Documento de RequisiÃ§Ã£o SIG enviado com sucesso!");
+      alert("Documento de Requisição SIG enviado com sucesso!");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao enviar documento de RequisiÃ§Ã£o SIG.");
+      alert(err instanceof Error ? err.message : "Erro ao enviar documento de Requisição SIG.");
     } finally {
       setUploadingSaida(false);
     }
@@ -469,17 +469,17 @@ function AdminHome() {
   // ADMIN ACTION: Open Devolver Modal
   const handleOpenDevolucao = (req: RequisicaoItem) => {
     setDevolucaoReq(req);
-    // Se a requisiÃ§Ã£o jÃ¡ estiver em estÃ¡gio de saÃ­da ou tiver admin_attachment, padroniza opÃ§Ã£o como saÃ­da
+    // Se a requisição já estiver em estágio de saída ou tiver admin_attachment, padroniza opção como saída
     setDevolucaoTarget(req.status === "aguardando_assinatura_saida" ? "saida" : "requisicao");
     setMotivoDevolucao("");
   };
 
-  // ADMIN ACTION: Devolver com Motivo (RequisiÃ§Ã£o vs SaÃ­da)
+  // ADMIN ACTION: Devolver com Motivo (Requisição vs Saída)
   const handleConfirmDevolucao = async () => {
     if (!devolucaoReq) return;
     const reason = motivoDevolucao.trim();
     if (!reason) {
-      alert("Por favor, informe o motivo da devoluÃ§Ã£o.");
+      alert("Por favor, informe o motivo da devolução.");
       return;
     }
 
@@ -525,17 +525,17 @@ function AdminHome() {
       setMotivoDevolucao("");
       alert(
         isSaidaReturn
-          ? "Documento de saÃ­da devolvido para o admin anexar novamente!"
-          : "RequisiÃ§Ã£o devolvida para correÃ§Ã£o com sucesso!",
+          ? "Documento de saída devolvido para o admin anexar novamente!"
+          : "Requisição devolvida para correção com sucesso!",
       );
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao devolver requisiÃ§Ã£o.");
+      alert(err instanceof Error ? err.message : "Erro ao devolver requisição.");
     } finally {
       setSavingDevolucao(false);
     }
   };
 
-  const userName = profile?.nome || "UsuÃ¡rio";
+  const userName = profile?.nome || "Usuário";
 
   const currentMonthRequisicoes = requisicoes.filter((r) => isCurrentMonth(r.data, r.created_at));
   const monthlyCount = currentMonthRequisicoes.length;
@@ -559,51 +559,51 @@ function AdminHome() {
   const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
 
   const pendingMetricLabel = isAdmin
-    ? "SolicitaÃ§Ãµes Pendentes para Atendimento"
+    ? "Solicitações Pendentes para Atendimento"
     : hasCorrectionPending
-      ? "Pendentes de CorreÃ§Ã£o"
+      ? "Pendentes de Correção"
       : "Pendentes de Assinatura";
 
   const getPendingBannerTitle = () => {
     if (isAdmin) {
-      return `VocÃª tem ${pendingRequests.length} ${
+      return `Você tem ${pendingRequests.length} ${
         pendingRequests.length === 1
-          ? "solicitaÃ§Ã£o pendente para atendimento"
-          : "solicitaÃ§Ãµes pendentes para atendimento"
+          ? "solicitação pendente para atendimento"
+          : "solicitações pendentes para atendimento"
       }`;
     }
 
     if (hasCorrectionPending) {
       return correctionPendingRequests.length === 1
-        ? "VocÃª tem requisiÃ§Ã£o devolvida para correÃ§Ã£o"
-        : "VocÃª tem requisiÃ§Ãµes devolvidas para correÃ§Ã£o";
+        ? "Você tem requisição devolvida para correção"
+        : "Você tem requisições devolvidas para correção";
     }
 
     if (hasOutputPending) {
-      return "VocÃª tem requisiÃ§Ã£o aguardando assinatura de saÃ­da";
+      return "Você tem requisição aguardando assinatura de saída";
     }
 
-    return "AtenÃ§Ã£o, vocÃª precisa assinar suas requisiÃ§Ãµes para prosseguir";
+    return "Atenção, você precisa assinar suas requisições para prosseguir";
   };
 
   const getPendingBannerDescription = () => {
     if (isAdmin) {
-      return "Clique aqui para acessar e gerenciar as solicitaÃ§Ãµes pendentes de atendimento";
+      return "Clique aqui para acessar e gerenciar as solicitações pendentes de atendimento";
     }
 
     if (hasCorrectionPending) {
       return correctionPendingRequests.length === pendingRequests.length
-        ? "Clique aqui para abrir as opÃ§Ãµes de editar ou excluir"
-        : "Clique aqui para corrigir devoluÃ§Ãµes e assinar documentos pendentes";
+        ? "Clique aqui para abrir as opções de editar ou excluir"
+        : "Clique aqui para corrigir devoluções e assinar documentos pendentes";
     }
 
     return "Clique aqui para acessar suas assinaturas e assinar os documentos";
   };
 
   const getPendingActionLabel = (status: string) => {
-    if (isAdmin) return "Atender RequisiÃ§Ã£o";
-    if (status === "correcao_requisicao") return "Corrigir RequisiÃ§Ã£o";
-    if (status === "aguardando_assinatura_saida") return "Assinar RequisiÃ§Ã£o SIG";
+    if (isAdmin) return "Atender Requisição";
+    if (status === "correcao_requisicao") return "Corrigir Requisição";
+    if (status === "aguardando_assinatura_saida") return "Assinar Requisição SIG";
     return "Ver Assinatura";
   };
 
@@ -627,8 +627,8 @@ function AdminHome() {
   const pendingSignatureGroups = requisicoes
     .filter((req) => pendingSignatureStatuses.has(req.status))
     .reduce<PendingSignatureGroup[]>((groups, req) => {
-      const solicitante = req.solicitante?.trim() || "UsuÃ¡rio sem nome";
-      const setor = req.setor?.trim() || "Setor nÃ£o informado";
+      const solicitante = req.solicitante?.trim() || "Usuário sem nome";
+      const setor = req.setor?.trim() || "Setor não informado";
       const key = `${solicitante.toLowerCase()}::${setor.toLowerCase()}`;
       const existingGroup = groups.find((group) => group.key === key);
 
@@ -655,9 +655,9 @@ function AdminHome() {
   });
 
   const getSignatureStatusLabel = (status: string) => {
-    if (status === "aguardando_assinatura_saida") return "Assinatura da RequisiÃ§Ã£o SIG";
-    if (status === "correcao_requisicao") return "CorreÃ§Ã£o pendente";
-    return "Assinatura da RequisiÃ§Ã£o";
+    if (status === "aguardando_assinatura_saida") return "Assinatura da Requisição SIG";
+    if (status === "correcao_requisicao") return "Correção pendente";
+    return "Assinatura da Requisição";
   };
 
   const handleSignatureGroupDrop = (targetKey: string) => {
@@ -684,20 +684,20 @@ function AdminHome() {
 
   return (
     <div className="space-y-6">
-      {/* SAUDAÃ‡ÃƒÆ’O INICIAL */}
+      {/* SAUDAÇÃO INICIAL */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          OlÃ¡, {userName}
+          Olá, {userName}
         </h1>
         <p className="text-xs text-slate-500 mt-1 font-normal">
-          Bem-vindo ao SOLICITE JÃ - Sistema Integrado de GestÃ£o de RequisiÃ§Ãµes.
+          Bem-vindo ao SOLICITE JÁ - Sistema Integrado de Gestão de Requisições.
         </p>
       </div>
 
-      {/* CARDS DE MÃ‰TRICAS EM BRANCO (MÃŠS ATUAL) */}
+      {/* CARDS DE MÉTRICAS EM BRANCO (MÊS ATUAL) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="text-xs font-normal text-slate-500">Total de RequisiÃ§Ãµes (MÃªs Atual)</div>
+          <div className="text-xs font-normal text-slate-500">Total de Requisições (Mês Atual)</div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
             {monthlyCount}
           </div>
@@ -712,7 +712,7 @@ function AdminHome() {
         </div>
       </div>
 
-      {/* BANNER DE AVISO (VERMELHO CLARO SE HOUVER PENDÃŠNCIAS COM NÃšMERO E DATA) */}
+      {/* BANNER DE AVISO (VERMELHO CLARO SE HOUVER PENDÊNCIAS COM NÚMERO E DATA) */}
       {loading ? (
         <Card className="flex items-center gap-2 p-6 rounded-2xl border-slate-200 bg-white text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
@@ -749,7 +749,7 @@ function AdminHome() {
                   className="flex items-center justify-between text-orange-900 font-normal"
                 >
                   <span>
-                    SolicitaÃ§Ã£o {reqCode} - {date}
+                    Solicitação {reqCode} - {date}
                   </span>
                   <span className="underline text-orange-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
                     {getPendingActionLabel(req.status)}{" "}
@@ -765,19 +765,19 @@ function AdminHome() {
           <h3 className="text-sm font-semibold text-emerald-800">Tudo em dia</h3>
           <p className="text-xs text-emerald-700 font-normal">
             {isAdmin
-              ? "NÃ£o hÃ¡ solicitaÃ§Ãµes pendentes para atendimento no momento."
-              : "VocÃª nÃ£o tem requisiÃ§Ãµes pendentes no momento."}
+              ? "Não há solicitações pendentes para atendimento no momento."
+              : "Você não tem requisições pendentes no momento."}
           </p>
         </div>
       )}
 
-      {/* QUADRO DE ASSINATURAS PENDENTES POR SETOR/USUÃRIO */}
+      {/* QUADRO DE ASSINATURAS PENDENTES POR SETOR/USUÁRIO */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
           <div>
             <h3 className="text-sm font-bold text-slate-800">Blocos de Assinaturas Pendentes</h3>
             <p className="text-xs text-slate-500 mt-0.5 font-normal">
-              Organizado por setor e usuÃ¡rio. Arraste os blocos para priorizar o acompanhamento.
+              Organizado por setor e usuário. Arraste os blocos para priorizar o acompanhamento.
             </p>
           </div>
           <button
@@ -844,7 +844,7 @@ function AdminHome() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-slate-700">
                             <FileSignature className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                            <span className="truncate">RequisiÃ§Ã£o {reqCode}</span>
+                            <span className="truncate">Requisição {reqCode}</span>
                           </span>
                           {linkedOutputCode && (
                             <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
@@ -853,7 +853,7 @@ function AdminHome() {
                           )}
                         </div>
                         <div className="mt-1 text-[10px] font-normal text-slate-500">
-                          {getSignatureStatusLabel(req.status)}{dateDisplay ? ` Â· ${dateDisplay}` : ""}
+                          {getSignatureStatusLabel(req.status)}{dateDisplay ? ` · ${dateDisplay}` : ""}
                         </div>
                       </button>
                     );
@@ -865,7 +865,7 @@ function AdminHome() {
         )}
       </div>
 
-      {/* MODAL DE VISUALIZAÃ‡ÃƒÆ’O DE PDF */}
+      {/* MODAL DE VISUALIZAÇÃO DE PDF */}
       <Dialog
         open={pdfModal.open}
         onOpenChange={(open) => {
@@ -900,7 +900,7 @@ function AdminHome() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL ADMIN: ANEXAR SAÃDA DIRETO (COM ARRASTAR/SOLTAR, V SEM FUNDO, NÃšMERO E DATA DA SAÃDA) */}
+      {/* MODAL ADMIN: ANEXAR SAÍDA DIRETO (COM ARRASTAR/SOLTAR, V SEM FUNDO, NÚMERO E DATA DA SAÍDA) */}
       <Dialog
         open={Boolean(attachingReq)}
         onOpenChange={(open) => {
@@ -913,7 +913,7 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Anexar Documento de RequisiÃ§Ã£o SIG
+              Anexar Documento de Requisição SIG
             </DialogTitle>
           </DialogHeader>
 
@@ -921,7 +921,7 @@ function AdminHome() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="saida_codigo_dash" className="text-xs text-slate-600 font-normal">
-                  NÃºmero da RequisiÃ§Ã£o SIG
+                  Número da Requisição SIG
                 </Label>
                 <Input
                   id="saida_codigo_dash"
@@ -934,7 +934,7 @@ function AdminHome() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="saida_data_dash" className="text-xs text-slate-600 font-normal">
-                  Data da RequisiÃ§Ã£o SIG
+                  Data da Requisição SIG
                 </Label>
                 <Input
                   id="saida_data_dash"
@@ -946,9 +946,9 @@ function AdminHome() {
               </div>
             </div>
 
-            {/* ÃREA DE DRAG & DROP DO PDF */}
+            {/* ÁREA DE DRAG & DROP DO PDF */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600 font-normal">Arquivos PDF de RequisiÃ§Ã£o SIG</Label>
+              <Label className="text-xs text-slate-600 font-normal">Arquivos PDF de Requisição SIG</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -986,7 +986,7 @@ function AdminHome() {
                   <>
                     <Upload className="w-6 h-6 text-slate-400" />
                     <span className="text-xs text-slate-600 font-normal">
-                      Arraste ou clique para selecionar os PDFs da RequisiÃ§Ã£o SIG
+                      Arraste ou clique para selecionar os PDFs da Requisição SIG
                     </span>
                   </>
                 )}
@@ -1020,13 +1020,13 @@ function AdminHome() {
               ) : (
                 <Send className="w-3.5 h-3.5" />
               )}
-              Enviar RequisiÃ§Ã£o SIG
+              Enviar Requisição SIG
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* MODAL ADMIN: DEVOLVER COM SELEÃ‡ÃƒÆ’O (REQUIÃ‡ÃƒÆ’O OU SAÃDA) E MOTIVO */}
+      {/* MODAL ADMIN: DEVOLVER COM SELEÇÃO (REQUISIÇÃO OU SAÍDA) E MOTIVO */}
       <Dialog
         open={Boolean(devolucaoReq)}
         onOpenChange={(open) => {
@@ -1036,7 +1036,7 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Devolver requisiÃ§Ã£o
+              Devolver requisição
             </DialogTitle>
           </DialogHeader>
 
@@ -1054,7 +1054,7 @@ function AdminHome() {
                   }`}
                   onClick={() => setDevolucaoTarget("requisicao")}
                 >
-                  Devolver RequisiÃ§Ã£o
+                  Devolver Requisição
                 </Button>
                 <Button
                   type="button"
@@ -1066,22 +1066,22 @@ function AdminHome() {
                   }`}
                   onClick={() => setDevolucaoTarget("saida")}
                 >
-                  Devolver SaÃ­da
+                  Devolver Saída
                 </Button>
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="motivo_devolucao_dash" className="text-xs text-slate-600 font-normal">
-                Motivo da DevoluÃ§Ã£o
+                Motivo da Devolução
               </Label>
               <Textarea
                 id="motivo_devolucao_dash"
                 rows={3}
                 placeholder={
                   devolucaoTarget === "saida"
-                    ? "Descreva o motivo para o admin anexar a saÃ­da novamente..."
-                    : "Descreva o motivo para que o solicitante possa corrigir a requisiÃ§Ã£o..."
+                    ? "Descreva o motivo para o admin anexar a saída novamente..."
+                    : "Descreva o motivo para que o solicitante possa corrigir a requisição..."
                 }
                 value={motivoDevolucao}
                 onChange={(e) => setMotivoDevolucao(e.target.value)}
@@ -1113,7 +1113,7 @@ function AdminHome() {
               ) : (
                 <Undo2 className="w-3.5 h-3.5" />
               )}
-              Confirmar DevoluÃ§Ã£o
+              Confirmar Devolução
             </Button>
           </DialogFooter>
         </DialogContent>
