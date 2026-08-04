@@ -21,6 +21,10 @@ export function isUserProfileIncomplete(profile: CurrentUserProfile | null) {
   return !profile?.funcao?.trim();
 }
 
+
+export function isHospitalSharedProfile(profile: CurrentUserProfile | null) {
+  return String(profile?.usuario || "").trim().toLowerCase() === "hospital";
+}
 export async function getCurrentUserProfile() {
   const { data: authData, error: authError } = await supabase.auth.getUser();
 

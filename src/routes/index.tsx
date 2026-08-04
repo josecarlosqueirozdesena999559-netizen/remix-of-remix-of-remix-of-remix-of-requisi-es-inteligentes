@@ -48,7 +48,7 @@ function Index() {
       });
 
       if (signInError) throw new Error("Usuário ou senha");
-      navigate({ to: "/admin" });
+      navigate({ to: nomeLimpo.toLowerCase() === "hospital" ? "/admin/requisicao" : "/admin" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Usuário ou senha");
       setLoading(false);

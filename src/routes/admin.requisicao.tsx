@@ -1,38 +1,40 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Search, Send, X } from "lucide-react";
+import { ArrowLeft, Loader2, Search, UserCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import {
   isCleaningProduct,
   isMedicationProduct,
-  normalizeProductSearchValue,
   normalizeProductCategory,
-  productMatchesSearch,
-  productHasSubcategory,
+  normalizeProductSearchValue,
   productHasCategory,
-  sortProductsByMaterialGroup,
+  productHasSubcategory,
   PRODUCT_CATEGORIES,
 } from "@/lib/product-options";
-import {
-  isMissingReturnFeedbackColumnError,
-  omitReturnFeedbackFields,
-} from "@/lib/request-return-feedback";
 import {
   BLOCK_NEW_REQUEST_MESSAGE,
   hasPendingRequestSignatures,
 } from "@/lib/pending-request-signatures";
 import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
-import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
+
+import {
+  isMissingReturnFeedbackColumnError,
+  omitReturnFeedbackFields,
+} from "@/lib/request-return-feedback";
+import {
+  getCurrentUserProfile,
+  isHospitalSharedProfile,
+  type CurrentUserProfile,
+} from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/requisicao")({
   component: CriarRequisicaoPage,
 });
-
-const REQUEST_FLASH_KEY = "admin_request_whatsapp_flash";
 
 interface ItemRow {
   id: string;
@@ -46,6 +48,15 @@ interface ItemRow {
       nome: string;
     } | null;
   }[];
+}
+
+interface SectorUserOption {
+  id: string;
+  nome: string;
+  cpf: string | null;
+  funcao: string | null;
+  setor: string | null;
+  unidade_nome: string | null;
 }
 
 interface EditableRequestItem {
@@ -70,6 +81,8 @@ interface EditableRequest {
   id: string;
   categoria: string | null;
   status: string | null;
+  solicitante: string | null;
+  solicitante_cpf: string | null;
   items: EditableRequestItem[] | null;
   return_reason: string | null;
 }
@@ -97,8 +110,9 @@ interface ResponsibleSectorProgramRow {
   } | null;
 }
 
-const requestSelectWithFeedback = "id,categoria,status,items,return_reason";
-const requestSelectFallback = "id,categoria,status,items";
+const requestSelectWithFeedback =
+  "id,categoria,status,solicitante,solicitante_cpf,items,return_reason";
+const requestSelectFallback = "id,categoria,status,solicitante,solicitante_cpf,items";
 const productCategorySet = new Set<string>(PRODUCT_CATEGORIES);
 
 function isProductCategory(value: string) {
@@ -288,119 +302,11 @@ function getComparableProgramKeys(value: string | null | undefined) {
   return getRelatedProgramKeys(value);
 }
 
-function getItemProgramKeys(item: ItemRow) {
-  return (item.programa_produtos ?? [])
-    .map((link) => getProgramMatchKey(link.programas?.nome))
-    .filter(Boolean);
-}
-
-function itemMatchesSection(item: ItemRow, section: RequestSection) {
-  return productHasCategory(item.categoria, section.baseCategory);
-}
-
-function isItemAllowedForProfileProgram(
-  item: ItemRow,
-  profile: CurrentUserProfile | null,
-  section: RequestSection,
-  allowedProgramKeys: string[],
-) {
-  const linkedProgramRows = item.programa_produtos ?? [];
-  if (linkedProgramRows.length === 0) return true;
-
-  const linkedPrograms = getItemProgramKeys(item);
-
-  if (linkedPrograms.length === 0) return false;
-
-  const sectionPrograms = getComparableProgramKeys(section.baseCategory);
-  if (sectionPrograms.some((programKey) => linkedPrograms.includes(programKey))) return true;
-
-  if (allowedProgramKeys.length > 0) {
-    return linkedPrograms.some((programKey) => allowedProgramKeys.includes(programKey));
-  }
-
-  const profilePrograms = [profile?.setor, profile?.unidade_nome].flatMap((value) =>
-    getComparableProgramKeys(value),
-  );
-
-  if (profilePrograms.length === 0) return false;
-
-  return linkedPrograms.some((programName) => {
-    const linkedProgram = getProgramMatchKey(programName);
-
-    return profilePrograms.some(
-      (profileProgram) =>
-        linkedProgram === profileProgram ||
-        linkedProgram.includes(profileProgram) ||
-        profileProgram.includes(linkedProgram),
-    );
-  });
-}
-
-function buildRequestSections(categories: string[]) {
-  const sections: RequestSection[] = [];
-
-  categories.forEach((category) => {
-    if (category === "Gêneros alimentícios/limpeza") {
-      sections.push(
-        {
-          id: "generos-alimenticios",
-          label: "Alimentos",
-          baseCategory: category,
-          matchesItem: (item) =>
-            productHasSubcategory(item.subcategoria, "Alimentício") || !isCleaningProduct(item),
-          order: 0,
-        },
-        {
-          id: "limpeza",
-          label: "Limpeza",
-          baseCategory: category,
-          matchesItem: (item) =>
-            productHasSubcategory(item.subcategoria, "Limpeza") || isCleaningProduct(item),
-          order: 1,
-        },
-      );
-      return;
-    }
-
-    if (category === "Ambulatorial") {
-      sections.push(
-        {
-          id: "ambulatorial-materiais",
-          label: "Material Ambulatorial",
-          baseCategory: category,
-          matchesItem: (item) =>
-            productHasSubcategory(item.subcategoria, "Material Ambulatorial") ||
-            !isMedicationProduct(item),
-          order: 3,
-        },
-        {
-          id: "ambulatorial-medicamentos",
-          label: "Medicamentos",
-          baseCategory: category,
-          matchesItem: (item) =>
-            productHasSubcategory(item.subcategoria, "Medicamentos") || isMedicationProduct(item),
-          order: 4,
-        },
-      );
-      return;
-    }
-
-    sections.push({
-      id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
-      label: category,
-      baseCategory: category,
-      order: category === "Expediente" ? 2 : 5,
-    });
-  });
-
-  return sections.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "pt-BR"));
-}
-
 function buildNormalizedRequestSections(categories: string[]) {
   const sections: RequestSection[] = [];
 
   categories.forEach((category) => {
-    if (isFoodCleaningCategory(category)) {
+    if (category === "Gêneros alimentícios/limpeza") {
       sections.push(
         {
           id: "generos-alimenticios",
@@ -488,7 +394,8 @@ function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
   return (
     sections.find((section) => {
       return (
-        itemMatchesSection(item, section) && (!section.matchesItem || section.matchesItem(item))
+        productHasCategory(item.categoria, section.baseCategory) &&
+        (!section.matchesItem || section.matchesItem(item))
       );
     }) || null
   );
@@ -535,6 +442,9 @@ function CriarRequisicaoPage() {
   const [allowedCategories, setAllowedCategories] = useState<string[]>([]);
   const [allowedProgramKeys, setAllowedProgramKeys] = useState<string[]>([]);
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [sectorUsers, setSectorUsers] = useState<SectorUserOption[]>([]);
+  const [selectedSolicitanteId, setSelectedSolicitanteId] = useState<string>("");
+
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedGroupLabel, setSelectedGroupLabel] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -571,7 +481,7 @@ function CriarRequisicaoPage() {
       setError(null);
 
       try {
-        const [{ profile }, itemsResult, requestResult] = await Promise.all([
+        const [{ profile }, itemsResult, requestResult, usuariosResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("itens")
@@ -584,6 +494,10 @@ function CriarRequisicaoPage() {
                 .eq("id", editingRequestId)
                 .maybeSingle()
             : Promise.resolve({ data: null, error: null }),
+          supabase
+            .from("usuarios")
+            .select("id,nome,cpf,funcao,setor,unidade_nome")
+            .order("nome", { ascending: true }),
         ]);
 
         if (!active) return;
@@ -639,7 +553,40 @@ function CriarRequisicaoPage() {
             : [...PRODUCT_CATEGORIES];
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
 
+        // FILTRAR USUÁRIOS DO SETOR DA UNIDADE
+        const allUsers = (usuariosResult.data ?? []) as SectorUserOption[];
+        const sectorName = profile?.unidade_nome || profile?.setor || "";
+
+        let filteredSectorUsers = allUsers;
+        if (sectorName) {
+          filteredSectorUsers = allUsers.filter(
+            (u) =>
+              u.setor?.toLowerCase() === sectorName.toLowerCase() ||
+              u.unidade_nome?.toLowerCase() === sectorName.toLowerCase(),
+          );
+        }
+
+        if (filteredSectorUsers.length === 0 && !isHospitalSharedProfile(profile)) {
+          filteredSectorUsers = allUsers;
+        }
+
         setProfile(profile);
+        setSectorUsers(filteredSectorUsers);
+
+        // Se editando requisição existente, seleciona o solicitante correspondente
+        if (editableRequest?.solicitante_cpf) {
+          const matchedUser = filteredSectorUsers.find(
+            (u) => u.cpf?.trim() === editableRequest.solicitante_cpf?.trim(),
+          );
+          if (matchedUser) {
+            setSelectedSolicitanteId(matchedUser.id);
+          } else if (profile) {
+            setSelectedSolicitanteId(profile.id);
+          }
+        } else if (profile) {
+          setSelectedSolicitanteId(profile.id);
+        }
+
         setAllowedCategories(categories);
         setAllowedProgramKeys(profileProgramKeys);
         setItems(loadedItems);
@@ -699,85 +646,32 @@ function CriarRequisicaoPage() {
     [sectionGroups, selectedGroupLabel],
   );
 
-  useEffect(() => {
-    if (!sections.length) {
-      setSelectedSectionId("");
-      return;
-    }
-
-    if (!sections.some((section) => section.id === selectedSectionId)) {
-      setSelectedSectionId(sections[0].id);
-    }
-  }, [sections, selectedSectionId]);
-
-  useEffect(() => {
-    if (!sectionGroups.length) {
-      setSelectedGroupLabel("");
-      return;
-    }
-
-    if (sectionGroups.some((group) => group.label === selectedGroupLabel)) return;
-
-    const groupForSelectedSection = sectionGroups.find((group) =>
-      group.sections.some((section) => section.id === selectedSectionId),
-    );
-
-    setSelectedGroupLabel(groupForSelectedSection?.label || sectionGroups[0].label);
-  }, [sectionGroups, selectedGroupLabel, selectedSectionId]);
-
   const visibleSectionTables = useMemo(() => {
     if (!selectedGroup) return [];
 
-    return selectedGroup.sections.map((section) => ({
-      section,
-      items: sortProductsByMaterialGroup(
-        items.filter((item) => {
-          if (!itemMatchesSection(item, section)) return false;
-          if (!isItemAllowedForProfileProgram(item, profile, section, allowedProgramKeys))
-            return false;
+    const query = normalizeProductSearchValue(searchQuery);
+
+    return selectedGroup.sections
+      .map((section) => {
+        const sectionItems = items.filter((item) => {
+          if (!productHasCategory(item.categoria, section.baseCategory)) return false;
           if (section.matchesItem && !section.matchesItem(item)) return false;
 
-          return productMatchesSearch(
-            [
-              item.nome,
-              item.unidade,
-              item.categoria,
-              item.subcategoria,
-              ...(item.programa_produtos ?? []).map((link) => link.programas?.nome),
-            ],
-            searchQuery,
-          );
-        }),
-        section.baseCategory,
-      ),
-    }));
-  }, [allowedProgramKeys, items, profile, searchQuery, selectedGroup]);
+          if (!isItemAllowedForProfileProgram(item, profile, section, allowedProgramKeys)) {
+            return false;
+          }
 
-  const handleQuantityChange = (itemId: string, value: string) => {
-    const item = items.find((currentItem) => currentItem.id === itemId);
-    const nextQuantities = { ...quantities, [itemId]: value };
-    const categories = getSelectedRequestCategories(items, nextQuantities, sections);
+          if (!query) return true;
+          return productMatchesSearch(item, query);
+        });
 
-    if (item && hasRequestedQuantity(value) && categories.length > 1) {
-      const existingCategory = getSelectedRequestCategories(
-        items,
-        { ...quantities, [itemId]: "" },
-        sections,
-      )[0];
-
-      setError(
-        getSingleCategoryRequestMessage(existingCategory || getItemRequestCategory(item, sections)),
-      );
-      return;
-    }
-
-    if (error) setError(null);
-    setQuantities(nextQuantities);
-  };
-
-  const handleStockChange = (itemId: string, value: string) => {
-    setStocks((current) => ({ ...current, [itemId]: value }));
-  };
+        return {
+          section,
+          items: sortProductsByMaterialGroup(sectionItems),
+        };
+      })
+      .filter(({ items }) => items.length > 0);
+  }, [selectedGroup, items, searchQuery, profile, allowedProgramKeys]);
 
   const handleSubmit = async () => {
     setSaving(true);
@@ -788,6 +682,8 @@ function CriarRequisicaoPage() {
       setSaving(false);
       return;
     }
+
+    const chosenSolicitante = sectorUsers.find((u) => u.id === selectedSolicitanteId) || profile;
 
     const selectedItems = items
       .map((item) => {
@@ -837,14 +733,15 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    const requestCategory = selectedBaseCategories[0] || selectedGroup?.sections[0]?.baseCategory || null;
+    const requestCategory =
+      selectedBaseCategories[0] || selectedGroup?.sections[0]?.baseCategory || null;
 
     const payload = {
       categoria: requestCategory,
       setor: profile.unidade_nome || profile.setor,
-      solicitante: profile.nome,
-      solicitante_cpf: profile.cpf?.trim() || null,
-      solicitante_funcao: profile.funcao,
+      solicitante: chosenSolicitante.nome,
+      solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,
+      solicitante_funcao: chosenSolicitante.funcao || profile.funcao,
       data: formatToday(),
       status: "aguardando_assinatura",
       items: selectedItems,
@@ -948,7 +845,7 @@ function CriarRequisicaoPage() {
 
       {loading ? (
         <Card className="flex items-center gap-2 rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
           Carregando...
         </Card>
       ) : error ? (
@@ -967,6 +864,32 @@ function CriarRequisicaoPage() {
               <p className="mt-1 text-sm">{returnReason}</p>
             </Card>
           )}
+
+          {/* SELETOR DO SOLICITANTE RESPONSÁVEL DO SETOR */}
+          <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
+            <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+              <UserCheck className="w-4 h-4 text-emerald-600" />
+              Solicitante Responsável do Setor ({profile?.unidade_nome || profile?.setor || "Geral"}
+              )
+            </div>
+            <div className="max-w-md space-y-1">
+              <Label htmlFor="select-solicitante" className="text-xs text-slate-500 font-normal">
+                Selecione o profissional que está fazendo esta solicitação:
+              </Label>
+              <select
+                id="select-solicitante"
+                value={selectedSolicitanteId}
+                onChange={(e) => setSelectedSolicitanteId(e.target.value)}
+                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              >
+                {sectorUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.nome} {user.funcao ? `(${user.funcao})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Card>
 
           <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex flex-wrap gap-2">
@@ -1010,56 +933,52 @@ function CriarRequisicaoPage() {
 
           <div className="space-y-6">
             {visibleSectionTables.map(({ section, items: sectionItems }) => (
-              <Card key={section.id} className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
-                <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700">{section.label}</h3>
+              <Card
+                key={section.id}
+                className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs"
+              >
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700">
+                  {section.label}
+                </h3>
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       <tr>
                         <th className="px-4 py-3 text-left">Item</th>
                         <th className="px-4 py-3 text-left">Unidade</th>
-                        <th className="px-4 py-3 text-left">Quanto tem</th>
-                        <th className="px-4 py-3 text-left">Quanto precisa</th>
+                        <th className="px-4 py-3 text-center w-36">Estoque</th>
+                        <th className="px-4 py-3 text-center w-36">Qtd. Solicitada</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100 bg-white">
                       {sectionItems.map((item) => (
-                        <tr key={item.id} className="border-t">
-                          <td className="px-4 py-3 text-slate-800">{item.nome}</td>
-                          <td className="px-4 py-3 text-slate-500">{item.unidade}</td>
-                          <td className="px-4 py-3">
+                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-4 py-3 font-medium text-slate-800">{item.nome}</td>
+                          <td className="px-4 py-3 text-xs text-slate-500">{item.unidade}</td>
+                          <td className="px-4 py-2 text-center">
                             <Input
-                              type="number"
-                              min="0"
-                              value={stocks[item.id] ?? ""}
-                              onChange={(event) => handleStockChange(item.id, event.target.value)}
-                              className="h-9 w-28 rounded-xl"
-                              placeholder="0"
+                              type="text"
+                              value={stocks[item.id] || ""}
+                              onChange={(e) =>
+                                setStocks((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                              placeholder="-"
+                              className="h-8 text-center text-xs rounded-lg border-slate-200"
                             />
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-2 text-center">
                             <Input
-                              type="number"
-                              min="0"
-                              value={quantities[item.id] ?? ""}
-                              onChange={(event) =>
-                                handleQuantityChange(item.id, event.target.value)
+                              type="text"
+                              value={quantities[item.id] || ""}
+                              onChange={(e) =>
+                                setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))
                               }
-                              className="h-9 w-28 rounded-xl"
                               placeholder="0"
+                              className="h-8 text-center text-xs rounded-lg border-slate-200 font-semibold text-emerald-700"
                             />
                           </td>
                         </tr>
                       ))}
-                      {sectionItems.length === 0 && (
-                        <tr>
-                          <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
-                            {searchQuery.trim()
-                              ? "Nenhum item encontrado para esta pesquisa."
-                              : "Nenhum item liberado para este tipo de material."}
-                          </td>
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1067,35 +986,15 @@ function CriarRequisicaoPage() {
             ))}
           </div>
 
-          {error && (
-            <p className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
-              {error}
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-2">
+          <div className="flex justify-end pt-4">
             <Button
               type="button"
-              className="gap-2 rounded-xl bg-emerald-600 font-semibold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700"
               disabled={saving}
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
+              className="gap-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 px-6 font-semibold"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {editingRequestId
-                ? isCorrectionEdit
-                  ? "Reenviar requisição"
-                  : "Salvar alterações"
-                : "Enviar requisição"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={saving}
-              onClick={() => navigate({ to: returnPath })}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Voltar
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {editingRequestId ? "Salvar alterações" : "Enviar requisição"}
             </Button>
           </div>
         </>
