@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  getAttachmentFile,
-  getOutputSignedAttachment,
+  getAttachmentFiles,
+  getOutputSignedAttachments,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
   type AttachmentFile,
@@ -77,20 +77,21 @@ function MeuAssinadoPdfPage() {
         request.signed_attachment,
         request.status,
       );
-      const outputAttachment =
-        getOutputSignedAttachment(request.signed_attachment, request.status) ||
-        getAttachmentFile(request.admin_attachment) as AttachmentFile | null;
+      const outputAttachments =
+    getOutputSignedAttachments(request.signed_attachment, request.status).length > 0
+      ? getOutputSignedAttachments(request.signed_attachment, request.status)
+      : getAttachmentFiles(request.admin_attachment);
 
-      const [requestUrl, outputUrl] = await Promise.all([
+      const [requestUrl, outputUrls] = await Promise.all([
         resolveAttachmentUrl(requestAttachment),
-        resolveAttachmentUrl(outputAttachment),
+        Promise.all(outputAttachments.map((attachment) => resolveAttachmentUrl(attachment))),
       ]);
 
-      if (requestUrl && outputUrl) {
-        const blob = await createCombinedSignedPdfBlob(outputUrl, requestUrl);
+      if (requestUrl && outputUrls.some(Boolean)) {
+        const blob = await createCombinedSignedPdfBlob(outputUrls.filter(Boolean), requestUrl);
         createdUrl = URL.createObjectURL(blob);
-      } else if (requestUrl || outputUrl) {
-        createdUrl = requestUrl || outputUrl;
+      } else if (requestUrl || outputUrls.some(Boolean)) {
+        createdUrl = requestUrl || outputUrls.find(Boolean) || "";
       } else {
         const blob = await createRequestPdfBlob(
           await resolveRequestForPdf(

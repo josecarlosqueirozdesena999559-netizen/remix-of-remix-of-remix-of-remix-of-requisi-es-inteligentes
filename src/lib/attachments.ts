@@ -16,6 +16,7 @@ export interface AttachmentFile {
 interface SignedAttachmentPayload extends AttachmentFile {
   request?: AttachmentFile | null;
   output?: AttachmentFile | null;
+  outputs?: AttachmentFile[] | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,7 +51,7 @@ function toAttachmentFile(value: unknown): AttachmentFile | null {
 }
 
 function hasStructuredSignedAttachmentParts(value: Record<string, unknown>) {
-  return "request" in value || "output" in value;
+  return "request" in value || "output" in value || "outputs" in value;
 }
 
 export function getAttachmentFiles(value: unknown) {
@@ -73,17 +74,20 @@ export function getSignedAttachmentParts(signedAttachment: unknown, status?: str
     return {
       request: null,
       output: null,
+      outputs: [],
     };
   }
 
   const legacyAttachment = toAttachmentFile(attachment);
   const requestAttachment = toAttachmentFile(attachment.request);
   const outputAttachment = toAttachmentFile(attachment.output);
+  const outputAttachments = getAttachmentFiles(attachment.outputs);
 
   if (hasStructuredSignedAttachmentParts(attachment)) {
     return {
       request: requestAttachment || legacyAttachment,
       output: outputAttachment || null,
+      outputs: outputAttachments.length > 0 ? outputAttachments : outputAttachment ? [outputAttachment] : [],
     };
   }
 
@@ -91,12 +95,14 @@ export function getSignedAttachmentParts(signedAttachment: unknown, status?: str
     return {
       request: null,
       output: legacyAttachment,
+      outputs: legacyAttachment ? [legacyAttachment] : [],
     };
   }
 
   return {
     request: legacyAttachment,
     output: null,
+    outputs: [],
   };
 }
 
@@ -105,13 +111,24 @@ export function buildSignedAttachmentPayload(
   updates: {
     request?: AttachmentFile | null;
     output?: AttachmentFile | null;
+    outputs?: AttachmentFile[] | null;
   },
 ) {
   const current = getSignedAttachmentParts(signedAttachment);
+  const nextOutput = updates.output === undefined ? current.output : updates.output;
+  const nextOutputs =
+    updates.outputs === undefined
+      ? updates.output === undefined
+        ? current.outputs
+        : nextOutput
+          ? [nextOutput]
+          : []
+      : updates.outputs || [];
 
   return {
     request: updates.request === undefined ? current.request : updates.request,
-    output: updates.output === undefined ? current.output : updates.output,
+    output: nextOutput || nextOutputs.at(-1) || null,
+    outputs: nextOutputs,
   };
 }
 
@@ -123,6 +140,11 @@ export function getRequestSignedAttachment(signedAttachment: unknown, _status?: 
 export function getOutputSignedAttachment(signedAttachment: unknown, _status?: string | null) {
   const { output } = getSignedAttachmentParts(signedAttachment, _status);
   return output;
+}
+
+export function getOutputSignedAttachments(signedAttachment: unknown, _status?: string | null) {
+  const { output, outputs } = getSignedAttachmentParts(signedAttachment, _status);
+  return outputs.length > 0 ? outputs : output ? [output] : [];
 }
 
 export async function resolveAttachmentUrl(attachment: AttachmentFile | null | undefined) {

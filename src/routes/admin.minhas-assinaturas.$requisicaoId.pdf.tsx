@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
+  getAttachmentFiles,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
-  type AttachmentFile,
 } from "@/lib/attachments";
 import { formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
+import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
 import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
 import { resolveRequestForPdf, type RequisicaoPdfRow } from "@/lib/request-resolver";
 import { supabase } from "@/integrations/supabase/client";

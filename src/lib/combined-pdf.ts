@@ -16,14 +16,16 @@ async function appendPdf(target: PDFDocument, sourceUrl: string) {
   pages.forEach((page) => target.addPage(page));
 }
 
-export async function createCombinedSignedPdfBlob(outputUrl: string, requestUrl: string) {
-  if (!outputUrl && !requestUrl) {
+export async function createCombinedSignedPdfBlob(outputUrls: string | string[], requestUrl: string) {
+  const outputUrlList = Array.isArray(outputUrls) ? outputUrls.filter(Boolean) : outputUrls ? [outputUrls] : [];
+
+  if (outputUrlList.length === 0 && !requestUrl) {
     throw new Error("Nenhum documento encontrado para juntar.");
   }
 
   const combined = await PDFDocument.create();
 
-  if (outputUrl) {
+  for (const outputUrl of outputUrlList) {
     await appendPdf(combined, outputUrl);
   }
 

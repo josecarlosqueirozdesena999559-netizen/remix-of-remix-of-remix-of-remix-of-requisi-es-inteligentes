@@ -1,9 +1,8 @@
 import {
-  getAttachmentFile,
-  getOutputSignedAttachment,
+  getAttachmentFiles,
+  getOutputSignedAttachments,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
-  type AttachmentFile,
 } from "@/lib/attachments";
 import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
 import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
@@ -32,17 +31,18 @@ export function getSignedRequestProcessCode(request: Pick<SignedRequestProcessPd
 export async function createSignedRequestProcessPdfBlob(request: SignedRequestProcessPdfRow) {
   const code = getSignedRequestProcessCode(request);
   const requestAttachment = getRequestSignedAttachment(request.signed_attachment, request.status);
-  const outputAttachment =
-    getOutputSignedAttachment(request.signed_attachment, request.status) ||
-    (getAttachmentFile(request.admin_attachment) as AttachmentFile | null);
+  const outputAttachments =
+    getOutputSignedAttachments(request.signed_attachment, request.status).length > 0
+      ? getOutputSignedAttachments(request.signed_attachment, request.status)
+      : getAttachmentFiles(request.admin_attachment);
 
-  const [outputUrl, requestUrl] = await Promise.all([
-    resolveAttachmentUrl(outputAttachment),
+  const [outputUrls, requestUrl] = await Promise.all([
+    Promise.all(outputAttachments.map((attachment) => resolveAttachmentUrl(attachment))),
     resolveAttachmentUrl(requestAttachment),
   ]);
 
-  if (outputUrl || requestUrl) {
-    return await createCombinedSignedPdfBlob(outputUrl, requestUrl);
+  if (outputUrls.some(Boolean) || requestUrl) {
+    return await createCombinedSignedPdfBlob(outputUrls.filter(Boolean), requestUrl);
   }
 
   return await createRequestPdfBlob(

@@ -1,5 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Check, ChevronRight, FileText, Loader2, Send, Undo2, Upload } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronRight,
+  FileSignature,
+  GripVertical,
+  Loader2,
+  Send,
+  Undo2,
+  Upload,
+  UserRound,
+} from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,6 +69,13 @@ type PdfModalState = {
   open: boolean;
   url: string | null;
   title: string;
+};
+
+type PendingSignatureGroup = {
+  key: string;
+  solicitante: string;
+  setor: string;
+  items: RequisicaoItem[];
 };
 
 function sanitizeFileName(fileName: string) {
@@ -123,7 +141,7 @@ function getStatusBadge(status: string) {
   switch (status) {
     case "aguardando_assinatura_saida":
       return {
-        label: "Aguardando Assinatura de Saída",
+        label: "Aguardando Assinatura de RequisiÃ§Ã£o SIG",
         className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "aguardando_assinatura":
@@ -134,18 +152,18 @@ function getStatusBadge(status: string) {
       };
     case "correcao_requisicao":
       return {
-        label: "Devolvida para Correção",
+        label: "Devolvida para CorreÃ§Ã£o",
         className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "recebido":
     case "requisicao_assinada":
       return {
-        label: "Enviada / Em Separação",
+        label: "Enviada / Em SeparaÃ§Ã£o",
         className: "bg-emerald-100 text-emerald-800 border border-emerald-200 font-normal",
       };
     case "concluido":
       return {
-        label: "Concluído",
+        label: "ConcluÃ­do",
         className: "bg-blue-100 text-blue-800 border border-blue-200 font-normal",
       };
     default:
@@ -191,12 +209,14 @@ function AdminHome() {
     title: "",
   });
 
-  // Admin Actions State (Anexar Saída & Devolver)
+  // Admin Actions State (Anexar RequisiÃ§Ã£o SIG & Devolver)
   const [attachingReq, setAttachingReq] = useState<RequisicaoItem | null>(null);
   const [saidaCodigoInput, setSaidaCodigoInput] = useState("");
   const [saidaDataInput, setSaidaDataInput] = useState(getTodayInputDate());
-  const [stagedPdfFile, setStagedPdfFile] = useState<File | null>(null);
+  const [stagedPdfFiles, setStagedPdfFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [draggedGroupKey, setDraggedGroupKey] = useState<string | null>(null);
+  const [signatureGroupOrder, setSignatureGroupOrder] = useState<string[]>([]);
   const [uploadingSaida, setUploadingSaida] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -269,7 +289,7 @@ function AdminHome() {
         if (active) {
           setRequisicoes([]);
           setHasOutputPending(false);
-          setLoadError(err instanceof Error ? err.message : "Erro ao carregar informações do dashboard.");
+          setLoadError(err instanceof Error ? err.message : "Erro ao carregar informaÃ§Ãµes do dashboard.");
         }
       } finally {
         if (active) setLoading(false);
@@ -296,7 +316,7 @@ function AdminHome() {
     title: string,
   ) => {
     if (!attachment?.storageBucket || !attachment?.storagePath) {
-      alert("Nenhum PDF disponível para visualização.");
+      alert("Nenhum PDF disponÃ­vel para visualizaÃ§Ã£o.");
       return;
     }
 
@@ -314,54 +334,59 @@ function AdminHome() {
     }
   };
 
-  // ADMIN ACTION: Abrir Modal Anexar Saída
+  // ADMIN ACTION: Abrir Modal Anexar RequisiÃ§Ã£o SIG
   const handleOpenAnexarSaida = (req: RequisicaoItem) => {
     setAttachingReq(req);
     setSaidaCodigoInput(req.saida_vinculada_codigo || "");
     setSaidaDataInput(getTodayInputDate());
-    setStagedPdfFile(null);
+    setStagedPdfFiles([]);
   };
 
   const handleConfirmAnexarSaida = async () => {
     if (!attachingReq) return;
-    if (!stagedPdfFile) {
-      alert("Selecione ou arraste um arquivo PDF de saída antes de enviar.");
+    if (stagedPdfFiles.length === 0) {
+      alert("Selecione ou arraste os PDFs da RequisiÃ§Ã£o SIG antes de enviar.");
       return;
     }
 
-    if (
-      stagedPdfFile.type !== "application/pdf" &&
-      !stagedPdfFile.name.toLowerCase().endsWith(".pdf")
-    ) {
-      alert("Envie apenas arquivo PDF.");
+    const invalidFile = stagedPdfFiles.find(
+      (file) => file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"),
+    );
+
+    if (invalidFile) {
+      alert("Envie apenas arquivos PDF.");
       return;
     }
 
     setUploadingSaida(true);
-    const safeName = sanitizeFileName(stagedPdfFile.name) || "saida.pdf";
-    const storagePath = `saidas/${attachingReq.id}/${Date.now()}-${safeName}`;
     const linkedCode = saidaCodigoInput.trim() || null;
     const linkedDate = saidaDataInput.trim() || getTodayInputDate();
-
-    const attachment = {
-      fileName: stagedPdfFile.name,
-      storageBucket: REQUISICOES_BUCKET,
-      storagePath,
-      uploadedAt: new Date().toISOString(),
-      kind: "output" as const,
-      outputCode: linkedCode,
-      outputDate: linkedDate,
-    };
+    const attachments: Array<{ fileName: string; storageBucket: string; storagePath: string; uploadedAt: string; kind: "output" }> = [];
 
     try {
-      const { error: uploadError } = await supabase.storage
-        .from(REQUISICOES_BUCKET)
-        .upload(storagePath, stagedPdfFile, {
-          contentType: stagedPdfFile.type || "application/pdf",
-          upsert: true,
-        });
+      for (const file of stagedPdfFiles) {
+        const safeName = sanitizeFileName(file.name) || "saida.pdf";
+        const storagePath = `saidas/${attachingReq.id}/${Date.now()}-${attachments.length + 1}-${safeName}`;
+        const attachment = {
+          fileName: file.name,
+          storageBucket: REQUISICOES_BUCKET,
+          storagePath,
+          uploadedAt: new Date().toISOString(),
+          kind: "output" as const,
+        };
 
-      if (uploadError) throw new Error(uploadError.message);
+        const { error: uploadError } = await supabase.storage
+          .from(REQUISICOES_BUCKET)
+          .upload(storagePath, file, {
+            contentType: file.type || "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) throw new Error(uploadError.message);
+        attachments.push(attachment);
+      }
+
+      const attachment = attachments.length === 1 ? attachments[0] : attachments;
 
       const payload = {
         admin_attachment: attachment,
@@ -404,11 +429,11 @@ function AdminHome() {
       );
 
       setAttachingReq(null);
-      setStagedPdfFile(null);
+      setStagedPdfFiles([]);
       setSaidaCodigoInput("");
-      alert("Documento de saída enviado com sucesso!");
+      alert("Documento de RequisiÃ§Ã£o SIG enviado com sucesso!");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao enviar documento de saída.");
+      alert(err instanceof Error ? err.message : "Erro ao enviar documento de RequisiÃ§Ã£o SIG.");
     } finally {
       setUploadingSaida(false);
     }
@@ -428,33 +453,33 @@ function AdminHome() {
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    const droppedFile = e.dataTransfer.files?.[0];
-    if (droppedFile) {
-      if (
-        droppedFile.type === "application/pdf" ||
-        droppedFile.name.toLowerCase().endsWith(".pdf")
-      ) {
-        setStagedPdfFile(droppedFile);
-      } else {
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    if (droppedFiles.length > 0) {
+      const invalidFile = droppedFiles.find(
+        (file) => file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"),
+      );
+      if (invalidFile) {
         alert("Envie apenas arquivos no formato PDF.");
+        return;
       }
+      setStagedPdfFiles(droppedFiles);
     }
   };
 
   // ADMIN ACTION: Open Devolver Modal
   const handleOpenDevolucao = (req: RequisicaoItem) => {
     setDevolucaoReq(req);
-    // Se a requisição já estiver em estágio de saída ou tiver admin_attachment, padroniza opção como saída
+    // Se a requisiÃ§Ã£o jÃ¡ estiver em estÃ¡gio de saÃ­da ou tiver admin_attachment, padroniza opÃ§Ã£o como saÃ­da
     setDevolucaoTarget(req.status === "aguardando_assinatura_saida" ? "saida" : "requisicao");
     setMotivoDevolucao("");
   };
 
-  // ADMIN ACTION: Devolver com Motivo (Requisição vs Saída)
+  // ADMIN ACTION: Devolver com Motivo (RequisiÃ§Ã£o vs SaÃ­da)
   const handleConfirmDevolucao = async () => {
     if (!devolucaoReq) return;
     const reason = motivoDevolucao.trim();
     if (!reason) {
-      alert("Por favor, informe o motivo da devolução.");
+      alert("Por favor, informe o motivo da devoluÃ§Ã£o.");
       return;
     }
 
@@ -500,17 +525,17 @@ function AdminHome() {
       setMotivoDevolucao("");
       alert(
         isSaidaReturn
-          ? "Documento de saída devolvido para o admin anexar novamente!"
-          : "Requisição devolvida para correção com sucesso!",
+          ? "Documento de saÃ­da devolvido para o admin anexar novamente!"
+          : "RequisiÃ§Ã£o devolvida para correÃ§Ã£o com sucesso!",
       );
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao devolver requisição.");
+      alert(err instanceof Error ? err.message : "Erro ao devolver requisiÃ§Ã£o.");
     } finally {
       setSavingDevolucao(false);
     }
   };
 
-  const userName = profile?.nome || "Usuário";
+  const userName = profile?.nome || "UsuÃ¡rio";
 
   const currentMonthRequisicoes = requisicoes.filter((r) => isCurrentMonth(r.data, r.created_at));
   const monthlyCount = currentMonthRequisicoes.length;
@@ -534,51 +559,51 @@ function AdminHome() {
   const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
 
   const pendingMetricLabel = isAdmin
-    ? "Solicitações Pendentes para Atendimento"
+    ? "SolicitaÃ§Ãµes Pendentes para Atendimento"
     : hasCorrectionPending
-      ? "Pendentes de Correção"
+      ? "Pendentes de CorreÃ§Ã£o"
       : "Pendentes de Assinatura";
 
   const getPendingBannerTitle = () => {
     if (isAdmin) {
-      return `Você tem ${pendingRequests.length} ${
+      return `VocÃª tem ${pendingRequests.length} ${
         pendingRequests.length === 1
-          ? "solicitação pendente para atendimento"
-          : "solicitações pendentes para atendimento"
+          ? "solicitaÃ§Ã£o pendente para atendimento"
+          : "solicitaÃ§Ãµes pendentes para atendimento"
       }`;
     }
 
     if (hasCorrectionPending) {
       return correctionPendingRequests.length === 1
-        ? "Você tem requisição devolvida para correção"
-        : "Você tem requisições devolvidas para correção";
+        ? "VocÃª tem requisiÃ§Ã£o devolvida para correÃ§Ã£o"
+        : "VocÃª tem requisiÃ§Ãµes devolvidas para correÃ§Ã£o";
     }
 
     if (hasOutputPending) {
-      return "Você tem requisição aguardando assinatura de saída";
+      return "VocÃª tem requisiÃ§Ã£o aguardando assinatura de saÃ­da";
     }
 
-    return "Atenção, você precisa assinar suas requisições para prosseguir";
+    return "AtenÃ§Ã£o, vocÃª precisa assinar suas requisiÃ§Ãµes para prosseguir";
   };
 
   const getPendingBannerDescription = () => {
     if (isAdmin) {
-      return "Clique aqui para acessar e gerenciar as solicitações pendentes de atendimento";
+      return "Clique aqui para acessar e gerenciar as solicitaÃ§Ãµes pendentes de atendimento";
     }
 
     if (hasCorrectionPending) {
       return correctionPendingRequests.length === pendingRequests.length
-        ? "Clique aqui para abrir as opções de editar ou excluir"
-        : "Clique aqui para corrigir devoluções e assinar documentos pendentes";
+        ? "Clique aqui para abrir as opÃ§Ãµes de editar ou excluir"
+        : "Clique aqui para corrigir devoluÃ§Ãµes e assinar documentos pendentes";
     }
 
     return "Clique aqui para acessar suas assinaturas e assinar os documentos";
   };
 
   const getPendingActionLabel = (status: string) => {
-    if (isAdmin) return "Atender Requisição";
-    if (status === "correcao_requisicao") return "Corrigir Requisição";
-    if (status === "aguardando_assinatura_saida") return "Assinar Saída";
+    if (isAdmin) return "Atender RequisiÃ§Ã£o";
+    if (status === "correcao_requisicao") return "Corrigir RequisiÃ§Ã£o";
+    if (status === "aguardando_assinatura_saida") return "Assinar RequisiÃ§Ã£o SIG";
     return "Ver Assinatura";
   };
 
@@ -591,35 +616,88 @@ function AdminHome() {
     })),
   );
 
-  const signedByUserStatuses = new Set([
-    "recebido",
-    "requisicao_assinada",
+
+  const pendingSignatureStatuses = new Set([
+    "aguardando_assinatura",
+    "aguardando_assinatura_requisicao",
     "aguardando_assinatura_saida",
-    "concluido",
+    "correcao_requisicao",
   ]);
 
-  // Mostrar apenas requisições já enviadas/assinadas; devolvidas ficam no aviso de pendência.
-  const requisicoesForDisplay = currentMonthRequisicoes.filter((req) =>
-    signedByUserStatuses.has(req.status),
-  );
-  const sortedRequisicoesForDisplay = [...requisicoesForDisplay].reverse();
+  const pendingSignatureGroups = requisicoes
+    .filter((req) => pendingSignatureStatuses.has(req.status))
+    .reduce<PendingSignatureGroup[]>((groups, req) => {
+      const solicitante = req.solicitante?.trim() || "UsuÃ¡rio sem nome";
+      const setor = req.setor?.trim() || "Setor nÃ£o informado";
+      const key = `${solicitante.toLowerCase()}::${setor.toLowerCase()}`;
+      const existingGroup = groups.find((group) => group.key === key);
+
+      if (existingGroup) {
+        existingGroup.items.push(req);
+      } else {
+        groups.push({ key, solicitante, setor, items: [req] });
+      }
+
+      return groups;
+    }, []);
+
+  const orderedSignatureGroups = [...pendingSignatureGroups].sort((a, b) => {
+    const aIndex = signatureGroupOrder.indexOf(a.key);
+    const bIndex = signatureGroupOrder.indexOf(b.key);
+
+    if (aIndex !== -1 || bIndex !== -1) {
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    }
+
+    return b.items.length - a.items.length;
+  });
+
+  const getSignatureStatusLabel = (status: string) => {
+    if (status === "aguardando_assinatura_saida") return "Assinatura da RequisiÃ§Ã£o SIG";
+    if (status === "correcao_requisicao") return "CorreÃ§Ã£o pendente";
+    return "Assinatura da RequisiÃ§Ã£o";
+  };
+
+  const handleSignatureGroupDrop = (targetKey: string) => {
+    if (!draggedGroupKey || draggedGroupKey === targetKey) {
+      setDraggedGroupKey(null);
+      return;
+    }
+
+    const currentOrder = orderedSignatureGroups.map((group) => group.key);
+    const fromIndex = currentOrder.indexOf(draggedGroupKey);
+    const toIndex = currentOrder.indexOf(targetKey);
+
+    if (fromIndex === -1 || toIndex === -1) {
+      setDraggedGroupKey(null);
+      return;
+    }
+
+    const nextOrder = [...currentOrder];
+    const [movedKey] = nextOrder.splice(fromIndex, 1);
+    nextOrder.splice(toIndex, 0, movedKey);
+    setSignatureGroupOrder(nextOrder);
+    setDraggedGroupKey(null);
+  };
 
   return (
     <div className="space-y-6">
-      {/* SAUDAÇÃO INICIAL */}
+      {/* SAUDAÃ‡ÃƒÆ’O INICIAL */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          Olá, {userName}
+          OlÃ¡, {userName}
         </h1>
         <p className="text-xs text-slate-500 mt-1 font-normal">
-          Bem-vindo ao SOLICITE JÁ - Sistema Integrado de Gestão de Requisições.
+          Bem-vindo ao SOLICITE JÃ - Sistema Integrado de GestÃ£o de RequisiÃ§Ãµes.
         </p>
       </div>
 
-      {/* CARDS DE MÉTRICAS EM BRANCO (MÊS ATUAL) */}
+      {/* CARDS DE MÃ‰TRICAS EM BRANCO (MÃŠS ATUAL) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="text-xs font-normal text-slate-500">Total de Requisições (Mês Atual)</div>
+          <div className="text-xs font-normal text-slate-500">Total de RequisiÃ§Ãµes (MÃªs Atual)</div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
             {monthlyCount}
           </div>
@@ -634,7 +712,7 @@ function AdminHome() {
         </div>
       </div>
 
-      {/* BANNER DE AVISO (VERMELHO CLARO SE HOUVER PENDÊNCIAS COM NÚMERO E DATA) */}
+      {/* BANNER DE AVISO (VERMELHO CLARO SE HOUVER PENDÃŠNCIAS COM NÃšMERO E DATA) */}
       {loading ? (
         <Card className="flex items-center gap-2 p-6 rounded-2xl border-slate-200 bg-white text-slate-500">
           <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
@@ -671,7 +749,7 @@ function AdminHome() {
                   className="flex items-center justify-between text-orange-900 font-normal"
                 >
                   <span>
-                    Requisição {reqCode} - {date}
+                    SolicitaÃ§Ã£o {reqCode} - {date}
                   </span>
                   <span className="underline text-orange-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
                     {getPendingActionLabel(req.status)}{" "}
@@ -687,156 +765,107 @@ function AdminHome() {
           <h3 className="text-sm font-semibold text-emerald-800">Tudo em dia</h3>
           <p className="text-xs text-emerald-700 font-normal">
             {isAdmin
-              ? "Não há solicitações pendentes para atendimento no momento."
-              : "Você não tem requisições pendentes no momento."}
+              ? "NÃ£o hÃ¡ solicitaÃ§Ãµes pendentes para atendimento no momento."
+              : "VocÃª nÃ£o tem requisiÃ§Ãµes pendentes no momento."}
           </p>
         </div>
       )}
 
-      {/* SEÇÃO INFERIOR: ÚLTIMAS REQUISIÇÕES (MÊS ATUAL APENAS) */}
+      {/* QUADRO DE ASSINATURAS PENDENTES POR SETOR/USUÃRIO */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
           <div>
-            <h3 className="text-sm font-bold text-slate-800">Últimas Requisições (Mês Atual)</h3>
+            <h3 className="text-sm font-bold text-slate-800">Blocos de Assinaturas Pendentes</h3>
             <p className="text-xs text-slate-500 mt-0.5 font-normal">
-              Acompanhamento de status e envio de saída do almoxarifado
+              Organizado por setor e usuÃ¡rio. Arraste os blocos para priorizar o acompanhamento.
             </p>
           </div>
           <button
             type="button"
-            onClick={() =>
-              navigate({ to: isAdmin ? "/admin/solicitacoes" : "/admin/minhas-requisicoes" })
-            }
+            onClick={() => navigate({ to: "/admin/minhas-assinaturas" })}
             className="text-xs font-normal text-emerald-600 hover:text-emerald-700 underline inline-flex items-center gap-1 cursor-pointer self-start sm:self-auto"
           >
-            Ver Todas as Requisições <ChevronRight className="w-3.5 h-3.5" />
+            Abrir Assinaturas <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="space-y-3">
-          {sortedRequisicoesForDisplay.length === 0 ? (
-            <div className="p-6 text-center text-xs text-slate-500 font-normal">
-              Nenhuma requisição realizada no mês atual.
-            </div>
-          ) : (
-            sortedRequisicoesForDisplay.map((req) => {
-              const badge = getStatusBadge(req.status);
-              const dateDisplay = formatDisplayDate(req.data, req.created_at);
-              const reqCode = requestCodesMap.get(req.id) || req.id.substring(0, 8);
-
-              const linkedOutputCode = req.saida_vinculada_codigo?.trim() || "";
-              const showSaidaCode = Boolean(linkedOutputCode);
-
-              const reqAttachment =
-                getRequestSignedAttachment(req.signed_attachment, req.status) ||
-                (req.admin_attachment as { storageBucket?: string; storagePath?: string } | null);
-
-              const outputAttachment = getOutputSignedAttachment(req.signed_attachment, req.status);
-
-              // ADMIN SÓ PODE ANEXAR SAÍDA QUANDO O USUÁRIO JÁ CRIOU E ASSINOU A REQUIÇÃO
-              const isUserSigned =
-                req.status === "recebido" ||
-                req.status === "requisicao_assinada" ||
-                req.status === "aguardando_assinatura_saida" ||
-                req.status === "concluido";
-
-              return (
-                <div
-                  key={req.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200/70 gap-3"
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-normal text-slate-700">
-                        Requisição {reqCode}
-                      </span>
-                      {showSaidaCode && (
-                        <span className="text-xs font-normal text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                          Saída {linkedOutputCode}
-                        </span>
-                      )}
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.className}`}>
-                        {badge.label}
-                      </span>
+        {orderedSignatureGroups.length === 0 ? (
+          <div className="p-6 text-center text-xs text-slate-500 font-normal border border-dashed border-slate-200 rounded-xl bg-slate-50/70">
+            Nenhuma assinatura pendente no momento.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {orderedSignatureGroups.map((group) => (
+              <div
+                key={group.key}
+                draggable
+                onDragStart={() => setDraggedGroupKey(group.key)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => handleSignatureGroupDrop(group.key)}
+                onDragEnd={() => setDraggedGroupKey(null)}
+                className={`min-h-48 rounded-xl border p-4 transition-all cursor-grab active:cursor-grabbing ${
+                  draggedGroupKey === group.key
+                    ? "border-emerald-300 bg-emerald-50 shadow-sm opacity-80"
+                    : "border-slate-200 bg-slate-50 hover:border-emerald-200 hover:bg-white"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3 border-b border-slate-200/70 pb-3">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                      <UserRound className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span className="truncate">{group.solicitante}</span>
                     </div>
-                    <div className="text-[11px] text-slate-500 font-normal">
-                      Data: {dateDisplay || "—"} | Setor: {req.setor || "Almoxarifado"}
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 font-normal">
+                      <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{group.setor}</span>
                     </div>
                   </div>
-
-                  {/* AÇÕES DIRETA NA LINHA */}
-                  <div className="flex flex-col gap-1.5 self-end sm:self-auto min-w-44">
-                    {/* VISUALIZAÇÃO DE PDF (VER) */}
-                    {reqAttachment && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 rounded-xl text-[11px] font-normal cursor-pointer border-slate-200 hover:bg-slate-100 justify-start"
-                        onClick={() =>
-                          void handleFetchAndOpenPdf(
-                            reqAttachment,
-                            `PDF da Requisição - Requisição ${reqCode}`,
-                          )
-                        }
-                      >
-                        <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        Ver PDF Requisição
-                      </Button>
-                    )}
-
-                    {outputAttachment && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 rounded-xl text-[11px] font-normal cursor-pointer border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/70 text-emerald-800 justify-start"
-                        onClick={() =>
-                          void handleFetchAndOpenPdf(
-                            outputAttachment,
-                            `PDF da Saída - Saída ${req.saida_codigo || reqCode}`,
-                          )
-                        }
-                      >
-                        <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        Ver PDF Saída
-                      </Button>
-                    )}
-
-                    {/* AÇÕES EXCLUSIVAS DE ADMIN: ANEXAR SAÍDA E DEVOLVER */}
-                    {isAdmin && isUserSigned && (
-                      <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/60">
-                        <Button
-                            type="button"
-                            size="sm"
-                            className="flex-1 gap-1 rounded-xl text-[11px] font-normal bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                            onClick={() => handleOpenAnexarSaida(req)}
-                          >
-                            <Send className="w-3 h-3" />
-                            Anexar Saída
-                          </Button>
-
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1 rounded-xl text-[11px] font-normal border-orange-200 text-orange-700 hover:bg-orange-50 cursor-pointer"
-                          onClick={() => handleOpenDevolucao(req)}
-                        >
-                          <Undo2 className="w-3 h-3 text-orange-500" />
-                          Devolver
-                        </Button>
-                      </div>
-                    )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-normal text-emerald-700">
+                      {group.items.length} pendente{group.items.length === 1 ? "" : "s"}
+                    </span>
+                    <GripVertical className="h-4 w-4 text-slate-300" />
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+
+                <div className="mt-3 space-y-2">
+                  {group.items.map((req) => {
+                    const reqCode = requestCodesMap.get(req.id) || req.id.substring(0, 8);
+                    const dateDisplay = formatDisplayDate(req.data, req.created_at);
+                    const linkedOutputCode = req.saida_vinculada_codigo?.trim();
+
+                    return (
+                      <button
+                        key={req.id}
+                        type="button"
+                        onClick={() => navigate({ to: "/admin/minhas-assinaturas" })}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                            <FileSignature className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">RequisiÃ§Ã£o {reqCode}</span>
+                          </span>
+                          {linkedOutputCode && (
+                            <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                              SIG {linkedOutputCode}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-[10px] font-normal text-slate-500">
+                          {getSignatureStatusLabel(req.status)}{dateDisplay ? ` Â· ${dateDisplay}` : ""}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* MODAL DE VISUALIZAÇÃO DE PDF */}
+      {/* MODAL DE VISUALIZAÃ‡ÃƒÆ’O DE PDF */}
       <Dialog
         open={pdfModal.open}
         onOpenChange={(open) => {
@@ -871,20 +900,20 @@ function AdminHome() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL ADMIN: ANEXAR SAÍDA DIRETO (COM ARRASTAR/SOLTAR, V SEM FUNDO, NÚMERO E DATA DA SAÍDA) */}
+      {/* MODAL ADMIN: ANEXAR SAÃDA DIRETO (COM ARRASTAR/SOLTAR, V SEM FUNDO, NÃšMERO E DATA DA SAÃDA) */}
       <Dialog
         open={Boolean(attachingReq)}
         onOpenChange={(open) => {
           if (!open) {
             setAttachingReq(null);
-            setStagedPdfFile(null);
+            setStagedPdfFiles([]);
           }
         }}
       >
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Anexar Documento de Saída
+              Anexar Documento de RequisiÃ§Ã£o SIG
             </DialogTitle>
           </DialogHeader>
 
@@ -892,7 +921,7 @@ function AdminHome() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="saida_codigo_dash" className="text-xs text-slate-600 font-normal">
-                  Número da Saída
+                  NÃºmero da RequisiÃ§Ã£o SIG
                 </Label>
                 <Input
                   id="saida_codigo_dash"
@@ -905,7 +934,7 @@ function AdminHome() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="saida_data_dash" className="text-xs text-slate-600 font-normal">
-                  Data da Saída
+                  Data da RequisiÃ§Ã£o SIG
                 </Label>
                 <Input
                   id="saida_data_dash"
@@ -917,17 +946,18 @@ function AdminHome() {
               </div>
             </div>
 
-            {/* ÁREA DE DRAG & DROP DO PDF */}
+            {/* ÃREA DE DRAG & DROP DO PDF */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600 font-normal">Arquivo PDF de Saída</Label>
+              <Label className="text-xs text-slate-600 font-normal">Arquivos PDF de RequisiÃ§Ã£o SIG</Label>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="application/pdf,.pdf"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const picked = e.target.files?.[0];
-                  if (picked) setStagedPdfFile(picked);
+                  const picked = Array.from(e.target.files || []);
+                  if (picked.length > 0) setStagedPdfFiles(picked);
                 }}
               />
 
@@ -939,24 +969,24 @@ function AdminHome() {
                 className={`p-5 border-2 border-dashed rounded-2xl text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
                   isDragging
                     ? "border-emerald-500 bg-emerald-50/80"
-                    : stagedPdfFile
+                    : stagedPdfFiles[0]
                       ? "border-emerald-300 bg-emerald-50/30"
                       : "border-slate-300 hover:border-emerald-400 hover:bg-slate-50"
                 }`}
               >
-                {stagedPdfFile ? (
+                {stagedPdfFiles[0] ? (
                   <div className="flex items-center gap-2 text-emerald-800">
                     {/* V SIMPLES SEM FUNDO */}
                     <Check className="w-5 h-5 text-emerald-600 shrink-0 stroke-[2.5]" />
                     <span className="text-xs font-normal truncate max-w-64">
-                      {stagedPdfFile.name}
+                      {stagedPdfFiles.length === 1 ? stagedPdfFiles[0].name : `${stagedPdfFiles.length} PDFs selecionados`}
                     </span>
                   </div>
                 ) : (
                   <>
                     <Upload className="w-6 h-6 text-slate-400" />
                     <span className="text-xs text-slate-600 font-normal">
-                      Arraste ou clique para selecionar o PDF de Saída
+                      Arraste ou clique para selecionar os PDFs da RequisiÃ§Ã£o SIG
                     </span>
                   </>
                 )}
@@ -972,7 +1002,7 @@ function AdminHome() {
               className="rounded-xl text-xs"
               onClick={() => {
                 setAttachingReq(null);
-                setStagedPdfFile(null);
+                setStagedPdfFiles([]);
               }}
               disabled={uploadingSaida}
             >
@@ -983,20 +1013,20 @@ function AdminHome() {
               size="sm"
               className="rounded-xl text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5"
               onClick={() => void handleConfirmAnexarSaida()}
-              disabled={uploadingSaida || !stagedPdfFile}
+              disabled={uploadingSaida || stagedPdfFiles.length === 0}
             >
               {uploadingSaida ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Send className="w-3.5 h-3.5" />
               )}
-              Enviar Documento de Saída
+              Enviar RequisiÃ§Ã£o SIG
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* MODAL ADMIN: DEVOLVER COM SELEÇÃO (REQUIÇÃO OU SAÍDA) E MOTIVO */}
+      {/* MODAL ADMIN: DEVOLVER COM SELEÃ‡ÃƒÆ’O (REQUIÃ‡ÃƒÆ’O OU SAÃDA) E MOTIVO */}
       <Dialog
         open={Boolean(devolucaoReq)}
         onOpenChange={(open) => {
@@ -1006,7 +1036,7 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Devolver requisição
+              Devolver requisiÃ§Ã£o
             </DialogTitle>
           </DialogHeader>
 
@@ -1024,7 +1054,7 @@ function AdminHome() {
                   }`}
                   onClick={() => setDevolucaoTarget("requisicao")}
                 >
-                  Devolver Requisição
+                  Devolver RequisiÃ§Ã£o
                 </Button>
                 <Button
                   type="button"
@@ -1036,22 +1066,22 @@ function AdminHome() {
                   }`}
                   onClick={() => setDevolucaoTarget("saida")}
                 >
-                  Devolver Saída
+                  Devolver SaÃ­da
                 </Button>
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="motivo_devolucao_dash" className="text-xs text-slate-600 font-normal">
-                Motivo da Devolução
+                Motivo da DevoluÃ§Ã£o
               </Label>
               <Textarea
                 id="motivo_devolucao_dash"
                 rows={3}
                 placeholder={
                   devolucaoTarget === "saida"
-                    ? "Descreva o motivo para o admin anexar a saída novamente..."
-                    : "Descreva o motivo para que o solicitante possa corrigir a requisição..."
+                    ? "Descreva o motivo para o admin anexar a saÃ­da novamente..."
+                    : "Descreva o motivo para que o solicitante possa corrigir a requisiÃ§Ã£o..."
                 }
                 value={motivoDevolucao}
                 onChange={(e) => setMotivoDevolucao(e.target.value)}
@@ -1083,7 +1113,7 @@ function AdminHome() {
               ) : (
                 <Undo2 className="w-3.5 h-3.5" />
               )}
-              Confirmar Devolução
+              Confirmar DevoluÃ§Ã£o
             </Button>
           </DialogFooter>
         </DialogContent>

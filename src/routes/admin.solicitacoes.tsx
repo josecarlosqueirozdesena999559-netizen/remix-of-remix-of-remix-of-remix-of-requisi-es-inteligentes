@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   buildSignedAttachmentPayload,
   getAttachmentFile,
+  getAttachmentFiles,
   getOutputSignedAttachment,
   getRequestSignedAttachment,
   removeAttachmentFile,
@@ -135,7 +136,7 @@ function Solicitacoes() {
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
   const [outputDates, setOutputDates] = useState<Record<string, string>>({});
-  const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
+  const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [reviewingRequest, setReviewingRequest] = useState<Requisicao | null>(null);
   const [reviewMode, setReviewMode] = useState<"devolver" | "excluir">("devolver");
@@ -297,60 +298,68 @@ function Solicitacoes() {
     ? (grouped.find(([setor]) => setor === selected)?.[1] ?? [])
     : [];
 
-  const handleOutputUpload = async (request: Requisicao, file: File | undefined) => {
-    if (!file) return;
+  const handleOutputUpload = async (request: Requisicao, files: File[] | File | undefined) => {
+    const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+    if (selectedFiles.length === 0) return;
 
     setUploadMessage(null);
 
     if (!hasRequestItems(request)) {
       setUploadMessage(
-        "Esta requisição está sem itens e não pode seguir para a saída. Devolva para ser refeita com os itens corretos.",
+        "Esta solicita??o est? sem itens e n?o pode seguir para a sa?da. Devolva para ser refeita com os itens corretos.",
       );
       return;
     }
 
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadMessage("Envie apenas arquivo PDF.");
+    const invalidFile = selectedFiles.find(
+      (file) => file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"),
+    );
+
+    if (invalidFile) {
+      setUploadMessage("Envie apenas arquivos PDF.");
       return;
     }
 
     const linkedOutputCode = outputCodes[request.id]?.trim() || null;
     const linkedOutputDate = outputDates[request.id]?.trim() || getTodayInputDate();
-    const safeName = sanitizeFileName(file.name) || "saida.pdf";
-    const storagePath = `saidas/${request.id}/${Date.now()}-${safeName}`;
-    const attachment = {
-      fileName: file.name,
-      storageBucket: REQUISICOES_BUCKET,
-      storagePath,
-      uploadedAt: new Date().toISOString(),
-      kind: "output" as const,
-      outputCode: linkedOutputCode,
-      outputDate: linkedOutputDate,
-    };
+    const attachments: AttachmentFile[] = [];
 
     setUploadingId(request.id);
 
     try {
-      const previousAdminAttachment = getAttachmentFile(
-        request.admin_attachment,
-      ) as AttachmentFile | null;
+      const previousAdminAttachments = getAttachmentFiles(request.admin_attachment);
 
-      const { error: uploadError } = await supabase.storage
-        .from(REQUISICOES_BUCKET)
-        .upload(storagePath, file, {
-          contentType: file.type || "application/pdf",
-          upsert: true,
-        });
+      for (const file of selectedFiles) {
+        const safeName = sanitizeFileName(file.name) || "saida.pdf";
+        const storagePath = `saidas/${request.id}/${Date.now()}-${attachments.length + 1}-${safeName}`;
+        const attachment: AttachmentFile = {
+          fileName: file.name,
+          storageBucket: REQUISICOES_BUCKET,
+          storagePath,
+          uploadedAt: new Date().toISOString(),
+          kind: "output",
+        };
 
-      if (uploadError) {
-        throw new Error(
-          uploadError.message ||
-            "Não foi possível anexar o PDF. Verifique o arquivo e tente novamente.",
-        );
+        const { error: uploadError } = await supabase.storage
+          .from(REQUISICOES_BUCKET)
+          .upload(storagePath, file, {
+            contentType: file.type || "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(
+            uploadError.message ||
+              "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.",
+          );
+        }
+
+        attachments.push(attachment);
       }
 
+      const adminAttachment = attachments.length === 1 ? attachments[0] : attachments;
       const payload = {
-        admin_attachment: attachment,
+        admin_attachment: adminAttachment,
         saida_vinculada_codigo: linkedOutputCode,
         saida_vinculada_data: linkedOutputDate,
         status: "aguardando_assinatura_saida",
@@ -384,7 +393,7 @@ function Solicitacoes() {
 
       if (updateError) throw new Error(updateError.message);
 
-      await removeAttachmentFile(previousAdminAttachment);
+      await Promise.all(previousAdminAttachments.map((attachment) => removeAttachmentFile(attachment)));
 
       try {
         await notifyRequestByWhatsApp({
@@ -392,13 +401,18 @@ function Solicitacoes() {
           notificationType: "outputAttached",
         });
       } catch (notificationError) {
-        console.error("Erro ao enviar notificação por WhatsApp:", notificationError);
+        console.error("Erro ao enviar notifica??o por WhatsApp:", notificationError);
       }
 
       setData((current) => current?.filter((item) => item.id !== request.id));
-      setUploadMessage("Documento de saída enviado pro Almoxarifado com sucesso.");
+      setUploadMessage(
+        attachments.length === 1
+          ? "Documento de sa?da enviado pro Almoxarifado com sucesso."
+          : `${attachments.length} documentos de sa?da enviados para assinatura.`,
+      );
     } catch (err) {
-      setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de saída.");
+      await Promise.all(attachments.map((attachment) => removeAttachmentFile(attachment)));
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de sa?da.");
     } finally {
       setUploadingId(null);
     }
@@ -418,9 +432,9 @@ function Solicitacoes() {
   const handleDrop = (event: DragEvent<HTMLDivElement>, request: Requisicao) => {
     event.preventDefault();
     setDraggingId((current) => (current === request.id ? null : current));
-    const droppedFile = event.dataTransfer.files?.[0];
-    if (droppedFile) {
-      setStagedFiles((current) => ({ ...current, [request.id]: droppedFile }));
+    const droppedFiles = Array.from(event.dataTransfer.files || []);
+    if (droppedFiles.length > 0) {
+      setStagedFiles((current) => ({ ...current, [request.id]: droppedFiles }));
     }
   };
 
@@ -659,7 +673,7 @@ function Solicitacoes() {
                             className="h-8 w-36"
                             aria-label="Data da saída"
                           />
-                          {getAttachmentFile(r.admin_attachment) ? (
+                          {getAttachmentFiles(r.admin_attachment).length > 0 ? (
                             <span className="inline-flex items-center gap-1 text-xs text-orange-700">
                               <CheckCircle2 className="h-4 w-4" />
                               Enviado
@@ -674,11 +688,12 @@ function Solicitacoes() {
                             id={`saida-${r.id}`}
                             type="file"
                             accept="application/pdf,.pdf"
+                            multiple
                             className="hidden"
                             disabled={uploadingId === r.id || missingItems}
                             onChange={(event) => {
-                              const picked = event.target.files?.[0];
-                              if (picked) {
+                              const picked = Array.from(event.target.files || []);
+                              if (picked.length > 0) {
                                 setStagedFiles((current) => ({ ...current, [r.id]: picked }));
                               }
                               event.currentTarget.value = "";
@@ -688,16 +703,18 @@ function Solicitacoes() {
                           {stagedFiles[r.id] ? (
                             <div className="flex items-center gap-2">
                               <span className="max-w-44 truncate rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800">
-                                PDF: {stagedFiles[r.id].name}
+                                {stagedFiles[r.id].length === 1
+                                  ? `PDF: ${stagedFiles[r.id][0].name}`
+                                  : `${stagedFiles[r.id].length} PDFs selecionados`}
                               </span>
                               <button
                                 type="button"
                                 disabled={uploadingId === r.id || missingItems}
                                 onClick={() => {
-                                  const fileToUpload = stagedFiles[r.id];
-                                  if (!fileToUpload) return;
+                                  const filesToUpload = stagedFiles[r.id];
+                                  if (!filesToUpload?.length) return;
 
-                                  void handleOutputUpload(r, fileToUpload).finally(() => {
+                                  void handleOutputUpload(r, filesToUpload).finally(() => {
                                     setStagedFiles((current) => {
                                       const next = { ...current };
                                       delete next[r.id];
@@ -729,13 +746,13 @@ function Solicitacoes() {
                               ) : (
                                 <Upload className="h-4 w-4" />
                               )}
-                              {getAttachmentFile(r.admin_attachment) ? "Trocar PDF" : "Anexar PDF"}
+                              {getAttachmentFiles(r.admin_attachment).length > 0 ? "Trocar PDFs" : "Anexar PDFs"}
                             </Button>
                           )}
 
                           {draggingId === r.id && (
                             <span className="text-xs font-semibold text-orange-700">
-                              Solte o PDF para reconhecer
+                              Solte os PDFs para reconhecer
                             </span>
                           )}
                         </div>

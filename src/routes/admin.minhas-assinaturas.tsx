@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
   buildSignedAttachmentPayload,
+  getAttachmentFiles,
   getOutputSignedAttachment,
+  getOutputSignedAttachments,
   getRequestSignedAttachment,
   removeAttachmentFile,
   type AttachmentFile,
@@ -70,9 +72,13 @@ function canEditUnsignedRequest(request: Requisicao) {
   );
 }
 
+function getRequiredOutputSignatureCount(request: Requisicao) {
+  return Math.max(1, getAttachmentFiles(request.admin_attachment).length);
+}
+
 function needsCurrentStageSignature(request: Requisicao) {
   if (request.status === "aguardando_assinatura_saida") {
-    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+    return getOutputSignedAttachments(request.signed_attachment, request.status).length < getRequiredOutputSignatureCount(request);
   }
 
   if (request.status === "correcao_requisicao") {
@@ -154,7 +160,7 @@ function MinhasAssinaturasPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
+  const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -267,65 +273,89 @@ function MinhasAssinaturasPage() {
     return <Outlet />;
   }
 
-  const handleUpload = async (request: Requisicao, file: File | undefined) => {
-    if (!file) return;
+  const handleUpload = async (request: Requisicao, files: File[] | File | undefined) => {
+    const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+    if (selectedFiles.length === 0) return;
 
     setMessage(null);
     setError(null);
 
     if (shouldBlockSignatureUpload(request)) {
       setError(
-        "Esta requisição está sem itens e não pode ser assinada. Refaça a requisição com os itens corretos.",
+        "Esta solicita??o est? sem itens e n?o pode ser assinada. Refa?a a solicita??o com os itens corretos.",
       );
       return;
     }
 
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Envie apenas arquivo PDF.");
+    const invalidFile = selectedFiles.find(
+      (file) => file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"),
+    );
+
+    if (invalidFile) {
+      setError("Envie apenas arquivos PDF.");
       return;
     }
 
     const isOutputStage = request.status === "aguardando_assinatura_saida";
-    const safeName = sanitizeFileName(file.name) || "assinado.pdf";
-    const storagePath = `${isOutputStage ? "saidas-assinadas" : "requisicoes-assinadas"}/${request.id}/${Date.now()}-${safeName}`;
-    const attachment = {
-      fileName: file.name,
-      storageBucket: REQUISICOES_BUCKET,
-      storagePath,
-      uploadedAt: new Date().toISOString(),
-      sourceUploadedAt: isOutputStage
-        ? (request.admin_attachment as AttachmentFile | null)?.uploadedAt ||
-          new Date().toISOString()
-        : undefined,
-      kind: isOutputStage ? ("output" as const) : ("request" as const),
-    };
+    const requiredOutputCount = isOutputStage ? getRequiredOutputSignatureCount(request) : 1;
+
+    if (isOutputStage && selectedFiles.length !== requiredOutputCount) {
+      setError(
+        requiredOutputCount === 1
+          ? "Anexe 1 PDF de sa?da assinado."
+          : `Anexe os ${requiredOutputCount} PDFs de sa?da assinados.`,
+      );
+      return;
+    }
+
+    const uploadedAttachments: AttachmentFile[] = [];
 
     setUploadingId(request.id);
 
     try {
-      const { error: uploadError } = await supabase.storage
-        .from(REQUISICOES_BUCKET)
-        .upload(storagePath, file, {
-          contentType: file.type || "application/pdf",
-          upsert: true,
-        });
+      for (const file of selectedFiles) {
+        const safeName = sanitizeFileName(file.name) || "assinado.pdf";
+        const storagePath = `${isOutputStage ? "saidas-assinadas" : "requisicoes-assinadas"}/${request.id}/${Date.now()}-${uploadedAttachments.length + 1}-${safeName}`;
+        const attachment: AttachmentFile = {
+          fileName: file.name,
+          storageBucket: REQUISICOES_BUCKET,
+          storagePath,
+          uploadedAt: new Date().toISOString(),
+          sourceUploadedAt: isOutputStage
+            ? getAttachmentFiles(request.admin_attachment).at(uploadedAttachments.length)?.uploadedAt ||
+              new Date().toISOString()
+            : undefined,
+          kind: isOutputStage ? "output" : "request",
+        };
 
-      if (uploadError)
-        throw new Error(
-          uploadError.message ||
-            "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.",
-        );
+        const { error: uploadError } = await supabase.storage
+          .from(REQUISICOES_BUCKET)
+          .upload(storagePath, file, {
+            contentType: file.type || "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(
+            uploadError.message ||
+              "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.",
+          );
+        }
+
+        uploadedAttachments.push(attachment);
+      }
 
       const signedAttachment = buildSignedAttachmentPayload(request.signed_attachment, {
-        request: isOutputStage ? undefined : attachment,
-        output: isOutputStage ? attachment : undefined,
+        request: isOutputStage ? undefined : uploadedAttachments[0],
+        output: isOutputStage ? uploadedAttachments.at(-1) || null : undefined,
+        outputs: isOutputStage ? uploadedAttachments : undefined,
       });
-      const previousSignedAttachment = isOutputStage
-        ? getOutputSignedAttachment(request.signed_attachment, request.status)
-        : getRequestSignedAttachment(request.signed_attachment, request.status);
-      const previousAdminAttachment = isOutputStage
-        ? (request.admin_attachment as AttachmentFile | null)
-        : null;
+      const previousSignedAttachments = isOutputStage
+        ? getOutputSignedAttachments(request.signed_attachment, request.status)
+        : [getRequestSignedAttachment(request.signed_attachment, request.status)].filter(Boolean);
+      const previousAdminAttachments = isOutputStage
+        ? getAttachmentFiles(request.admin_attachment)
+        : [];
 
       const payload = {
         signed_attachment: signedAttachment,
@@ -357,13 +387,13 @@ function MinhasAssinaturasPage() {
       }
 
       await Promise.all([
-        removeOldAttachment(previousSignedAttachment),
-        removeOldAttachment(previousAdminAttachment),
+        ...previousSignedAttachments.map((attachment) => removeOldAttachment(attachment)),
+        ...previousAdminAttachments.map((attachment) => removeOldAttachment(attachment)),
       ]);
 
       const sentMessage = isOutputStage
-        ? "Saída assinada enviada pro Almoxarifado."
-        : "Requisição assinada enviada pro Almoxarifado.";
+        ? "Sa?da assinada enviada pro Almoxarifado."
+        : "Solicita??o assinada enviada pro Almoxarifado.";
       setMessage(sentMessage);
       try {
         await notifyRequestByWhatsApp({
@@ -376,6 +406,7 @@ function MinhasAssinaturasPage() {
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
     } catch (err) {
+      await Promise.all(uploadedAttachments.map((attachment) => removeOldAttachment(attachment)));
       setError(getSignedPdfUploadErrorMessage(err));
     } finally {
       setUploadingId(null);
@@ -396,9 +427,9 @@ function MinhasAssinaturasPage() {
   const handleDrop = (event: DragEvent<HTMLDivElement>, request: Requisicao) => {
     event.preventDefault();
     setDraggingId((current) => (current === request.id ? null : current));
-    const droppedFile = event.dataTransfer.files?.[0];
-    if (droppedFile) {
-      setStagedFiles((current) => ({ ...current, [request.id]: droppedFile }));
+    const droppedFiles = Array.from(event.dataTransfer.files || []);
+    if (droppedFiles.length > 0) {
+      setStagedFiles((current) => ({ ...current, [request.id]: droppedFiles }));
     }
   };
 
@@ -641,9 +672,10 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
+                                multiple={request.status === "aguardando_assinatura_saida"}
                                 onChange={(event) => {
-                                  const picked = event.target.files?.[0];
-                                  if (picked) {
+                                  const picked = Array.from(event.target.files || []);
+                                  if (picked.length > 0) {
                                     setStagedFiles((current) => ({
                                       ...current,
                                       [request.id]: picked,
@@ -656,16 +688,18 @@ function MinhasAssinaturasPage() {
                               {stagedFiles[request.id] ? (
                                 <div className="flex items-center gap-2">
                                   <span className="max-w-44 truncate rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800">
-                                    PDF: {stagedFiles[request.id].name}
+                                    {stagedFiles[request.id].length === 1
+                                      ? `PDF: ${stagedFiles[request.id][0].name}`
+                                      : `${stagedFiles[request.id].length} PDFs selecionados`}
                                   </span>
                                   <button
                                     type="button"
                                     disabled={uploadingId === request.id}
                                     onClick={() => {
-                                      const fileToUpload = stagedFiles[request.id];
-                                      if (!fileToUpload) return;
+                                      const filesToUpload = stagedFiles[request.id];
+                                      if (!filesToUpload?.length) return;
 
-                                      void handleUpload(request, fileToUpload).finally(() => {
+                                      void handleUpload(request, filesToUpload).finally(() => {
                                         setStagedFiles((curr) => {
                                           const next = { ...curr };
                                           delete next[request.id];
@@ -703,13 +737,17 @@ function MinhasAssinaturasPage() {
                                   ) : (
                                     <Upload className="h-4 w-4" />
                                   )}
-                                  Anexar PDF
+                                  {request.status === "aguardando_assinatura_saida"
+                                    ? `Anexar ${getRequiredOutputSignatureCount(request)} PDFs`
+                                    : "Anexar PDF"}
                                 </Button>
                               )}
 
                               {draggingId === request.id && (
                                 <span className="text-xs font-medium text-orange-700">
-                                  Solte o PDF para reconhecer
+                                  {request.status === "aguardando_assinatura_saida"
+                                    ? "Solte os PDFs assinados"
+                                    : "Solte o PDF para reconhecer"}
                                 </span>
                               )}
                             </div>
