@@ -194,6 +194,7 @@ export type Database = {
           return_target: string | null
           returned_at: string | null
           saida_codigo: string | null
+          saida_data_envio: string | null
           saida_vinculada_codigo: string | null
           saida_vinculada_data: string | null
           setor: string | null
@@ -217,6 +218,7 @@ export type Database = {
           return_target?: string | null
           returned_at?: string | null
           saida_codigo?: string | null
+          saida_data_envio?: string | null
           saida_vinculada_codigo?: string | null
           saida_vinculada_data?: string | null
           setor?: string | null
@@ -240,6 +242,7 @@ export type Database = {
           return_target?: string | null
           returned_at?: string | null
           saida_codigo?: string | null
+          saida_data_envio?: string | null
           saida_vinculada_codigo?: string | null
           saida_vinculada_data?: string | null
           setor?: string | null
