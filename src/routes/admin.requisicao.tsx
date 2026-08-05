@@ -153,6 +153,24 @@ function getSingleLinkedUser(value: SectorUserOption | SectorUserOption[] | null
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
+async function getUsersForSector(sectorName: string) {
+  const normalizedSectorName = normalizeSectorName(sectorName);
+  if (!normalizedSectorName) return [];
+
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
+    .order("nome", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as SectorUserOption[]).filter(
+    (user) =>
+      normalizeSectorName(user.setor) === normalizedSectorName ||
+      normalizeSectorName(user.unidade_nome) === normalizedSectorName,
+  );
+}
+
 async function getLinkedUsersForSector(sectorName: string) {
   const normalizedSectorName = normalizeSectorName(sectorName);
   if (!normalizedSectorName) return [];
@@ -627,9 +645,17 @@ function CriarRequisicaoPage() {
 
         if (isHospitalShared) {
           try {
-            filteredSectorUsers = await getLinkedUsersForSector(sectorName);
+            filteredSectorUsers = await getUsersForSector(sectorName);
           } catch (err) {
-            console.error("Erro ao carregar usuarios vinculados ao setor:", err);
+            console.error("Erro ao carregar usuarios do setor:", err);
+          }
+
+          if (filteredSectorUsers.length === 0) {
+            try {
+              filteredSectorUsers = await getLinkedUsersForSector(sectorName);
+            } catch (err) {
+              console.error("Erro ao carregar usuarios vinculados ao setor:", err);
+            }
           }
         }
 
