@@ -112,6 +112,10 @@ interface ResponsibleSectorProgramRow {
   } | null;
 }
 
+interface SectorResponsibleUserRow {
+  usuarios: SectorUserOption | SectorUserOption[] | null;
+}
+
 const requestSelectWithFeedback =
   "id,categoria,status,solicitante,solicitante_cpf,items,return_reason";
 const requestSelectFallback = "id,categoria,status,solicitante,solicitante_cpf,items";
@@ -134,6 +138,37 @@ function normalizeSectorName(value: string | null | undefined) {
   return String(value || "")
     .trim()
     .toLowerCase();
+}
+
+function getSingleLinkedUser(value: SectorUserOption | SectorUserOption[] | null) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+async function getLinkedUsersForSector(sectorName: string) {
+  const normalizedSectorName = normalizeSectorName(sectorName);
+  if (!normalizedSectorName) return [];
+
+  const { data: sectors, error: sectorsError } = await supabase.from("setores").select("id,nome");
+
+  if (sectorsError) throw new Error(sectorsError.message);
+
+  const sectorIds = ((sectors ?? []) as { id: number; nome: string | null }[])
+    .filter((sector) => normalizeSectorName(sector.nome) === normalizedSectorName)
+    .map((sector) => sector.id);
+
+  if (sectorIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("setor_responsaveis")
+    .select("usuarios(id,nome,usuario,email,cpf,funcao,setor,unidade_nome)")
+    .in("setor_id", sectorIds)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as SectorResponsibleUserRow[])
+    .map((row) => getSingleLinkedUser(row.usuarios))
+    .filter((user): user is SectorUserOption => Boolean(user));
 }
 
 function normalizeAllowedCategories(raw: unknown) {
@@ -567,13 +602,25 @@ function CriarRequisicaoPage() {
         const sectorName = profile?.unidade_nome || profile?.setor || "";
         const normalizedSectorName = normalizeSectorName(sectorName);
 
-        let filteredSectorUsers = allUsers;
-        if (normalizedSectorName) {
-          filteredSectorUsers = allUsers.filter(
-            (u) =>
-              normalizeSectorName(u.setor) === normalizedSectorName ||
-              normalizeSectorName(u.unidade_nome) === normalizedSectorName,
-          );
+        let filteredSectorUsers: SectorUserOption[] = [];
+
+        if (isHospitalShared) {
+          try {
+            filteredSectorUsers = await getLinkedUsersForSector(sectorName);
+          } catch (err) {
+            console.error("Erro ao carregar usuarios vinculados ao setor:", err);
+          }
+        }
+
+        if (filteredSectorUsers.length === 0) {
+          filteredSectorUsers = allUsers;
+          if (normalizedSectorName) {
+            filteredSectorUsers = allUsers.filter(
+              (u) =>
+                normalizeSectorName(u.setor) === normalizedSectorName ||
+                normalizeSectorName(u.unidade_nome) === normalizedSectorName,
+            );
+          }
         }
 
         filteredSectorUsers = filteredSectorUsers.filter(
