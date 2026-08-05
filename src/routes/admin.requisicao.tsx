@@ -781,6 +781,8 @@ function CriarRequisicaoPage() {
       sectionGroups.find((group) => group.label === selectedGroupLabel) || sectionGroups[0] || null,
     [sectionGroups, selectedGroupLabel],
   );
+  const isHospitalShared = isHospitalSharedProfile(profile);
+  const mustChooseHospitalRequester = isHospitalShared && !selectedSolicitanteId;
 
   const visibleSectionTables = useMemo(() => {
     if (!selectedGroup) return [];
@@ -1004,7 +1006,7 @@ function CriarRequisicaoPage() {
         <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 font-medium text-destructive">
           {error}
         </Card>
-      ) : categories.length === 0 && !isHospitalSharedProfile(profile) ? (
+      ) : categories.length === 0 && !isHospitalShared ? (
         <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
           Nenhum tipo de material liberado para este usuário.
         </Card>
@@ -1017,7 +1019,7 @@ function CriarRequisicaoPage() {
             </Card>
           )}
 
-          {isHospitalSharedProfile(profile) && (
+          {isHospitalShared && (
             <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
               <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
                 <UserCheck className="w-4 h-4 text-emerald-600" />
@@ -1051,112 +1053,127 @@ function CriarRequisicaoPage() {
             </Card>
           )}
 
-          <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
-            <div className="flex flex-wrap gap-2">
-              {sectionGroups.map((group) => (
-                <Button
-                  key={group.label}
-                  type="button"
-                  variant={selectedGroup?.label === group.label ? "default" : "outline"}
-                  onClick={() => {
-                    setSelectedGroupLabel(group.label);
-                    setSelectedSectionId(group.sections[0]?.id || "");
-                  }}
-                >
-                  {group.label}
-                </Button>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
-            <div className="relative max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Pesquisar item, unidade ou subcategoria..."
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                className="rounded-xl pl-9 pr-10"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label="Limpar pesquisa"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </Card>
-
-          <div className="space-y-6">
-            {visibleSectionTables.map(({ section, items: sectionItems }) => (
-              <Card
-                key={section.id}
-                className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs"
-              >
-                <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700">
-                  {section.label}
-                </h3>
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Item</th>
-                        <th className="px-4 py-3 text-left">Unidade</th>
-                        <th className="px-4 py-3 text-center w-36">Estoque</th>
-                        <th className="px-4 py-3 text-center w-36">Qtd. Solicitada</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {sectionItems.map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="px-4 py-3 font-medium text-slate-800">{item.nome}</td>
-                          <td className="px-4 py-3 text-xs text-slate-500">{item.unidade}</td>
-                          <td className="px-4 py-2 text-center">
-                            <Input
-                              type="text"
-                              value={stocks[item.id] || ""}
-                              onChange={(e) =>
-                                setStocks((prev) => ({ ...prev, [item.id]: e.target.value }))
-                              }
-                              placeholder="-"
-                              className="h-8 text-center text-xs rounded-lg border-slate-200"
-                            />
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <Input
-                              type="text"
-                              value={quantities[item.id] || ""}
-                              onChange={(e) =>
-                                setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))
-                              }
-                              placeholder="0"
-                              className="h-8 text-center text-xs rounded-lg border-slate-200 font-semibold text-emerald-700"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {mustChooseHospitalRequester ? (
+            <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
+              Selecione o profissional do setor para liberar os materiais do pedido.
+            </Card>
+          ) : categories.length === 0 ? (
+            <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
+              Nenhum tipo de material liberado para este usuario.
+            </Card>
+          ) : (
+            <>
+              <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
+                <div className="flex flex-wrap gap-2">
+                  {sectionGroups.map((group) => (
+                    <Button
+                      key={group.label}
+                      type="button"
+                      variant={selectedGroup?.label === group.label ? "default" : "outline"}
+                      onClick={() => {
+                        setSelectedGroupLabel(group.label);
+                        setSelectedSectionId(group.sections[0]?.id || "");
+                      }}
+                    >
+                      {group.label}
+                    </Button>
+                  ))}
                 </div>
               </Card>
-            ))}
-          </div>
 
-          <div className="flex justify-end pt-4">
-            <Button
-              type="button"
-              disabled={saving}
-              onClick={() => void handleSubmit()}
-              className="gap-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 px-6 font-semibold"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {editingRequestId ? "Salvar alterações" : "Enviar requisição"}
-            </Button>
-          </div>
+              <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
+                <div className="relative max-w-md">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Pesquisar item, unidade ou subcategoria..."
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    className="rounded-xl pl-9 pr-10"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                      aria-label="Limpar pesquisa"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </Card>
+
+              <div className="space-y-6">
+                {visibleSectionTables.map(({ section, items: sectionItems }) => (
+                  <Card
+                    key={section.id}
+                    className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs"
+                  >
+                    <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-700">
+                      {section.label}
+                    </h3>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          <tr>
+                            <th className="px-4 py-3 text-left">Item</th>
+                            <th className="px-4 py-3 text-left">Unidade</th>
+                            <th className="px-4 py-3 text-center w-36">Estoque</th>
+                            <th className="px-4 py-3 text-center w-36">Qtd. Solicitada</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {sectionItems.map((item) => (
+                            <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="px-4 py-3 font-medium text-slate-800">{item.nome}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{item.unidade}</td>
+                              <td className="px-4 py-2 text-center">
+                                <Input
+                                  type="text"
+                                  value={stocks[item.id] || ""}
+                                  onChange={(e) =>
+                                    setStocks((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                  placeholder="-"
+                                  className="h-8 text-center text-xs rounded-lg border-slate-200"
+                                />
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <Input
+                                  type="text"
+                                  value={quantities[item.id] || ""}
+                                  onChange={(e) =>
+                                    setQuantities((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="0"
+                                  className="h-8 text-center text-xs rounded-lg border-slate-200 font-semibold text-emerald-700"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void handleSubmit()}
+                  className="gap-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 px-6 font-semibold"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {editingRequestId ? "Salvar alterações" : "Enviar requisição"}
+                </Button>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
