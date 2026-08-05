@@ -1044,7 +1044,7 @@ function CriarRequisicaoPage() {
       ) : (
         <>
           {returnReason && (
-            <Card className="rounded-2xl border-amber-200 bg-amber-50 p-4 text-amber-950">
+            <Card className="rounded-2xl border-orange-200 bg-orange-50 p-4 text-orange-950">
               <p className="text-sm font-medium">Motivo da devolução</p>
               <p className="mt-1 text-sm">{returnReason}</p>
             </Card>

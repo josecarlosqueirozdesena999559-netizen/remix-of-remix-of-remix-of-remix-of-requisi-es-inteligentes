@@ -148,7 +148,7 @@ function getStatusBadge(status: string) {
     case "aguardando_assinatura_requisicao":
       return {
         label: "Aguardando Assinatura do Solicitante",
-        className: "bg-amber-100 text-amber-800 border border-amber-200 font-normal",
+        className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "correcao_requisicao":
       return {
@@ -847,7 +847,7 @@ function AdminHome() {
                             <span className="truncate">Requisição {reqCode}</span>
                           </span>
                           {linkedOutputCode && (
-                            <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700">
+                            <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">
                               SIG {linkedOutputCode}
                             </span>
                           )}

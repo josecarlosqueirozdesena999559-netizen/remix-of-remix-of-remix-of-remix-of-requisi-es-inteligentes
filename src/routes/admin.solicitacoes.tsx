@@ -674,7 +674,7 @@ function Solicitacoes() {
                             aria-label="Data da saída"
                           />
                           {getAttachmentFiles(r.admin_attachment).length > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-orange-700">
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
                               <CheckCircle2 className="h-4 w-4" />
                               Enviado
                             </span>
@@ -702,7 +702,7 @@ function Solicitacoes() {
 
                           {stagedFiles[r.id] ? (
                             <div className="flex items-center gap-2">
-                              <span className="max-w-44 truncate rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800">
+                              <span className="max-w-44 truncate rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
                                 {stagedFiles[r.id].length === 1
                                   ? `PDF: ${stagedFiles[r.id][0].name}`
                                   : `${stagedFiles[r.id].length} PDFs selecionados`}
@@ -722,7 +722,7 @@ function Solicitacoes() {
                                     });
                                   });
                                 }}
-                                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-orange-500 text-white shadow-md shadow-orange-500/20 transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 title="Enviar ao Almoxarifado"
                               >
                                 {uploadingId === r.id ? (
@@ -737,7 +737,7 @@ function Solicitacoes() {
                               type="button"
                               variant="outline"
                               size="sm"
-                              className={`gap-2 rounded-xl ${draggingId === r.id ? "border-orange-500 bg-orange-100 text-orange-900 hover:bg-orange-100" : ""}`}
+                              className={`gap-2 rounded-xl ${draggingId === r.id ? "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50" : ""}`}
                               disabled={uploadingId === r.id || missingItems}
                               onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
                             >
@@ -751,7 +751,7 @@ function Solicitacoes() {
                           )}
 
                           {draggingId === r.id && (
-                            <span className="text-xs font-semibold text-orange-700">
+                            <span className="text-xs font-semibold text-emerald-700">
                               Solte os PDFs para reconhecer
                             </span>
                           )}

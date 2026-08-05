@@ -556,7 +556,7 @@ function MinhasAssinaturasPage() {
                       <td className="px-3 py-2 text-foreground">
                         <span className="inline-flex flex-wrap items-center gap-2">
                           {hasRequestSigned && request.status === "aguardando_assinatura_saida" && (
-                            <CheckCircle2 className="h-4 w-4 text-orange-700" />
+                            <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                           )}
                           {getStageLabel(request.status)}
                           {missingItems && (
@@ -565,7 +565,7 @@ function MinhasAssinaturasPage() {
                             </span>
                           )}
                           {request.return_reason && request.status === "correcao_requisicao" && (
-                            <span className="text-xs text-amber-700">
+                            <span className="text-xs text-orange-700">
                               Motivo da devolução: {request.return_reason}
                             </span>
                           )}
@@ -664,7 +664,7 @@ function MinhasAssinaturasPage() {
                             <div
                               className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
                                 draggingId === request.id
-                                  ? "border-orange-500 bg-orange-50"
+                                  ? "border-emerald-500 bg-emerald-50"
                                   : "border-transparent"
                               }`}
                               onDragEnter={() => setDraggingId(request.id)}
@@ -692,7 +692,7 @@ function MinhasAssinaturasPage() {
 
                               {stagedFiles[request.id] ? (
                                 <div className="flex items-center gap-2">
-                                  <span className="max-w-44 truncate rounded-lg border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-800">
+                                  <span className="max-w-44 truncate rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
                                     {stagedFiles[request.id].length === 1
                                       ? `PDF: ${stagedFiles[request.id][0].name}`
                                       : `${stagedFiles[request.id].length} PDFs selecionados`}
@@ -712,7 +712,7 @@ function MinhasAssinaturasPage() {
                                         });
                                       });
                                     }}
-                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-orange-500 text-white shadow-md shadow-orange-500/20 transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                                     title="Enviar PDF assinado"
                                   >
                                     {uploadingId === request.id ? (
@@ -729,7 +729,7 @@ function MinhasAssinaturasPage() {
                                   size="sm"
                                   className={`gap-2 rounded-xl ${
                                     draggingId === request.id
-                                      ? "border-orange-500 bg-orange-100 text-orange-900 hover:bg-orange-100"
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50"
                                       : ""
                                   }`}
                                   disabled={uploadingId === request.id}
@@ -749,7 +749,7 @@ function MinhasAssinaturasPage() {
                               )}
 
                               {draggingId === request.id && (
-                                <span className="text-xs font-medium text-orange-700">
+                                <span className="text-xs font-medium text-emerald-700">
                                   {request.status === "aguardando_assinatura_saida"
                                     ? "Solte os PDFs assinados"
                                     : "Solte o PDF para reconhecer"}

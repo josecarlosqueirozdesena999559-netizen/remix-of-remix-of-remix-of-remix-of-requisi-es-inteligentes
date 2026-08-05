@@ -356,10 +356,10 @@ function ControleAssinaturasPage() {
             Acompanhe os setores com requisições aguardando assinatura.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-md border bg-card px-4 py-3 text-sm">
-          <FileSignature className="h-4 w-4 text-primary" />
-          <span className="text-muted-foreground">Pendências abertas</span>
-          <span className="text-lg leading-none text-foreground">{totalPendencias}</span>
+        <div className="flex items-center gap-2 rounded-md border border-orange-200/80 bg-orange-50 px-4 py-3 text-sm">
+          <FileSignature className="h-4 w-4 text-orange-600" />
+          <span className="text-orange-700">Pendências abertas</span>
+          <span className="text-lg leading-none text-orange-900">{totalPendencias}</span>
         </div>
       </div>
 
@@ -421,7 +421,7 @@ function ControleAssinaturasPage() {
               <p className="text-xl text-foreground">{selectedSetorData.nome}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="destructive">
+              <Badge className="border border-orange-200 bg-orange-100 text-orange-800 hover:bg-orange-100">
                 {selectedSetorData.requests.length} pendente
                 {selectedSetorData.requests.length === 1 ? "" : "s"}
               </Badge>
