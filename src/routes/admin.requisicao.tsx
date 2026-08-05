@@ -918,11 +918,12 @@ function CriarRequisicaoPage() {
 
     const payload = {
       categoria: requestCategory,
-      setor:
-        chosenSolicitante.unidade_nome ||
-        chosenSolicitante.setor ||
-        profile.unidade_nome ||
-        profile.setor,
+      setor: isHospitalShared
+        ? "HOSPITAL"
+        : chosenSolicitante.unidade_nome ||
+          chosenSolicitante.setor ||
+          profile.unidade_nome ||
+          profile.setor,
       solicitante: chosenSolicitante.nome,
       solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,
       solicitante_funcao: chosenSolicitante.funcao || profile.funcao,
