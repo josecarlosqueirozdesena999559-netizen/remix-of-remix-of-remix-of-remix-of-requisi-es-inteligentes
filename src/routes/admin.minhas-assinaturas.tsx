@@ -67,7 +67,7 @@ function isRequestSignatureStatus(status: string) {
 
 function canEditUnsignedRequest(request: Requisicao) {
   return (
-    isRequestSignatureStatus(request.status) &&
+    (isRequestSignatureStatus(request.status) || request.status === "correcao_requisicao") &&
     !getRequestSignedAttachment(request.signed_attachment, request.status)
   );
 }
@@ -206,6 +206,7 @@ function MinhasAssinaturasPage() {
           "aguardando_assinatura",
           "aguardando_assinatura_requisicao",
           "aguardando_assinatura_saida",
+          "correcao_requisicao",
         ])
         .order("updated_at", { ascending: false });
 
@@ -589,35 +590,7 @@ function MinhasAssinaturasPage() {
                         </Button>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {request.status === "correcao_requisicao" ? (
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="gap-2"
-                              onClick={() => {
-                                if (typeof window !== "undefined") {
-                                  window.location.assign(
-                                    `/admin/requisicao?requisicaoId=${request.id}`,
-                                  );
-                                }
-                              }}
-                            >
-                              Editar
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="gap-2 text-destructive"
-                              onClick={() => void handleDeletePendingRequest(request)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Excluir
-                            </Button>
-                          </div>
-                        ) : (
+                        {(
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             {canEditUnsignedRequest(request) && (
                               <>
