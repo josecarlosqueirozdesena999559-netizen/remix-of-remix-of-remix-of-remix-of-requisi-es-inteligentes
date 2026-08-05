@@ -59,6 +59,14 @@ interface SectorUserOption {
   funcao: string | null;
   setor: string | null;
   unidade_nome: string | null;
+  categorias_permitidas: unknown;
+}
+
+interface RequestAccessProfile {
+  id: string;
+  setor: string | null;
+  unidade_nome: string | null;
+  categorias_permitidas: unknown;
 }
 
 interface EditableRequestItem {
@@ -125,7 +133,7 @@ function isProductCategory(value: string) {
   return productCategorySet.has(value);
 }
 
-function getAllowedCategories(profile: CurrentUserProfile | null) {
+function getAllowedCategories(profile: Pick<RequestAccessProfile, "categorias_permitidas"> | null) {
   const raw = profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
   return categories.filter(
@@ -160,7 +168,7 @@ async function getLinkedUsersForSector(sectorName: string) {
 
   const { data, error } = await supabase
     .from("setor_responsaveis")
-    .select("usuarios(id,nome,usuario,email,cpf,funcao,setor,unidade_nome)")
+    .select("usuarios(id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas)")
     .in("setor_id", sectorIds)
     .order("created_at", { ascending: true });
 
@@ -179,7 +187,7 @@ function normalizeAllowedCategories(raw: unknown) {
   );
 }
 
-async function getAllowedCategoriesForRequest(profile: CurrentUserProfile | null) {
+async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | null) {
   if (!profile) return [];
 
   const sectorCandidates = [profile.unidade_nome, profile.setor]
@@ -207,7 +215,7 @@ async function getAllowedCategoriesForRequest(profile: CurrentUserProfile | null
   return getAllowedCategories(profile);
 }
 
-async function getResponsibleSectorProgramKeys(profile: CurrentUserProfile | null) {
+async function getResponsibleSectorProgramKeys(profile: Pick<RequestAccessProfile, "id"> | null) {
   if (!profile?.id) return [];
 
   const { data: setorLinks, error: setorLinksError } = await supabase
@@ -343,6 +351,18 @@ function getProgramMatchKey(value: string | null | undefined) {
 
 function getComparableProgramKeys(value: string | null | undefined) {
   return getRelatedProgramKeys(value);
+}
+
+function isItemAllowedForProfileProgram(item: ItemRow, allowedProgramKeys: string[]) {
+  if (allowedProgramKeys.length === 0) return true;
+
+  const itemProgramKeys = (item.programa_produtos ?? []).flatMap((link) =>
+    getComparableProgramKeys(link.programas?.nome),
+  );
+
+  if (itemProgramKeys.length === 0) return true;
+
+  return itemProgramKeys.some((key) => allowedProgramKeys.includes(key));
 }
 
 function buildNormalizedRequestSections(categories: string[]) {
@@ -539,7 +559,7 @@ function CriarRequisicaoPage() {
             : Promise.resolve({ data: null, error: null }),
           supabase
             .from("usuarios")
-            .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome")
+            .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
             .order("nome", { ascending: true }),
         ]);
 
@@ -701,6 +721,56 @@ function CriarRequisicaoPage() {
     };
   }, [editingRequestId]);
 
+  useEffect(() => {
+    if (!isHospitalSharedProfile(profile)) return;
+
+    const selectedRequester = sectorUsers.find((user) => user.id === selectedSolicitanteId);
+    if (!selectedRequester) return;
+
+    let active = true;
+
+    async function loadSelectedRequesterAccess() {
+      try {
+        const [nextCategories, nextProgramKeys] = await Promise.all([
+          getAllowedCategoriesForRequest(selectedRequester),
+          getResponsibleSectorProgramKeys(selectedRequester),
+        ]);
+
+        if (!active) return;
+
+        const categoriesToUse =
+          nextCategories.length > 0 ? nextCategories : getAllowedCategories(profile);
+        const nextSections = buildNormalizedRequestSections(categoriesToUse);
+        const firstGroupLabel = nextSections[0] ? getSectionGroupLabel(nextSections[0]) : "";
+
+        setAllowedCategories(categoriesToUse);
+        setAllowedProgramKeys(nextProgramKeys);
+        setSelectedGroupLabel((current) =>
+          nextSections.some((section) => getSectionGroupLabel(section) === current)
+            ? current
+            : firstGroupLabel,
+        );
+        setSelectedSectionId((current) =>
+          nextSections.some((section) => section.id === current)
+            ? current
+            : getInitialSectionId(nextSections, null),
+        );
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof Error ? err.message : "Erro ao carregar permissao do solicitante.",
+          );
+        }
+      }
+    }
+
+    loadSelectedRequesterAccess();
+
+    return () => {
+      active = false;
+    };
+  }, [profile, sectorUsers, selectedSolicitanteId]);
+
   const categories = allowedCategories;
   const sections = useMemo(() => buildNormalizedRequestSections(categories), [categories]);
   const sectionGroups = useMemo(() => groupRequestSections(sections), [sections]);
@@ -723,7 +793,7 @@ function CriarRequisicaoPage() {
           if (!productHasCategory(item.categoria, section.baseCategory)) return false;
           if (section.matchesItem && !section.matchesItem(item)) return false;
 
-          if (!isItemAllowedForProfileProgram(item, profile, section, allowedProgramKeys)) {
+          if (!isItemAllowedForProfileProgram(item, allowedProgramKeys)) {
             return false;
           }
 
@@ -737,7 +807,7 @@ function CriarRequisicaoPage() {
         };
       })
       .filter(({ items }) => items.length > 0);
-  }, [selectedGroup, items, searchQuery, profile, allowedProgramKeys]);
+  }, [selectedGroup, items, searchQuery, allowedProgramKeys]);
 
   const handleSubmit = async () => {
     setSaving(true);
@@ -934,7 +1004,7 @@ function CriarRequisicaoPage() {
         <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 font-medium text-destructive">
           {error}
         </Card>
-      ) : categories.length === 0 ? (
+      ) : categories.length === 0 && !isHospitalSharedProfile(profile) ? (
         <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
           Nenhum tipo de material liberado para este usuário.
         </Card>
