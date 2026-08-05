@@ -22,7 +22,7 @@ import {
 } from "@/lib/request-return-feedback";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
-import { getCurrentUserProfile, isHospitalSharedProfile } from "@/lib/user-profile";
+import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/minhas-assinaturas")({
@@ -181,9 +181,9 @@ function MinhasAssinaturasPage() {
       const cpfVariants = getRequestOwnerCpfVariants(profile);
       const location = getRequestOwnerLocation(profile);
       const name = profile?.nome?.trim() || "";
-      const isHospitalShared = isHospitalSharedProfile(profile);
+      const isSharedSector = isSharedSectorProfile(profile);
 
-      if (!isHospitalShared && cpfVariants.length === 0 && !(name && location)) {
+      if (!isSharedSector && cpfVariants.length === 0 && !(name && location)) {
         setRequests([]);
         return;
       }
@@ -210,14 +210,14 @@ function MinhasAssinaturasPage() {
         ])
         .order("updated_at", { ascending: false });
 
-      const scopedRequestsQuery = isHospitalShared
-        ? requestsQuery.eq("setor", "HOSPITAL")
+      const scopedRequestsQuery = isSharedSector
+        ? requestsQuery.eq("setor", location)
         : cpfVariants.length > 0
           ? requestsQuery.in("solicitante_cpf", cpfVariants)
           : requestsQuery.eq("solicitante", name).eq("setor", location);
 
-      const scopedFallbackQuery = isHospitalShared
-        ? fallbackRequestsQuery.eq("setor", "HOSPITAL")
+      const scopedFallbackQuery = isSharedSector
+        ? fallbackRequestsQuery.eq("setor", location)
         : cpfVariants.length > 0
           ? fallbackRequestsQuery.in("solicitante_cpf", cpfVariants)
           : fallbackRequestsQuery.eq("solicitante", name).eq("setor", location);

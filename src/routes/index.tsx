@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -52,7 +53,8 @@ function Index() {
       });
 
       if (signInError) throw new Error("Usuario ou senha");
-      navigate({ to: normalizedLogin === "hospital" ? "/admin/requisicao" : "/admin" });
+      const { profile } = await getCurrentUserProfile();
+      navigate({ to: isSharedSectorProfile(profile) ? "/admin/requisicao" : "/admin" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Usuario ou senha");
       setLoading(false);

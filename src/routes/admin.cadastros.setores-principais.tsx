@@ -1,13 +1,32 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Folder, FolderTree, MapPin, Stethoscope } from "lucide-react";
+import { Folder, FolderTree, Pencil, UserRound } from "lucide-react";
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
+import { normalizeProductCategory } from "@/lib/product-options";
 import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/setores-principais")({
   component: SetoresPrincipaisPage,
 });
+
+interface Usuario {
+  id: string;
+  nome: string;
+  usuario: string | null;
+  cpf: string | null;
+  funcao: string | null;
+  setor: string | null;
+  unidade_nome: string | null;
+  categorias_permitidas: unknown;
+}
+
+interface ResponsavelRow {
+  setor_id: number;
+  usuarios: Usuario | Usuario[] | null;
+}
 
 interface Setor {
   id: number;
@@ -19,41 +38,22 @@ interface Setor {
       nome: string;
     } | null;
   }[];
+  setor_responsaveis?: ResponsavelRow[];
 }
 
-interface FolderItem {
-  id: string;
-  label: string;
-  subtitle: string;
-  kind: "principal" | "odontologia";
-  setorId?: number;
-}
-
-interface SectorGroup {
-  id: string;
-  nome: string;
-  programa: string;
-  folders: FolderItem[];
-}
-
-function normalizeText(value: string) {
-  return value
+function normalizeText(value: string | null | undefined) {
+  return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .trim();
 }
 
-function isOdontologiaSetor(nome: string) {
-  return normalizeText(nome).includes("ODONTO");
+function isSharedLogin(user: Usuario) {
+  return normalizeText(user.funcao) === "LOGIN COMPARTILHADO";
 }
 
-function isSingleFolderSetor(nome: string) {
-  const normalized = normalizeText(nome);
-  return normalized.includes("SECRETARIA DE SAUDE") || normalized.includes("SAMU");
-}
-
-function getProgramLabel(setor: Setor) {
+function getLinkedProgramLabel(setor: Setor) {
   const linkedProgramas =
     setor.setor_programas?.map((item) => item.programas?.nome).filter(Boolean) ?? [];
 
@@ -64,48 +64,59 @@ function getProgramLabel(setor: Setor) {
   return formatProgramName(setor.programa) || "Sem programa vinculado";
 }
 
-function buildSectorGroups(setores: Setor[] | undefined): SectorGroup[] {
-  return (setores ?? [])
-    .filter((setor) => setor.nome && !isOdontologiaSetor(setor.nome))
-    .map((setor) => {
-      const singleFolder = isSingleFolderSetor(setor.nome);
-      const folders: FolderItem[] = [
-        {
-          id: `${setor.id}-principal`,
-          label: setor.nome,
-          subtitle: singleFolder ? "Setor principal" : "Posto principal",
-          kind: "principal",
-          setorId: setor.id,
-        },
-      ];
+function getSingleUser(value: Usuario | Usuario[] | null) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
 
-      if (!singleFolder) {
-        folders.push({
-          id: `${setor.id}-odontologia`,
-          label: "Odontologia",
-          subtitle: setor.nome,
-          kind: "odontologia",
-        });
-      }
+function isDuplicatedDentalFolder(setor: Setor) {
+  return normalizeText(setor.nome).includes("ODONTO");
+}
 
-      return {
-        id: String(setor.id),
-        nome: setor.nome,
-        programa: getProgramLabel(setor),
-        folders,
-      };
-    });
+function getUsers(setor: Setor) {
+  const seen = new Set<string>();
+
+  return (setor.setor_responsaveis ?? [])
+    .map((row) => getSingleUser(row.usuarios))
+    .filter((user): user is Usuario => Boolean(user))
+    .filter((user) => !isSharedLogin(user))
+    .filter((user) => {
+      if (seen.has(user.id)) return false;
+      seen.add(user.id);
+      return true;
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
+}
+
+function getCategoryLabels(raw: unknown) {
+  const categories = Array.isArray(raw)
+    ? raw.map(String).map(normalizeProductCategory).filter(Boolean)
+    : [];
+  const unique = categories.filter((category, index) => categories.indexOf(category) === index);
+
+  return unique.length > 0 ? unique : ["Sem materiais liberados"];
 }
 
 function SetoresPrincipaisPage() {
   const navigate = useNavigate();
   const { data, loading, error } = useSupabaseList<Setor>(
     "setores",
-    "id,nome,programa,created_at,setor_programas(programas(id,nome))",
+    "id,nome,programa,created_at,setor_programas(programas(id,nome)),setor_responsaveis(setor_id,usuarios(id,nome,usuario,cpf,funcao,setor,unidade_nome,categorias_permitidas))",
     { column: "nome", ascending: true },
-    ["setores", "setor_programas", "programas"],
+    ["setores", "setor_programas", "programas", "setor_responsaveis", "usuarios"],
   );
-  const groups = buildSectorGroups(data);
+  const setores = useMemo(() => {
+    const seen = new Set<string>();
+
+    return (data ?? []).filter((setor) => {
+      if (isDuplicatedDentalFolder(setor)) return false;
+
+      const key = normalizeText(setor.nome);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [data]);
+  const totalUsuarios = setores.reduce((total, setor) => total + getUsers(setor).length, 0);
 
   return (
     <div className="space-y-5">
@@ -114,66 +125,103 @@ function SetoresPrincipaisPage() {
           <p className="text-sm text-muted-foreground">Cadastros / Setores principais</p>
           <h2 className="text-2xl text-foreground">Setores Principais</h2>
         </div>
-        <Badge variant="outline" className="gap-2 rounded-md px-3 py-2 text-sm">
-          <FolderTree className="h-4 w-4 text-primary" />
-          {groups.reduce((total, group) => total + group.folders.length, 0)} pastas
-        </Badge>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline" className="gap-2 rounded-md px-3 py-2 text-sm">
+            <FolderTree className="h-4 w-4 text-primary" />
+            {setores.length} pastas
+          </Badge>
+          <Badge variant="outline" className="gap-2 rounded-md px-3 py-2 text-sm">
+            <UserRound className="h-4 w-4 text-primary" />
+            {totalUsuarios} usuários
+          </Badge>
+        </div>
       </div>
 
       {loading ? (
         <Card className="p-6 text-sm text-muted-foreground">Carregando setores principais...</Card>
       ) : error ? (
         <Card className="p-6 text-sm text-destructive">{error}</Card>
-      ) : groups.length === 0 ? (
+      ) : setores.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">Nenhum setor cadastrado.</Card>
       ) : (
-        <div className="space-y-4">
-          {groups.map((group) => (
-            <section key={group.id} className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                <div className="min-w-0">
-                  <h3 className="truncate text-sm font-semibold text-foreground">{group.nome}</h3>
-                  <p className="text-xs text-muted-foreground">{group.programa}</p>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {setores.map((setor) => {
+            const users = getUsers(setor);
+
+            return (
+              <Card key={setor.id} className="space-y-4 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Folder className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-foreground">{setor.nome}</h3>
+                      <p className="text-sm text-muted-foreground">{getLinkedProgramLabel(setor)}</p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() =>
+                      navigate({
+                        to: "/admin/cadastros/locais/$localId",
+                        params: { localId: String(setor.id) },
+                      })
+                    }
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Editar
+                  </Button>
                 </div>
-                <Badge variant="outline" className="rounded-md text-xs">
-                  {group.folders.length} {group.folders.length === 1 ? "pasta" : "pastas"}
-                </Badge>
-              </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {group.folders.map((folder) => {
-                  const isPrincipal = folder.kind === "principal";
-                  const Icon = isPrincipal ? Folder : Stethoscope;
-
-                  return (
-                    <button
-                      key={folder.id}
-                      type="button"
-                      onClick={() => {
-                        if (!folder.setorId) return;
-                        navigate({
-                          to: "/admin/cadastros/locais/$localId",
-                          params: { localId: String(folder.setorId) },
-                        });
-                      }}
-                      className="flex min-h-28 items-start gap-3 rounded-lg border bg-card p-4 text-left shadow-sm transition hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium text-foreground">{folder.label}</span>
-                        <span className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-                          <MapPin className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{folder.subtitle}</span>
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                <div className="space-y-2">
+                  {users.length === 0 ? (
+                    <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                      Nenhum usuário vinculado a este posto.
+                    </div>
+                  ) : (
+                    users.map((user) => (
+                      <div key={user.id} className="rounded-md border bg-card p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{user.nome}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {user.funcao || "Sem função"}{user.usuario ? ` · ${user.usuario}` : ""}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() =>
+                              navigate({
+                                to: "/admin/cadastros/usuarios/$usuarioId",
+                                params: { usuarioId: user.id },
+                              })
+                            }
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Editar
+                          </Button>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {getCategoryLabels(user.categorias_permitidas).map((category) => (
+                            <Badge key={category} variant="outline" className="rounded-md text-xs">
+                              {category}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

@@ -22,6 +22,21 @@ export function isUserProfileIncomplete(profile: CurrentUserProfile | null) {
 }
 
 
+function normalizeSharedProfileValue(value: string | null | undefined) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+export function isSharedSectorProfile(profile: CurrentUserProfile | null) {
+  const usuario = normalizeSharedProfileValue(profile?.usuario);
+  const funcao = normalizeSharedProfileValue(profile?.funcao);
+
+  return usuario === "hospital" || funcao === "login compartilhado";
+}
+
 export function isHospitalSharedProfile(profile: CurrentUserProfile | null) {
   return String(profile?.usuario || "").trim().toLowerCase() === "hospital";
 }

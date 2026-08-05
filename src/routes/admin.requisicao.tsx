@@ -28,7 +28,7 @@ import {
 } from "@/lib/request-return-feedback";
 import {
   getCurrentUserProfile,
-  isHospitalSharedProfile,
+  isSharedSectorProfile,
   type CurrentUserProfile,
 } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
@@ -620,9 +620,9 @@ function CriarRequisicaoPage() {
           throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
         }
 
-        const isHospitalShared = isHospitalSharedProfile(profile);
+        const isSharedSector = isSharedSectorProfile(profile);
 
-        if (!editingRequestId && profile && !isHospitalShared) {
+        if (!editingRequestId && profile && !isSharedSector) {
           const hasPendingSignature = await hasPendingRequestSignatures(profile);
 
           if (hasPendingSignature) {
@@ -646,7 +646,7 @@ function CriarRequisicaoPage() {
 
         let filteredSectorUsers: SectorUserOption[] = [];
 
-        if (isHospitalShared) {
+        if (isSharedSector) {
           try {
             filteredSectorUsers = await getUsersForSector(sectorName);
           } catch (err) {
@@ -674,12 +674,10 @@ function CriarRequisicaoPage() {
         }
 
         filteredSectorUsers = filteredSectorUsers.filter(
-          (u) =>
-            normalizeSectorName(u.nome) !== "hospital" &&
-            normalizeSectorName(u.usuario) !== "hospital",
+          (u) => !isSharedSectorProfile(u as unknown as CurrentUserProfile),
         );
 
-        if (filteredSectorUsers.length === 0 && !isHospitalShared) {
+        if (filteredSectorUsers.length === 0 && !isSharedSector) {
           filteredSectorUsers = allUsers;
         }
 
@@ -692,12 +690,12 @@ function CriarRequisicaoPage() {
           );
           if (matchedUser) {
             setSelectedSolicitanteId(matchedUser.id);
-          } else if (profile && !isHospitalShared) {
+          } else if (profile && !isSharedSector) {
             setSelectedSolicitanteId(profile.id);
           } else {
             setSelectedSolicitanteId("");
           }
-        } else if (profile && !isHospitalShared) {
+        } else if (profile && !isSharedSector) {
           setSelectedSolicitanteId(profile.id);
         } else {
           setSelectedSolicitanteId("");
@@ -752,7 +750,7 @@ function CriarRequisicaoPage() {
   }, [editingRequestId]);
 
   useEffect(() => {
-    if (!isHospitalSharedProfile(profile)) return;
+    if (!isSharedSectorProfile(profile)) return;
 
     const selectedRequester = sectorUsers.find((user) => user.id === selectedSolicitanteId);
     if (!selectedRequester) return;
@@ -811,8 +809,8 @@ function CriarRequisicaoPage() {
       sectionGroups.find((group) => group.label === selectedGroupLabel) || sectionGroups[0] || null,
     [sectionGroups, selectedGroupLabel],
   );
-  const isHospitalShared = isHospitalSharedProfile(profile);
-  const mustChooseHospitalRequester = isHospitalShared && !selectedSolicitanteId;
+  const isSharedSector = isSharedSectorProfile(profile);
+  const mustChooseSharedRequester = isSharedSector && !selectedSolicitanteId;
 
   const visibleSectionTables = useMemo(() => {
     if (!selectedGroup) return [];
@@ -852,15 +850,15 @@ function CriarRequisicaoPage() {
     }
 
     const chosenSolicitante = sectorUsers.find((u) => u.id === selectedSolicitanteId) || profile;
-    const isHospitalShared = isHospitalSharedProfile(profile);
+    const isSharedSector = isSharedSectorProfile(profile);
 
-    if (isHospitalShared && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
+    if (isSharedSector && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
       setError("Selecione o usuário do setor que está fazendo o pedido.");
       setSaving(false);
       return;
     }
 
-    if (isHospitalShared && (await hasPendingRequestSignatures(chosenSolicitante))) {
+    if (isSharedSector && (await hasPendingRequestSignatures(chosenSolicitante))) {
       setError(BLOCK_NEW_REQUEST_MESSAGE);
       setSaving(false);
       return;
@@ -918,12 +916,11 @@ function CriarRequisicaoPage() {
 
     const payload = {
       categoria: requestCategory,
-      setor: isHospitalShared
-        ? "HOSPITAL"
-        : chosenSolicitante.unidade_nome ||
-          chosenSolicitante.setor ||
-          profile.unidade_nome ||
-          profile.setor,
+      setor:
+        chosenSolicitante.unidade_nome ||
+        chosenSolicitante.setor ||
+        profile.unidade_nome ||
+        profile.setor,
       solicitante: chosenSolicitante.nome,
       solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,
       solicitante_funcao: chosenSolicitante.funcao || profile.funcao,
@@ -1037,7 +1034,7 @@ function CriarRequisicaoPage() {
         <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-6 font-medium text-destructive">
           {error}
         </Card>
-      ) : categories.length === 0 && !isHospitalShared ? (
+      ) : categories.length === 0 && !isSharedSector ? (
         <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
           Nenhum tipo de material liberado para este usuário.
         </Card>
@@ -1050,7 +1047,7 @@ function CriarRequisicaoPage() {
             </Card>
           )}
 
-          {isHospitalShared && (
+          {isSharedSector && (
             <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
               <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
                 <UserCheck className="w-4 h-4 text-emerald-600" />
@@ -1084,7 +1081,7 @@ function CriarRequisicaoPage() {
             </Card>
           )}
 
-          {mustChooseHospitalRequester ? (
+          {mustChooseSharedRequester ? (
             <Card className="rounded-2xl border-slate-200 bg-white p-6 text-slate-500">
               Selecione o profissional do setor para liberar os materiais do pedido.
             </Card>

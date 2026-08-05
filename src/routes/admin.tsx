@@ -54,7 +54,7 @@ import {
 } from "@/lib/pending-request-signatures";
 import {
   getCurrentUserProfile,
-  isHospitalSharedProfile,
+  isSharedSectorProfile,
   isUserProfileIncomplete,
   type CurrentUserProfile,
 } from "@/lib/user-profile";
@@ -152,15 +152,15 @@ function AdminLayout() {
     exact ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
 
   const isAdmin = profile?.is_admin !== false;
-  const isHospitalShared = isHospitalSharedProfile(profile);
+  const isSharedSector = isSharedSectorProfile(profile);
   const limitedAdmin = isLimitedAdmin(profile);
-  const showWhatsAppQrNotice = Boolean(profile?.id) && !profile?.is_admin && !isHospitalShared;
+  const showWhatsAppQrNotice = Boolean(profile?.id) && !profile?.is_admin && !isSharedSector;
   const mustRegisterWhatsApp =
     Boolean(profile?.id) &&
     !profile?.is_admin &&
     !profile?.whatsapp?.trim() &&
     pathname !== "/admin/completar-cadastro" &&
-    !isHospitalShared;
+    !isSharedSector;
 
   const openWhatsAppActivationReminder = async () => {
     try {
@@ -251,7 +251,7 @@ function AdminLayout() {
     setCreateRequestError(null);
 
     try {
-      if (isHospitalSharedProfile(profile)) {
+      if (isSharedSectorProfile(profile)) {
         navigate({ to: "/admin/requisicao" });
         return;
       }
