@@ -206,7 +206,7 @@ function normalizeAllowedCategories(raw: unknown) {
   );
 }
 
-async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | null) {
+async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | null, fallbackProfile?: RequestAccessProfile | null) {
   if (!profile) return [];
 
   const sectorCandidates = [profile.unidade_nome, profile.setor]
@@ -231,7 +231,10 @@ async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | nu
     }
   }
 
-  return getAllowedCategories(profile);
+  const profileCategories = getAllowedCategories(profile);
+  if (profileCategories.length > 0) return profileCategories;
+
+  return getAllowedCategories(fallbackProfile ?? null);
 }
 
 async function getResponsibleSectorProgramKeys(profile: Pick<RequestAccessProfile, "id"> | null) {
@@ -759,7 +762,7 @@ function CriarRequisicaoPage() {
     async function loadSelectedRequesterAccess() {
       try {
         const [nextCategories, nextProgramKeys] = await Promise.all([
-          getAllowedCategoriesForRequest(selectedRequester),
+          getAllowedCategoriesForRequest(selectedRequester, profile),
           getResponsibleSectorProgramKeys(selectedRequester),
         ]);
 
