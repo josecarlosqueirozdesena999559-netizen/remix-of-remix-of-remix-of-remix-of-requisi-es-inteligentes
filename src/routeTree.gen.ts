@@ -26,6 +26,7 @@ import { Route as AdminCompletarCadastroRouteImport } from './routes/admin.compl
 import { Route as AdminBackupRouteImport } from './routes/admin.backup'
 import { Route as AdminAssinadasRouteImport } from './routes/admin.assinadas'
 import { Route as AdminCadastrosUsuariosRouteImport } from './routes/admin.cadastros.usuarios'
+import { Route as AdminCadastrosSetoresPrincipaisRouteImport } from './routes/admin.cadastros.setores-principais'
 import { Route as AdminCadastrosProgramasRouteImport } from './routes/admin.cadastros.programas'
 import { Route as AdminCadastrosProdutosRouteImport } from './routes/admin.cadastros.produtos'
 import { Route as AdminCadastrosLocaisRouteImport } from './routes/admin.cadastros.locais'
@@ -124,6 +125,12 @@ const AdminCadastrosUsuariosRoute = AdminCadastrosUsuariosRouteImport.update({
   path: '/cadastros/usuarios',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminCadastrosSetoresPrincipaisRoute =
+  AdminCadastrosSetoresPrincipaisRouteImport.update({
+    id: '/cadastros/setores-principais',
+    path: '/cadastros/setores-principais',
+    getParentRoute: () => AdminRoute,
+  } as any)
 const AdminCadastrosProgramasRoute = AdminCadastrosProgramasRouteImport.update({
   id: '/cadastros/programas',
   path: '/cadastros/programas',
@@ -208,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/admin/cadastros/locais': typeof AdminCadastrosLocaisRouteWithChildren
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
   '/admin/cadastros/programas': typeof AdminCadastrosProgramasRouteWithChildren
+  '/admin/cadastros/setores-principais': typeof AdminCadastrosSetoresPrincipaisRoute
   '/admin/cadastros/usuarios': typeof AdminCadastrosUsuariosRouteWithChildren
   '/admin/assinadas/$requisicaoId/pdf': typeof AdminAssinadasRequisicaoIdPdfRoute
   '/admin/cadastros/locais/$localId': typeof AdminCadastrosLocaisLocalIdRoute
@@ -237,6 +245,7 @@ export interface FileRoutesByTo {
   '/admin/cadastros/locais': typeof AdminCadastrosLocaisRouteWithChildren
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
   '/admin/cadastros/programas': typeof AdminCadastrosProgramasRouteWithChildren
+  '/admin/cadastros/setores-principais': typeof AdminCadastrosSetoresPrincipaisRoute
   '/admin/cadastros/usuarios': typeof AdminCadastrosUsuariosRouteWithChildren
   '/admin/assinadas/$requisicaoId/pdf': typeof AdminAssinadasRequisicaoIdPdfRoute
   '/admin/cadastros/locais/$localId': typeof AdminCadastrosLocaisLocalIdRoute
@@ -268,6 +277,7 @@ export interface FileRoutesById {
   '/admin/cadastros/locais': typeof AdminCadastrosLocaisRouteWithChildren
   '/admin/cadastros/produtos': typeof AdminCadastrosProdutosRouteWithChildren
   '/admin/cadastros/programas': typeof AdminCadastrosProgramasRouteWithChildren
+  '/admin/cadastros/setores-principais': typeof AdminCadastrosSetoresPrincipaisRoute
   '/admin/cadastros/usuarios': typeof AdminCadastrosUsuariosRouteWithChildren
   '/admin/assinadas/$requisicaoId/pdf': typeof AdminAssinadasRequisicaoIdPdfRoute
   '/admin/cadastros/locais/$localId': typeof AdminCadastrosLocaisLocalIdRoute
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/admin/cadastros/locais'
     | '/admin/cadastros/produtos'
     | '/admin/cadastros/programas'
+    | '/admin/cadastros/setores-principais'
     | '/admin/cadastros/usuarios'
     | '/admin/assinadas/$requisicaoId/pdf'
     | '/admin/cadastros/locais/$localId'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/admin/cadastros/locais'
     | '/admin/cadastros/produtos'
     | '/admin/cadastros/programas'
+    | '/admin/cadastros/setores-principais'
     | '/admin/cadastros/usuarios'
     | '/admin/assinadas/$requisicaoId/pdf'
     | '/admin/cadastros/locais/$localId'
@@ -359,6 +371,7 @@ export interface FileRouteTypes {
     | '/admin/cadastros/locais'
     | '/admin/cadastros/produtos'
     | '/admin/cadastros/programas'
+    | '/admin/cadastros/setores-principais'
     | '/admin/cadastros/usuarios'
     | '/admin/assinadas/$requisicaoId/pdf'
     | '/admin/cadastros/locais/$localId'
@@ -494,6 +507,13 @@ declare module '@tanstack/react-router' {
       path: '/cadastros/usuarios'
       fullPath: '/admin/cadastros/usuarios'
       preLoaderRoute: typeof AdminCadastrosUsuariosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/cadastros/setores-principais': {
+      id: '/admin/cadastros/setores-principais'
+      path: '/cadastros/setores-principais'
+      fullPath: '/admin/cadastros/setores-principais'
+      preLoaderRoute: typeof AdminCadastrosSetoresPrincipaisRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/cadastros/programas': {
@@ -698,6 +718,7 @@ interface AdminRouteChildren {
   AdminCadastrosLocaisRoute: typeof AdminCadastrosLocaisRouteWithChildren
   AdminCadastrosProdutosRoute: typeof AdminCadastrosProdutosRouteWithChildren
   AdminCadastrosProgramasRoute: typeof AdminCadastrosProgramasRouteWithChildren
+  AdminCadastrosSetoresPrincipaisRoute: typeof AdminCadastrosSetoresPrincipaisRoute
   AdminCadastrosUsuariosRoute: typeof AdminCadastrosUsuariosRouteWithChildren
 }
 
@@ -719,6 +740,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCadastrosLocaisRoute: AdminCadastrosLocaisRouteWithChildren,
   AdminCadastrosProdutosRoute: AdminCadastrosProdutosRouteWithChildren,
   AdminCadastrosProgramasRoute: AdminCadastrosProgramasRouteWithChildren,
+  AdminCadastrosSetoresPrincipaisRoute: AdminCadastrosSetoresPrincipaisRoute,
   AdminCadastrosUsuariosRoute: AdminCadastrosUsuariosRouteWithChildren,
 }
 

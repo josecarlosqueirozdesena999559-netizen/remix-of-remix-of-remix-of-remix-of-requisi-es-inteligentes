@@ -9,6 +9,7 @@ import {
   FileClock,
   FilePlus,
   FileSignature,
+  FolderTree,
   LayoutDashboard,
   Layers,
   Loader2,
@@ -464,6 +465,19 @@ function AdminLayout() {
                             className={navIconClass(isActivePath("/admin/cadastros/locais"))}
                           />
                           <span className="truncate">Setores</span>
+                        </Link>
+                        <Link
+                          to="/admin/cadastros/setores-principais"
+                          className={navItemClass(
+                            isActivePath("/admin/cadastros/setores-principais"),
+                          )}
+                        >
+                          <FolderTree
+                            className={navIconClass(
+                              isActivePath("/admin/cadastros/setores-principais"),
+                            )}
+                          />
+                          <span className="truncate">Setores Principais</span>
                         </Link>
                       </div>
                     </div>
