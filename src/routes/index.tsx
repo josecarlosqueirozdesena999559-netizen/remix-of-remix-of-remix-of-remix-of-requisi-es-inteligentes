@@ -25,11 +25,15 @@ function Index() {
 
     try {
       const nomeLimpo = nome.trim();
-      const isAdminLogin = nomeLimpo.toLowerCase() === "admin";
+      const normalizedLogin = nomeLimpo.toLowerCase();
+      const isAdminLogin = normalizedLogin === "admin";
+      const isEmailLogin = nomeLimpo.includes("@");
       let email = "";
 
       if (isAdminLogin) {
         email = "admin@pereiro.ce.gov.br";
+      } else if (isEmailLogin) {
+        email = nomeLimpo;
       } else {
         const { data: resolvedEmail, error: resolveError } = await (supabase as any).rpc(
           "resolve_login_email",
@@ -40,17 +44,17 @@ function Index() {
         email = typeof resolvedEmail === "string" ? resolvedEmail : "";
       }
 
-      if (!email) throw new Error("Usuário ou senha");
+      if (!email) throw new Error("Usuario ou senha");
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
       });
 
-      if (signInError) throw new Error("Usuário ou senha");
-      navigate({ to: nomeLimpo.toLowerCase() === "hospital" ? "/admin/requisicao" : "/admin" });
+      if (signInError) throw new Error("Usuario ou senha");
+      navigate({ to: normalizedLogin === "hospital" ? "/admin/requisicao" : "/admin" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Usuário ou senha");
+      setError(err instanceof Error ? err.message : "Usuario ou senha");
       setLoading(false);
     }
   };
