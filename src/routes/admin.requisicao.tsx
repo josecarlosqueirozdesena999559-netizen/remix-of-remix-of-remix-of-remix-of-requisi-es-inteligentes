@@ -13,6 +13,7 @@ import {
   normalizeProductSearchValue,
   productHasCategory,
   productHasSubcategory,
+  sortProductsByMaterialGroup,
   PRODUCT_CATEGORIES,
 } from "@/lib/product-options";
 import {
