@@ -22,7 +22,7 @@ import {
 } from "@/lib/request-return-feedback";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
-import { getCurrentUserProfile } from "@/lib/user-profile";
+import { getCurrentUserProfile, isHospitalSharedProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/minhas-assinaturas")({
@@ -181,8 +181,9 @@ function MinhasAssinaturasPage() {
       const cpfVariants = getRequestOwnerCpfVariants(profile);
       const location = getRequestOwnerLocation(profile);
       const name = profile?.nome?.trim() || "";
+      const isHospitalShared = isHospitalSharedProfile(profile);
 
-      if (cpfVariants.length === 0 && !(name && location)) {
+      if (!isHospitalShared && cpfVariants.length === 0 && !(name && location)) {
         setRequests([]);
         return;
       }
@@ -208,13 +209,17 @@ function MinhasAssinaturasPage() {
         ])
         .order("updated_at", { ascending: false });
 
-      const scopedRequestsQuery = cpfVariants.length > 0
-        ? requestsQuery.in("solicitante_cpf", cpfVariants)
-        : requestsQuery.eq("solicitante", name).eq("setor", location);
+      const scopedRequestsQuery = isHospitalShared
+        ? requestsQuery.eq("setor", "HOSPITAL")
+        : cpfVariants.length > 0
+          ? requestsQuery.in("solicitante_cpf", cpfVariants)
+          : requestsQuery.eq("solicitante", name).eq("setor", location);
 
-      const scopedFallbackQuery = cpfVariants.length > 0
-        ? fallbackRequestsQuery.in("solicitante_cpf", cpfVariants)
-        : fallbackRequestsQuery.eq("solicitante", name).eq("setor", location);
+      const scopedFallbackQuery = isHospitalShared
+        ? fallbackRequestsQuery.eq("setor", "HOSPITAL")
+        : cpfVariants.length > 0
+          ? fallbackRequestsQuery.in("solicitante_cpf", cpfVariants)
+          : fallbackRequestsQuery.eq("solicitante", name).eq("setor", location);
 
       const [{ data: setoresData, error: setoresError }, requestsResult] = await Promise.all([
         supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),

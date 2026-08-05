@@ -6,7 +6,7 @@ begin
   update public.usuarios u
   set
     auth_user_id = null,
-    usuario = null,
+    usuario = coalesce(nullif(trim(usuario), ''), 'adrianacavalcante'),
     setor = 'HOSPITAL',
     unidade_nome = 'HOSPITAL',
     categorias_permitidas = hospital_categories,
