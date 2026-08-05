@@ -53,6 +53,8 @@ interface ItemRow {
 interface SectorUserOption {
   id: string;
   nome: string;
+  usuario: string | null;
+  email: string | null;
   cpf: string | null;
   funcao: string | null;
   setor: string | null;
@@ -126,6 +128,12 @@ function getAllowedCategories(profile: CurrentUserProfile | null) {
     (category, index) =>
       category && isProductCategory(category) && categories.indexOf(category) === index,
   );
+}
+
+function normalizeSectorName(value: string | null | undefined) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeAllowedCategories(raw: unknown) {
@@ -496,7 +504,7 @@ function CriarRequisicaoPage() {
             : Promise.resolve({ data: null, error: null }),
           supabase
             .from("usuarios")
-            .select("id,nome,cpf,funcao,setor,unidade_nome")
+            .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome")
             .order("nome", { ascending: true }),
         ]);
 
@@ -535,7 +543,9 @@ function CriarRequisicaoPage() {
           throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
         }
 
-        if (!editingRequestId && profile) {
+        const isHospitalShared = isHospitalSharedProfile(profile);
+
+        if (!editingRequestId && profile && !isHospitalShared) {
           const hasPendingSignature = await hasPendingRequestSignatures(profile);
 
           if (hasPendingSignature) {
@@ -553,38 +563,47 @@ function CriarRequisicaoPage() {
             : [...PRODUCT_CATEGORIES];
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
 
-        // FILTRAR USUÁRIOS DO SETOR DA UNIDADE
         const allUsers = (usuariosResult.data ?? []) as SectorUserOption[];
         const sectorName = profile?.unidade_nome || profile?.setor || "";
+        const normalizedSectorName = normalizeSectorName(sectorName);
 
         let filteredSectorUsers = allUsers;
-        if (sectorName) {
+        if (normalizedSectorName) {
           filteredSectorUsers = allUsers.filter(
             (u) =>
-              u.setor?.toLowerCase() === sectorName.toLowerCase() ||
-              u.unidade_nome?.toLowerCase() === sectorName.toLowerCase(),
+              normalizeSectorName(u.setor) === normalizedSectorName ||
+              normalizeSectorName(u.unidade_nome) === normalizedSectorName,
           );
         }
 
-        if (filteredSectorUsers.length === 0 && !isHospitalSharedProfile(profile)) {
+        filteredSectorUsers = filteredSectorUsers.filter(
+          (u) =>
+            normalizeSectorName(u.nome) !== "hospital" &&
+            normalizeSectorName(u.usuario) !== "hospital",
+        );
+
+        if (filteredSectorUsers.length === 0 && !isHospitalShared) {
           filteredSectorUsers = allUsers;
         }
 
         setProfile(profile);
         setSectorUsers(filteredSectorUsers);
 
-        // Se editando requisição existente, seleciona o solicitante correspondente
         if (editableRequest?.solicitante_cpf) {
           const matchedUser = filteredSectorUsers.find(
             (u) => u.cpf?.trim() === editableRequest.solicitante_cpf?.trim(),
           );
           if (matchedUser) {
             setSelectedSolicitanteId(matchedUser.id);
-          } else if (profile) {
+          } else if (profile && !isHospitalShared) {
             setSelectedSolicitanteId(profile.id);
+          } else {
+            setSelectedSolicitanteId("");
           }
-        } else if (profile) {
+        } else if (profile && !isHospitalShared) {
           setSelectedSolicitanteId(profile.id);
+        } else {
+          setSelectedSolicitanteId("");
         }
 
         setAllowedCategories(categories);
@@ -684,7 +703,19 @@ function CriarRequisicaoPage() {
     }
 
     const chosenSolicitante = sectorUsers.find((u) => u.id === selectedSolicitanteId) || profile;
+    const isHospitalShared = isHospitalSharedProfile(profile);
 
+    if (isHospitalShared && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
+      setError("Selecione o usuário do setor que está fazendo o pedido.");
+      setSaving(false);
+      return;
+    }
+
+    if (isHospitalShared && (await hasPendingRequestSignatures(chosenSolicitante))) {
+      setError(BLOCK_NEW_REQUEST_MESSAGE);
+      setSaving(false);
+      return;
+    }
     const selectedItems = items
       .map((item) => {
         const quantity = quantities[item.id];
@@ -738,7 +769,11 @@ function CriarRequisicaoPage() {
 
     const payload = {
       categoria: requestCategory,
-      setor: profile.unidade_nome || profile.setor,
+      setor:
+        chosenSolicitante.unidade_nome ||
+        chosenSolicitante.setor ||
+        profile.unidade_nome ||
+        profile.setor,
       solicitante: chosenSolicitante.nome,
       solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,
       solicitante_funcao: chosenSolicitante.funcao || profile.funcao,
@@ -865,31 +900,39 @@ function CriarRequisicaoPage() {
             </Card>
           )}
 
-          {/* SELETOR DO SOLICITANTE RESPONSÁVEL DO SETOR */}
-          <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
-            <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
-              <UserCheck className="w-4 h-4 text-emerald-600" />
-              Solicitante Responsável do Setor ({profile?.unidade_nome || profile?.setor || "Geral"}
-              )
-            </div>
-            <div className="max-w-md space-y-1">
-              <Label htmlFor="select-solicitante" className="text-xs text-slate-500 font-normal">
-                Selecione o profissional que está fazendo esta solicitação:
-              </Label>
-              <select
-                id="select-solicitante"
-                value={selectedSolicitanteId}
-                onChange={(e) => setSelectedSolicitanteId(e.target.value)}
-                className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              >
-                {sectorUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.nome} {user.funcao ? `(${user.funcao})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </Card>
+          {isHospitalSharedProfile(profile) && (
+            <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                <UserCheck className="w-4 h-4 text-emerald-600" />
+                Solicitante Responsável do Setor (
+                {profile?.unidade_nome || profile?.setor || "Geral"})
+              </div>
+              <div className="max-w-md space-y-1">
+                <Label htmlFor="select-solicitante" className="text-xs text-slate-500 font-normal">
+                  Selecione o profissional que está fazendo esta solicitação:
+                </Label>
+                <select
+                  id="select-solicitante"
+                  value={selectedSolicitanteId}
+                  onChange={(e) => setSelectedSolicitanteId(e.target.value)}
+                  required
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
+                  <option value="">Selecione um usuário do setor</option>
+                  {sectorUsers.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.nome} {user.funcao ? `(${user.funcao})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {sectorUsers.length === 0 ? (
+                  <p className="text-xs font-medium text-destructive">
+                    Nenhum usuário encontrado para este setor.
+                  </p>
+                ) : null}
+              </div>
+            </Card>
+          )}
 
           <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex flex-wrap gap-2">
