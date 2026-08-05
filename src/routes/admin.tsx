@@ -113,12 +113,6 @@ function AdminLayout() {
 
         setProfile(profile);
         setWhatsapp(profile?.whatsapp ?? "");
-
-        if (isHospitalSharedProfile(profile) && pathname !== "/admin/requisicao") {
-          navigate({ to: "/admin/requisicao" });
-          return;
-        }
-
         if (isUserProfileIncomplete(profile)) {
           navigate({ to: "/admin/completar-cadastro" });
         }
@@ -282,32 +276,6 @@ function AdminLayout() {
     const inicioActive = isActivePath("/admin", true);
     const requisicaoActive = isActivePath("/admin/requisicao");
     const configuracoesActive = isActivePath("/admin/configuracoes");
-
-    if (isHospitalShared) {
-      return (
-        <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${mobile ? "mt-4" : ""}`}>
-          <div className="space-y-5 px-3">
-            <div className="space-y-2">
-              <p className={sectionTitleClass}>Hospital</p>
-              <div className="space-y-1">
-                <Link
-                  to="/admin/requisicao"
-                  className={navItemClass(requisicaoActive)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    navigate({ to: "/admin/requisicao" });
-                  }}
-                >
-                  <FilePlus className={navIconClass(requisicaoActive)} />
-                  <span className="truncate">Criar Requisicao</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </nav>
-      );
-    }
-
     return (
       <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${mobile ? "mt-4" : ""}`}>
         <div className="space-y-5 px-3">
