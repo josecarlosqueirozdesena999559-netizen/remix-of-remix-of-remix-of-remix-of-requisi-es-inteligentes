@@ -1,23 +1,13 @@
+create extension if not exists pgcrypto with schema extensions;
+create extension if not exists unaccent with schema extensions;
+
 -- Generalizes shared request logins from Hospital to every main sector/posto.
 create or replace function public.normalize_shared_sector_text(input text)
 returns text
 language sql
 immutable
 as $$
-  select lower(
-    trim(
-      regexp_replace(
-        translate(
-          coalesce(input, ''),
-          'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ',
-          'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn'
-        ),
-        '\s+',
-        ' ',
-        'g'
-      )
-    )
-  );
+  select lower(trim(regexp_replace(extensions.unaccent(coalesce(input, '')), '\s+', ' ', 'g')));
 $$;
 
 create or replace function public.shared_sector_login_slug(sector_name text)
@@ -210,7 +200,7 @@ begin
         'authenticated',
         'authenticated',
         login_email,
-        crypt('123456', gen_salt('bf')),
+        extensions.crypt('123456', extensions.gen_salt('bf')),
         now(),
         '{"provider":"email","providers":["email"]}'::jsonb,
         jsonb_build_object('usuario', login_slug, 'nome', sector_row.nome),
@@ -223,7 +213,7 @@ begin
     else
       update auth.users
       set
-        encrypted_password = crypt('123456', gen_salt('bf')),
+        encrypted_password = extensions.crypt('123456', extensions.gen_salt('bf')),
         email_confirmed_at = coalesce(email_confirmed_at, now()),
         raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"provider":"email","providers":["email"]}'::jsonb,
         raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('usuario', login_slug, 'nome', sector_row.nome),
