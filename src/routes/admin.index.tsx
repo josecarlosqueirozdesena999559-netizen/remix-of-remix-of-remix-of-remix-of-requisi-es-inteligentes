@@ -38,7 +38,8 @@ import {
 } from "@/lib/linked-output-date";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
-import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/user-profile";
+import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
+import { getCurrentUserProfile, isSharedSectorProfile, type CurrentUserProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminHome,
@@ -254,10 +255,10 @@ function AdminHome() {
             .select(selectColumns)
             .order("created_at", { ascending: true });
 
-          if (!userProfile.is_admin) {
-            const cpfVariants = getRequestOwnerCpfVariants(userProfile);
-            const location = getRequestOwnerLocation(userProfile);
-            const name = userProfile.nome?.trim() || "";
+          if (!dashboardProfile.is_admin) {
+            const cpfVariants = getRequestOwnerCpfVariants(dashboardProfile);
+            const location = getRequestOwnerLocation(dashboardProfile);
+            const name = dashboardProfile.nome?.trim() || "";
 
             if (cpfVariants.length > 0) {
               query = query.in("solicitante_cpf", cpfVariants);

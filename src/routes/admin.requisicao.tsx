@@ -21,6 +21,10 @@ import {
   hasPendingRequestSignatures,
 } from "@/lib/pending-request-signatures";
 import { getRelatedProgramKeys, normalizeProgramKey } from "@/lib/program-options";
+import {
+  getSelectedSharedRequesterProfile,
+  setSelectedSharedRequesterId,
+} from "@/lib/shared-sector-session";
 
 import {
   isMissingReturnFeedbackColumnError,
@@ -621,6 +625,14 @@ function CriarRequisicaoPage() {
         }
 
         const isSharedSector = isSharedSectorProfile(profile);
+        const selectedSharedRequester = isSharedSector
+          ? await getSelectedSharedRequesterProfile(profile)
+          : null;
+
+        if (isSharedSector && !selectedSharedRequester && !editingRequestId) {
+          navigate({ to: "/admin/selecionar-solicitante" });
+          return;
+        }
 
         if (!editingRequestId && profile && !isSharedSector) {
           const hasPendingSignature = await hasPendingRequestSignatures(profile);
@@ -697,6 +709,8 @@ function CriarRequisicaoPage() {
           }
         } else if (profile && !isSharedSector) {
           setSelectedSolicitanteId(profile.id);
+        } else if (selectedSharedRequester && filteredSectorUsers.some((user) => user.id === selectedSharedRequester.id)) {
+          setSelectedSolicitanteId(selectedSharedRequester.id);
         } else {
           setSelectedSolicitanteId("");
         }
@@ -1061,7 +1075,10 @@ function CriarRequisicaoPage() {
                 <select
                   id="select-solicitante"
                   value={selectedSolicitanteId}
-                  onChange={(e) => setSelectedSolicitanteId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedSolicitanteId(e.target.value);
+                    if (e.target.value) setSelectedSharedRequesterId(e.target.value);
+                  }}
                   required
                   className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >

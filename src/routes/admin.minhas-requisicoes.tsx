@@ -9,7 +9,8 @@ import {
   getRequestOwnerLocation,
   type RequestOwnerProfile,
 } from "@/lib/request-owner";
-import { getCurrentUserProfile } from "@/lib/user-profile";
+import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
+import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/minhas-requisicoes")({
   component: MinhasRequisicoesPage,
@@ -100,9 +101,15 @@ function MinhasRequisicoesPage() {
       setError(null);
 
       try {
-        const { profile } = await getCurrentUserProfile();
+        const { profile: authProfile } = await getCurrentUserProfile();
+        const profile = isSharedSectorProfile(authProfile)
+          ? await getSelectedSharedRequesterProfile(authProfile)
+          : authProfile;
 
         if (!profile) {
+          if (isSharedSectorProfile(authProfile)) {
+            navigate({ to: "/admin/selecionar-solicitante" });
+          }
           setRequests([]);
           return;
         }

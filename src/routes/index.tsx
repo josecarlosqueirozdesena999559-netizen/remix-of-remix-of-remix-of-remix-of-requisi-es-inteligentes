@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { clearSelectedSharedRequesterId } from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 
 export const Route = createFileRoute("/")({
@@ -54,7 +55,12 @@ function Index() {
 
       if (signInError) throw new Error("Usuario ou senha");
       const { profile } = await getCurrentUserProfile();
-      navigate({ to: isSharedSectorProfile(profile) ? "/admin/requisicao" : "/admin" });
+      if (isSharedSectorProfile(profile)) {
+        clearSelectedSharedRequesterId();
+        navigate({ to: "/admin/selecionar-solicitante" });
+      } else {
+        navigate({ to: "/admin" });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Usuario ou senha");
       setLoading(false);

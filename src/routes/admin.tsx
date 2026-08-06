@@ -44,6 +44,10 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  clearSelectedSharedRequesterId,
+  getSelectedSharedRequesterProfile,
+} from "@/lib/shared-sector-session";
+import {
   getAdminSectionFromPath,
   hasAdminSectionAccess,
   isLimitedAdmin,
@@ -78,6 +82,7 @@ function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
+  const [sharedSessionActive, setSharedSessionActive] = useState(false);
   const [whatsapp, setWhatsapp] = useState("");
   const [savingWhatsApp, setSavingWhatsApp] = useState(false);
   const [whatsappError, setWhatsappError] = useState<string | null>(null);
@@ -112,8 +117,22 @@ function AdminLayout() {
           return;
         }
 
-        setProfile(profile);
-        setWhatsapp(profile?.whatsapp ?? "");
+        const isSharedSession = isSharedSectorProfile(profile);
+        setSharedSessionActive(isSharedSession);
+
+        if (isSharedSession && pathname !== "/admin/selecionar-solicitante") {
+          const selectedRequester = await getSelectedSharedRequesterProfile(profile);
+          if (!selectedRequester) {
+            navigate({ to: "/admin/selecionar-solicitante" });
+            return;
+          }
+          setProfile(selectedRequester);
+          setWhatsapp(selectedRequester.whatsapp ?? "");
+        } else {
+          setProfile(profile);
+          setWhatsapp(profile?.whatsapp ?? "");
+        }
+
         if (isUserProfileIncomplete(profile)) {
           navigate({ to: "/admin/completar-cadastro" });
         }
@@ -152,7 +171,7 @@ function AdminLayout() {
     exact ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
 
   const isAdmin = profile?.is_admin !== false;
-  const isSharedSector = isSharedSectorProfile(profile);
+  const isSharedSector = sharedSessionActive || isSharedSectorProfile(profile);
   const limitedAdmin = isLimitedAdmin(profile);
   const showWhatsAppQrNotice = Boolean(profile?.id) && !profile?.is_admin && !isSharedSector;
   const mustRegisterWhatsApp =
@@ -237,6 +256,7 @@ function AdminLayout() {
   };
 
   const handleSignOut = async () => {
+    clearSelectedSharedRequesterId();
     await supabase.auth.signOut();
     navigate({ to: "/" });
   };

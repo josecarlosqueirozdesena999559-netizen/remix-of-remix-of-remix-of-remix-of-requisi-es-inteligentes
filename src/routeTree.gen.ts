@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminWhatsappUsuariosRouteImport } from './routes/admin.whatsapp-usuarios'
 import { Route as AdminSolicitacoesRouteImport } from './routes/admin.solicitacoes'
+import { Route as AdminSelecionarSolicitanteRouteImport } from './routes/admin.selecionar-solicitante'
 import { Route as AdminRequisicaoRouteImport } from './routes/admin.requisicao'
 import { Route as AdminMinhasRequisicoesRouteImport } from './routes/admin.minhas-requisicoes'
 import { Route as AdminMinhasAssinaturasRouteImport } from './routes/admin.minhas-assinaturas'
@@ -64,6 +65,12 @@ const AdminSolicitacoesRoute = AdminSolicitacoesRouteImport.update({
   path: '/solicitacoes',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminSelecionarSolicitanteRoute =
+  AdminSelecionarSolicitanteRouteImport.update({
+    id: '/selecionar-solicitante',
+    path: '/selecionar-solicitante',
+    getParentRoute: () => AdminRoute,
+  } as any)
 const AdminRequisicaoRoute = AdminRequisicaoRouteImport.update({
   id: '/requisicao',
   path: '/requisicao',
@@ -209,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/admin/minhas-assinaturas': typeof AdminMinhasAssinaturasRouteWithChildren
   '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
+  '/admin/selecionar-solicitante': typeof AdminSelecionarSolicitanteRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin/': typeof AdminIndexRoute
@@ -239,6 +247,7 @@ export interface FileRoutesByTo {
   '/admin/minhas-assinaturas': typeof AdminMinhasAssinaturasRouteWithChildren
   '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
+  '/admin/selecionar-solicitante': typeof AdminSelecionarSolicitanteRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin': typeof AdminIndexRoute
@@ -271,6 +280,7 @@ export interface FileRoutesById {
   '/admin/minhas-assinaturas': typeof AdminMinhasAssinaturasRouteWithChildren
   '/admin/minhas-requisicoes': typeof AdminMinhasRequisicoesRoute
   '/admin/requisicao': typeof AdminRequisicaoRoute
+  '/admin/selecionar-solicitante': typeof AdminSelecionarSolicitanteRoute
   '/admin/solicitacoes': typeof AdminSolicitacoesRouteWithChildren
   '/admin/whatsapp-usuarios': typeof AdminWhatsappUsuariosRoute
   '/admin/': typeof AdminIndexRoute
@@ -304,6 +314,7 @@ export interface FileRouteTypes {
     | '/admin/minhas-assinaturas'
     | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
+    | '/admin/selecionar-solicitante'
     | '/admin/solicitacoes'
     | '/admin/whatsapp-usuarios'
     | '/admin/'
@@ -334,6 +345,7 @@ export interface FileRouteTypes {
     | '/admin/minhas-assinaturas'
     | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
+    | '/admin/selecionar-solicitante'
     | '/admin/solicitacoes'
     | '/admin/whatsapp-usuarios'
     | '/admin'
@@ -365,6 +377,7 @@ export interface FileRouteTypes {
     | '/admin/minhas-assinaturas'
     | '/admin/minhas-requisicoes'
     | '/admin/requisicao'
+    | '/admin/selecionar-solicitante'
     | '/admin/solicitacoes'
     | '/admin/whatsapp-usuarios'
     | '/admin/'
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       path: '/solicitacoes'
       fullPath: '/admin/solicitacoes'
       preLoaderRoute: typeof AdminSolicitacoesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/selecionar-solicitante': {
+      id: '/admin/selecionar-solicitante'
+      path: '/selecionar-solicitante'
+      fullPath: '/admin/selecionar-solicitante'
+      preLoaderRoute: typeof AdminSelecionarSolicitanteRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/requisicao': {
@@ -712,6 +732,7 @@ interface AdminRouteChildren {
   AdminMinhasAssinaturasRoute: typeof AdminMinhasAssinaturasRouteWithChildren
   AdminMinhasRequisicoesRoute: typeof AdminMinhasRequisicoesRoute
   AdminRequisicaoRoute: typeof AdminRequisicaoRoute
+  AdminSelecionarSolicitanteRoute: typeof AdminSelecionarSolicitanteRoute
   AdminSolicitacoesRoute: typeof AdminSolicitacoesRouteWithChildren
   AdminWhatsappUsuariosRoute: typeof AdminWhatsappUsuariosRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -734,6 +755,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminMinhasAssinaturasRoute: AdminMinhasAssinaturasRouteWithChildren,
   AdminMinhasRequisicoesRoute: AdminMinhasRequisicoesRoute,
   AdminRequisicaoRoute: AdminRequisicaoRoute,
+  AdminSelecionarSolicitanteRoute: AdminSelecionarSolicitanteRoute,
   AdminSolicitacoesRoute: AdminSolicitacoesRouteWithChildren,
   AdminWhatsappUsuariosRoute: AdminWhatsappUsuariosRoute,
   AdminIndexRoute: AdminIndexRoute,

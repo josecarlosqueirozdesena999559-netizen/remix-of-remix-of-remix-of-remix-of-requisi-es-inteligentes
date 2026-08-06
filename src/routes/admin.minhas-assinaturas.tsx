@@ -22,6 +22,7 @@ import {
 } from "@/lib/request-return-feedback";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
+import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
@@ -176,12 +177,20 @@ function MinhasAssinaturasPage() {
     setError(null);
 
     try {
-      const { profile } = await getCurrentUserProfile();
+      const { profile: authProfile } = await getCurrentUserProfile();
+      const profile = isSharedSectorProfile(authProfile)
+        ? await getSelectedSharedRequesterProfile(authProfile)
+        : authProfile;
+
+      if (!profile && isSharedSectorProfile(authProfile)) {
+        navigate({ to: "/admin/selecionar-solicitante" });
+        return;
+      }
 
       const cpfVariants = getRequestOwnerCpfVariants(profile);
       const location = getRequestOwnerLocation(profile);
       const name = profile?.nome?.trim() || "";
-      const isSharedSector = isSharedSectorProfile(profile);
+      const isSharedSector = false;
 
       if (!isSharedSector && cpfVariants.length === 0 && !(name && location)) {
         setRequests([]);
