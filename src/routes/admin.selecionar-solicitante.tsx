@@ -52,7 +52,7 @@ function SelecionarSolicitantePage() {
         setUsers(sectorUsers);
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : "Erro ao carregar usuários do posto.");
+          setError(err instanceof Error ? err.message : "Erro ao carregar usuarios do posto.");
         }
       } finally {
         if (active) setLoading(false);
@@ -76,19 +76,19 @@ function SelecionarSolicitantePage() {
     <div className="mx-auto max-w-4xl space-y-5">
       <div>
         <p className="text-sm text-muted-foreground">{sharedProfile?.nome || "Posto"}</p>
-        <h2 className="text-2xl text-foreground">Quem está usando o sistema?</h2>
+        <h2 className="text-2xl text-foreground">Quem esta usando o sistema?</h2>
       </div>
 
       {loading ? (
         <Card className="flex items-center gap-2 p-6 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando usuários...
+          Carregando usuarios...
         </Card>
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : users.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
-          Nenhum usuário real foi encontrado para este posto.
+          Nenhum usuario real foi encontrado para este posto.
         </Card>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -100,7 +100,7 @@ function SelecionarSolicitantePage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-base font-semibold text-foreground">{user.nome}</h3>
-                  <p className="text-sm text-muted-foreground">{user.funcao || "Sem função"}</p>
+                  <p className="text-sm text-muted-foreground">{user.funcao || "Sem funcao"}</p>
                 </div>
               </div>
 
@@ -123,7 +123,7 @@ function SelecionarSolicitantePage() {
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                Entrar como este usuário
+                Entrar como este usuario
               </Button>
             </Card>
           ))}

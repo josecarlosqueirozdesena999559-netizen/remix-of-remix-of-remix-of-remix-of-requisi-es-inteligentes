@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { isSharedSectorProfile, type CurrentUserProfile } from "@/lib/user-profile";
 
 const SELECTED_SHARED_REQUESTER_KEY = "soliciteja:selected-shared-requester-id";
-const USER_SELECT = "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
+const USER_SELECT =
+  "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
 
 function normalize(value: string | null | undefined) {
   return String(value || "")
@@ -27,9 +28,22 @@ function canUseRequesterForSharedProfile(
   if (!sharedLocation) return false;
 
   return (
-    normalize(requester.unidade_nome) === sharedLocation || normalize(requester.setor) === sharedLocation
+    normalize(requester.unidade_nome) === sharedLocation ||
+    normalize(requester.setor) === sharedLocation
   );
 }
+
+function applyCpfFallback(user: CurrentUserProfile, allUsers: CurrentUserProfile[]) {
+  if (user.cpf?.trim()) return user;
+
+  const cpfOwner = allUsers.find(
+    (candidate) =>
+      normalize(candidate.nome) === normalize(user.nome) && Boolean(candidate.cpf?.trim()),
+  );
+
+  return cpfOwner?.cpf ? { ...user, cpf: cpfOwner.cpf } : user;
+}
+
 
 export function getSelectedSharedRequesterId() {
   if (typeof window === "undefined") return "";
@@ -58,10 +72,12 @@ export async function getSharedSectorUsers(sharedProfile: CurrentUserProfile | n
 
   if (error) throw new Error(error.message);
 
+  const allUsers = (data ?? []) as CurrentUserProfile[];
   const seen = new Set<string>();
 
-  return ((data ?? []) as CurrentUserProfile[])
+  return allUsers
     .filter((user) => canUseRequesterForSharedProfile(sharedProfile, user))
+    .map((user) => applyCpfFallback(user, allUsers))
     .filter((user) => {
       if (seen.has(user.id)) return false;
       seen.add(user.id);
@@ -76,11 +92,19 @@ export async function getSelectedSharedRequesterProfile(sharedProfile: CurrentUs
   const requesterId = getSelectedSharedRequesterId();
   if (!requesterId) return null;
 
-  const { data, error } = await supabase.from("usuarios").select(USER_SELECT).eq("id", requesterId).maybeSingle();
+  const [{ data, error }, allUsersResult] = await Promise.all([
+    supabase.from("usuarios").select(USER_SELECT).eq("id", requesterId).maybeSingle(),
+    supabase.from("usuarios").select(USER_SELECT),
+  ]);
 
   if (error) throw new Error(error.message);
+  if (allUsersResult.error) throw new Error(allUsersResult.error.message);
 
-  const requester = (data as CurrentUserProfile | null) ?? null;
+  const rawRequester = (data as CurrentUserProfile | null) ?? null;
+  const requester = rawRequester
+    ? applyCpfFallback(rawRequester, (allUsersResult.data ?? []) as CurrentUserProfile[])
+    : null;
+
   if (!canUseRequesterForSharedProfile(sharedProfile, requester)) {
     clearSelectedSharedRequesterId();
     return null;
@@ -92,3 +116,4 @@ export async function getSelectedSharedRequesterProfile(sharedProfile: CurrentUs
 export async function getEffectiveCurrentUserProfile(sharedProfile: CurrentUserProfile | null) {
   return getSelectedSharedRequesterProfile(sharedProfile);
 }
+

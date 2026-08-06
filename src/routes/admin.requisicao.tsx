@@ -210,6 +210,23 @@ function normalizeAllowedCategories(raw: unknown) {
   );
 }
 
+async function getCpfFallbackByRequesterName(name: string | null | undefined) {
+  const normalizedName = normalizeSectorName(name);
+  if (!normalizedName) return null;
+
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("nome,cpf")
+    .not("cpf", "is", null);
+
+  if (error) throw new Error(error.message);
+
+  const match = ((data ?? []) as { nome: string | null; cpf: string | null }[]).find(
+    (user) => normalizeSectorName(user.nome) === normalizedName && Boolean(user.cpf?.trim()),
+  );
+
+  return match?.cpf?.trim() || null;
+}
 async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | null, fallbackProfile?: RequestAccessProfile | null) {
   if (!profile) return [];
 
@@ -863,7 +880,13 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    const chosenSolicitante = sectorUsers.find((u) => u.id === selectedSolicitanteId) || profile;
+    const rawChosenSolicitante = sectorUsers.find((u) => u.id === selectedSolicitanteId) || profile;
+    const fallbackCpf = rawChosenSolicitante?.cpf
+      ? null
+      : await getCpfFallbackByRequesterName(rawChosenSolicitante?.nome);
+    const chosenSolicitante = rawChosenSolicitante && fallbackCpf
+      ? { ...rawChosenSolicitante, cpf: fallbackCpf }
+      : rawChosenSolicitante;
     const isSharedSector = isSharedSectorProfile(profile);
 
     if (isSharedSector && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
@@ -1224,3 +1247,5 @@ function CriarRequisicaoPage() {
     </div>
   );
 }
+
+
