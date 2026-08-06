@@ -243,9 +243,17 @@ function AdminHome() {
           }
           return;
         }
+        const dashboardProfile = isSharedSectorProfile(userProfile)
+          ? await getSelectedSharedRequesterProfile(userProfile)
+          : userProfile;
+
+        if (!dashboardProfile && isSharedSectorProfile(userProfile)) {
+          navigate({ to: "/admin/selecionar-solicitante" });
+          return;
+        }
 
         if (active) {
-          setProfile(userProfile);
+          setProfile(dashboardProfile ?? userProfile);
           setIsAdmin(userProfile.is_admin === true);
         }
 
