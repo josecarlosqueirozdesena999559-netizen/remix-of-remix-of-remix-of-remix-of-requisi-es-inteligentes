@@ -230,6 +230,9 @@ async function getCpfFallbackByRequesterName(name: string | null | undefined) {
 async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | null, fallbackProfile?: RequestAccessProfile | null) {
   if (!profile) return [];
 
+  const profileCategories = getAllowedCategories(profile);
+  if (profileCategories.length > 0) return profileCategories;
+
   const sectorCandidates = [profile.unidade_nome, profile.setor]
     .map((value) => String(value || "").trim())
     .filter((value, index, values) => value && values.indexOf(value) === index);
@@ -251,9 +254,6 @@ async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | nu
       return sectorCategories;
     }
   }
-
-  const profileCategories = getAllowedCategories(profile);
-  if (profileCategories.length > 0) return profileCategories;
 
   return getAllowedCategories(fallbackProfile ?? null);
 }
