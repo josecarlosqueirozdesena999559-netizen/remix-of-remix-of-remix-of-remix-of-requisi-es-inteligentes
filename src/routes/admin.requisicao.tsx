@@ -559,7 +559,10 @@ function CriarRequisicaoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingRequestId, setEditingRequestId] = useState("");
+  const [editingRequestId, setEditingRequestId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("requisicaoId") || "";
+  });
   const [editingRequestStatus, setEditingRequestStatus] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState<string | null>(null);
 
@@ -904,7 +907,11 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    if (isSharedSector && (await hasPendingRequestSignatures(chosenSolicitante))) {
+    if (
+      !editingRequestId &&
+      isSharedSector &&
+      (await hasPendingRequestSignatures(chosenSolicitante))
+    ) {
       setError(BLOCK_NEW_REQUEST_MESSAGE);
       setSaving(false);
       return;
