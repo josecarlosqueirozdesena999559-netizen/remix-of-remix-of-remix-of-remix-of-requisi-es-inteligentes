@@ -790,20 +790,22 @@ function CriarRequisicaoPage() {
 
     async function loadSelectedRequesterAccess() {
       try {
-        const [nextCategories, nextProgramKeys] = await Promise.all([
-          getAllowedCategoriesForRequest(selectedRequester, profile),
-          getResponsibleSectorProgramKeys(selectedRequester),
-        ]);
+        const requesterCategories = getAllowedCategories(selectedRequester);
+        const resolvedCategories =
+          requesterCategories.length > 0
+            ? requesterCategories
+            : await getAllowedCategoriesForRequest(selectedRequester, profile);
 
         if (!active) return;
 
+        const fallbackCategories = getAllowedCategories(profile);
         const categoriesToUse =
-          nextCategories.length > 0 ? nextCategories : getAllowedCategories(profile);
+          resolvedCategories.length > 0 ? resolvedCategories : fallbackCategories;
         const nextSections = buildNormalizedRequestSections(categoriesToUse);
         const firstGroupLabel = nextSections[0] ? getSectionGroupLabel(nextSections[0]) : "";
 
         setAllowedCategories(categoriesToUse);
-        setAllowedProgramKeys(nextProgramKeys);
+        setAllowedProgramKeys([]);
         setSelectedGroupLabel((current) =>
           nextSections.some((section) => getSectionGroupLabel(section) === current)
             ? current
@@ -814,6 +816,13 @@ function CriarRequisicaoPage() {
             ? current
             : getInitialSectionId(nextSections, null),
         );
+
+        try {
+          const nextProgramKeys = await getResponsibleSectorProgramKeys(selectedRequester);
+          if (active) setAllowedProgramKeys(nextProgramKeys);
+        } catch (err) {
+          console.error("Erro ao carregar programas do solicitante:", err);
+        }
       } catch (err) {
         if (active) {
           setError(
