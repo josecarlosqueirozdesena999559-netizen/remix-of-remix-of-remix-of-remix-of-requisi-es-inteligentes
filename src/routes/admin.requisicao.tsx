@@ -11,6 +11,7 @@ import {
   isMedicationProduct,
   normalizeProductCategory,
   normalizeProductSearchValue,
+  productMatchesSearch,
   productHasCategory,
   productHasSubcategory,
   sortProductsByMaterialGroup,
@@ -117,6 +118,7 @@ interface RequestSectionGroup {
 
 interface SetorPermissionRow {
   categorias_permitidas: unknown;
+  programa?: string | null;
 }
 
 interface ResponsibleSectorProgramRow {
@@ -258,6 +260,27 @@ async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | nu
   return getAllowedCategories(fallbackProfile ?? null);
 }
 
+async function getSectorProgramKeysForRequest(profile: RequestAccessProfile | null) {
+  const sectorCandidates = [profile?.unidade_nome, profile?.setor]
+    .map((value) => String(value || "").trim())
+    .filter((value, index, values) => value && values.indexOf(value) === index);
+
+  const programKeys: string[] = [];
+
+  for (const sectorName of sectorCandidates) {
+    const { data, error } = await supabase
+      .from("setores")
+      .select("programa")
+      .eq("nome", sectorName)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    programKeys.push(...getComparableProgramKeys((data as SetorPermissionRow | null)?.programa));
+  }
+
+  return programKeys.filter((key, index, keys) => key && keys.indexOf(key) === index);
+}
 async function getResponsibleSectorProgramKeys(profile: Pick<RequestAccessProfile, "id"> | null) {
   if (!profile?.id) return [];
 
@@ -288,6 +311,16 @@ async function getResponsibleSectorProgramKeys(profile: Pick<RequestAccessProfil
   return programKeys.filter((key, index, keys) => key && keys.indexOf(key) === index);
 }
 
+async function getAllowedProgramKeysForRequest(profile: RequestAccessProfile | null) {
+  const [responsibleProgramKeys, sectorProgramKeys] = await Promise.all([
+    getResponsibleSectorProgramKeys(profile),
+    getSectorProgramKeysForRequest(profile),
+  ]);
+
+  return [...responsibleProgramKeys, ...sectorProgramKeys].filter(
+    (key, index, keys) => key && keys.indexOf(key) === index,
+  );
+}
 function formatToday() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
 }
@@ -403,7 +436,7 @@ function isItemAllowedForProfileProgram(item: ItemRow, allowedProgramKeys: strin
     getComparableProgramKeys(link.programas?.nome),
   );
 
-  if (itemProgramKeys.length === 0) return true;
+  if (itemProgramKeys.length === 0) return false;
 
   return itemProgramKeys.some((key) => allowedProgramKeys.includes(key));
 }
@@ -664,7 +697,7 @@ function CriarRequisicaoPage() {
 
         const [profileCategories, profileProgramKeys] = await Promise.all([
           getAllowedCategoriesForRequest(profile),
-          getResponsibleSectorProgramKeys(profile),
+          getAllowedProgramKeysForRequest(profile),
         ]);
         const categories =
           profileCategories.length > 0 || profileProgramKeys.length === 0
@@ -821,7 +854,7 @@ function CriarRequisicaoPage() {
         );
 
         try {
-          const nextProgramKeys = await getResponsibleSectorProgramKeys(selectedRequester);
+          const nextProgramKeys = await getAllowedProgramKeysForRequest(selectedRequester);
           if (active) setAllowedProgramKeys(nextProgramKeys);
         } catch (err) {
           console.error("Erro ao carregar programas do solicitante:", err);
@@ -871,7 +904,10 @@ function CriarRequisicaoPage() {
           }
 
           if (!query) return true;
-          return productMatchesSearch(item, query);
+          return productMatchesSearch(
+            [item.nome, item.unidade, item.categoria, item.subcategoria],
+            query,
+          );
         });
 
         return {
