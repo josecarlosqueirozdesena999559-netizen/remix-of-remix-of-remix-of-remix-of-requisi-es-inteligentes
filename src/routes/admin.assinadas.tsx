@@ -101,6 +101,15 @@ function parseOutputDateToTimestamp(value: string | null | undefined): number {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+function normalizeCodeFilter(value: string) {
+  const digits = value.replace(/\D/g, "").replace(/^0+/, "");
+  return digits || value.trim().toLowerCase();
+}
+
+function codeMatchesExactFilter(code: string, query: string) {
+  if (!query) return true;
+  return normalizeCodeFilter(code) === normalizeCodeFilter(query);
+}
 function getOutputDateTime(request: RequisicaoAssinada) {
   return (
     parseOutputDateToTimestamp(request.saida_vinculada_data) ||
@@ -222,7 +231,7 @@ function AssinadasPage() {
   const hasCodeSearch = Boolean(codigoFilter.trim() || saidaFilter.trim());
 
   const filteredData = useMemo(() => {
-    const codeQuery = codigoFilter.trim().toLowerCase();
+    const codeQuery = codigoFilter.trim();
     const saidaQuery = saidaFilter.trim().toLowerCase();
 
     return (data ?? [])
@@ -231,7 +240,7 @@ function AssinadasPage() {
 
         const code = (request.saida_codigo || codeByRequestId.get(request.id) || "-").toLowerCase();
         const linkedOutputCode = (request.saida_vinculada_codigo || "").toLowerCase();
-        const codigoMatch = !codeQuery || code.includes(codeQuery);
+        const codigoMatch = codeMatchesExactFilter(code, codeQuery);
         const saidaMatch = !saidaQuery || linkedOutputCode.includes(saidaQuery);
         return codigoMatch && saidaMatch;
       })

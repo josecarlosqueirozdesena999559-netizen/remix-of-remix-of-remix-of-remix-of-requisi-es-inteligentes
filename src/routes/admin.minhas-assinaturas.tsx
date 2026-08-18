@@ -297,7 +297,7 @@ function MinhasAssinaturasPage() {
 
     if (shouldBlockSignatureUpload(request)) {
       setError(
-        "Esta solicita??o est? sem itens e n?o pode ser assinada. Refa?a a solicita??o com os itens corretos.",
+        "Esta solicitação está sem itens e não pode ser assinada. Refaça a solicitação com os itens corretos.",
       );
       return;
     }
@@ -317,8 +317,8 @@ function MinhasAssinaturasPage() {
     if (isOutputStage && selectedFiles.length !== requiredOutputCount) {
       setError(
         requiredOutputCount === 1
-          ? "Anexe 1 PDF de sa?da assinado."
-          : `Anexe os ${requiredOutputCount} PDFs de sa?da assinados.`,
+          ? "Anexe 1 PDF de saída do SIG assinado."
+          : `Anexe os ${requiredOutputCount} PDFs de saída do SIG assinados.`,
       );
       return;
     }
@@ -353,7 +353,7 @@ function MinhasAssinaturasPage() {
         if (uploadError) {
           throw new Error(
             uploadError.message ||
-              "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.",
+              "Não foi possível anexar o PDF. Verifique o arquivo e tente novamente.",
           );
         }
 
@@ -407,8 +407,8 @@ function MinhasAssinaturasPage() {
       ]);
 
       const sentMessage = isOutputStage
-        ? "Sa?da assinada enviada pro Almoxarifado."
-        : "Solicita??o assinada enviada pro Almoxarifado.";
+        ? "Saída do SIG assinada enviada para o Almoxarifado."
+        : "Solicitação assinada enviada para o Almoxarifado.";
       setMessage(sentMessage);
       try {
         await notifyRequestByWhatsApp({
@@ -503,7 +503,11 @@ function MinhasAssinaturasPage() {
         <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>
       </div>
 
-      {message && <Card className="p-4 text-sm text-muted-foreground">{message}</Card>}
+      {message && (
+        <Card className="border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800">
+          {message}
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 p-6 text-muted-foreground">
@@ -511,7 +515,7 @@ function MinhasAssinaturasPage() {
           Carregando...
         </div>
       ) : error ? (
-        <Card className="p-6 border border-destructive/40 bg-destructive/10 text-destructive font-medium">
+        <Card className="border border-red-200 bg-red-50 p-6 font-medium text-red-700">
           {error}
         </Card>
       ) : requests.length === 0 ? (
@@ -521,7 +525,7 @@ function MinhasAssinaturasPage() {
       ) : (
         <Card className="p-4">
           {error && (
-            <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+            <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
               {error}
             </p>
           )}

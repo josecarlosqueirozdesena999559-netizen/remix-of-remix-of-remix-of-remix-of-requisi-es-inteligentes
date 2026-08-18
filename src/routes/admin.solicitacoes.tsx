@@ -134,6 +134,7 @@ function Solicitacoes() {
   const [selected, setSelected] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [uploadMessageType, setUploadMessageType] = useState<"success" | "error">("success");
   const [outputCodes, setOutputCodes] = useState<Record<string, string>>({});
   const [outputDates, setOutputDates] = useState<Record<string, string>>({});
   const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
@@ -303,10 +304,12 @@ function Solicitacoes() {
     if (selectedFiles.length === 0) return;
 
     setUploadMessage(null);
+    setUploadMessageType("success");
 
     if (!hasRequestItems(request)) {
+      setUploadMessageType("error");
       setUploadMessage(
-        "Esta solicita??o est? sem itens e n?o pode seguir para a sa?da. Devolva para ser refeita com os itens corretos.",
+        "Esta solicitação está sem itens e não pode seguir para a saída do SIG. Devolva para ser refeita com os itens corretos.",
       );
       return;
     }
@@ -316,6 +319,7 @@ function Solicitacoes() {
     );
 
     if (invalidFile) {
+      setUploadMessageType("error");
       setUploadMessage("Envie apenas arquivos PDF.");
       return;
     }
@@ -350,7 +354,7 @@ function Solicitacoes() {
         if (uploadError) {
           throw new Error(
             uploadError.message ||
-              "N?o foi poss?vel anexar o PDF. Verifique o arquivo e tente novamente.",
+              "Não foi possível anexar o PDF. Verifique o arquivo e tente novamente.",
           );
         }
 
@@ -401,18 +405,20 @@ function Solicitacoes() {
           notificationType: "outputAttached",
         });
       } catch (notificationError) {
-        console.error("Erro ao enviar notifica??o por WhatsApp:", notificationError);
+        console.error("Erro ao enviar notificação por WhatsApp:", notificationError);
       }
 
       setData((current) => current?.filter((item) => item.id !== request.id));
+      setUploadMessageType("success");
       setUploadMessage(
         attachments.length === 1
-          ? "Documento de sa?da enviado pro Almoxarifado com sucesso."
-          : `${attachments.length} documentos de sa?da enviados para assinatura.`,
+          ? "Documento de saída do SIG enviado para assinatura com sucesso."
+          : `${attachments.length} documentos de saída do SIG enviados para assinatura.`,
       );
     } catch (err) {
       await Promise.all(attachments.map((attachment) => removeAttachmentFile(attachment)));
-      setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de sa?da.");
+      setUploadMessageType("error");
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao enviar documento de saída do SIG.");
     } finally {
       setUploadingId(null);
     }
@@ -456,6 +462,7 @@ function Solicitacoes() {
 
     setPrintingRequestId(request.id);
     setUploadMessage(null);
+    setUploadMessageType("success");
     setError(null);
 
     try {
@@ -474,6 +481,7 @@ function Solicitacoes() {
       );
       setUploadMessage("Marcado como impresso.");
     } catch (err) {
+      setUploadMessageType("error");
       setUploadMessage(err instanceof Error ? err.message : "Erro ao atualizar impressão.");
     } finally {
       setPrintingRequestId(null);
@@ -485,12 +493,14 @@ function Solicitacoes() {
 
     const reason = reviewReason.trim();
     if (!reason) {
+      setUploadMessageType("error");
       setUploadMessage("Digite o motivo para continuar.");
       return;
     }
 
     setReviewSaving(true);
     setUploadMessage(null);
+    setUploadMessageType("success");
 
     try {
       const requestAttachment = getRequestSignedAttachment(
@@ -555,6 +565,7 @@ function Solicitacoes() {
       }
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
+      setUploadMessageType("success");
       setUploadMessage(
         reviewMode === "devolver"
           ? isSaidaReturn
@@ -564,6 +575,7 @@ function Solicitacoes() {
       );
       closeReview();
     } catch (err) {
+      setUploadMessageType("error");
       setUploadMessage(err instanceof Error ? err.message : "Erro ao revisar solicitação.");
     } finally {
       setReviewSaving(false);
@@ -609,7 +621,13 @@ function Solicitacoes() {
           </div>
 
           {uploadMessage && (
-            <p className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+            <p
+              className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+                uploadMessageType === "error"
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-800"
+              }`}
+            >
               {uploadMessage}
             </p>
           )}
