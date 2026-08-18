@@ -70,17 +70,39 @@ function MinhaAssinaturaPdfPage() {
         const request = requestResult.data as Requisicao;
 
         if (request.status === "aguardando_assinatura_saida") {
-          const outputUrl = await resolveAttachmentUrl(request.admin_attachment as AttachmentFile | null);
+          const outputAttachments = getAttachmentFiles(request.admin_attachment);
+          const outputUrls = (
+            await Promise.all(outputAttachments.map((attachment) => resolveAttachmentUrl(attachment)))
+          ).filter(Boolean);
 
-          if (outputUrl) {
+          if (outputUrls.length > 0) {
+            if (outputUrls.length === 1) {
+              setPdf({
+                title: "Documento de saída do SIG",
+                fileName: `Saída-${request.saida_codigo || request.id}.pdf`,
+                url: outputUrls[0],
+              });
+              setLoading(false);
+              return;
+            }
+
+            const outputBlob = await createCombinedSignedPdfBlob(outputUrls, "");
+            createdUrl = URL.createObjectURL(outputBlob);
+
+            if (!active) {
+              URL.revokeObjectURL(createdUrl);
+              return;
+            }
+
             setPdf({
-              title: "Documento de saída do SIG",
+              title: "Documentos de saída do SIG",
               fileName: `Saída-${request.saida_codigo || request.id}.pdf`,
-              url: outputUrl,
+              url: createdUrl,
             });
             setLoading(false);
             return;
           }
+
 
           const requestSignedUrl = await resolveAttachmentUrl(
             getRequestSignedAttachment(request.signed_attachment, request.status),

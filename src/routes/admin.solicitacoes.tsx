@@ -29,6 +29,7 @@ import {
   getAttachmentFile,
   getAttachmentFiles,
   getOutputSignedAttachment,
+  getOutputSignedAttachments,
   getRequestSignedAttachment,
   removeAttachmentFile,
   removeAttachmentFileSafely,
@@ -507,13 +508,11 @@ function Solicitacoes() {
         reviewingRequest.signed_attachment,
         reviewingRequest.status,
       );
-      const outputAttachment = getOutputSignedAttachment(
+      const outputAttachments = getOutputSignedAttachments(
         reviewingRequest.signed_attachment,
         reviewingRequest.status,
       );
-      const adminAttachment = getAttachmentFile(
-        reviewingRequest.admin_attachment,
-      ) as AttachmentFile | null;
+      const adminAttachments = getAttachmentFiles(reviewingRequest.admin_attachment);
 
       const isSaidaReturn = reviewMode === "devolver" && reviewTarget === "saida";
 
@@ -551,18 +550,15 @@ function Solicitacoes() {
 
       if (updateError) throw new Error(updateError.message);
 
-      if (!isSaidaReturn) {
-        await Promise.all([
-          removeAttachmentFileSafely(requestAttachment, "request attachment"),
-          removeAttachmentFileSafely(outputAttachment, "output attachment"),
-          removeAttachmentFileSafely(adminAttachment, "admin attachment"),
-        ]);
-      } else {
-        await Promise.all([
-          removeAttachmentFileSafely(outputAttachment, "output attachment"),
-          removeAttachmentFileSafely(adminAttachment, "admin attachment"),
-        ]);
-      }
+      const cleanupAttachments = [
+        ...outputAttachments.map((attachment) => ({ attachment, context: "output attachment" })),
+        ...adminAttachments.map((attachment) => ({ attachment, context: "admin attachment" })),
+        ...(!isSaidaReturn ? [{ attachment: requestAttachment, context: "request attachment" }] : []),
+      ];
+
+      await Promise.all(
+        cleanupAttachments.map(({ attachment, context }) => removeAttachmentFileSafely(attachment, context)),
+      );
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
       setUploadMessageType("success");

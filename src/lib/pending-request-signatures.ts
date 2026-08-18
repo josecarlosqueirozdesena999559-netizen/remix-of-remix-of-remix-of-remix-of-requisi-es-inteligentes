@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
-  getOutputSignedAttachment,
+  getAttachmentFiles,
+  getOutputSignedAttachments,
   getRequestSignedAttachment,
 } from "@/lib/attachments";
 import {
@@ -16,6 +17,7 @@ interface PendingSignatureRequest {
   id: string;
   status: string;
   signed_attachment: unknown;
+  admin_attachment: unknown;
 }
 
 function normalizeUserKey(value: string | null | undefined) {
@@ -41,7 +43,8 @@ function canBypassPendingSignatureBlock(profile: RequestOwnerProfile) {
 
 export function requestNeedsSignature(request: PendingSignatureRequest) {
   if (request.status === "aguardando_assinatura_saida") {
-    return !getOutputSignedAttachment(request.signed_attachment, request.status);
+    const requiredOutputCount = Math.max(1, getAttachmentFiles(request.admin_attachment).length);
+    return getOutputSignedAttachments(request.signed_attachment, request.status).length < requiredOutputCount;
   }
 
   if (request.status === "correcao_requisicao") {
@@ -62,7 +65,7 @@ export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) 
 
   let query = supabase
     .from("requisicoes")
-    .select("id,status,signed_attachment")
+    .select("id,status,signed_attachment,admin_attachment")
     .in("status", [
       "aguardando_assinatura",
       "aguardando_assinatura_requisicao",
