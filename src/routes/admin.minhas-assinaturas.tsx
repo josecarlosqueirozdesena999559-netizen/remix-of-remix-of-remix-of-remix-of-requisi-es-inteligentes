@@ -57,9 +57,9 @@ const baseSelectWithOutputDate =
   "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
 
 function getStageLabel(status: string) {
-  if (status === "aguardando_assinatura_saida") return "Assinar saída";
-  if (status === "correcao_requisicao") return "Corrigir requisição";
-  return "Assinar requisição";
+  if (status === "aguardando_assinatura_saida") return "Assinar saída do SIG";
+  if (status === "correcao_requisicao") return "Corrigir solicitação";
+  return "Assinar solicitação";
 }
 
 function isRequestSignatureStatus(status: string) {
@@ -449,7 +449,7 @@ function MinhasAssinaturasPage() {
   };
 
   const handleDeletePendingRequest = async (request: Requisicao) => {
-    const confirmed = window.confirm("Excluir esta requisição antes da assinatura?");
+    const confirmed = window.confirm("Excluir esta solicitação antes da assinatura?");
     if (!confirmed) return;
 
     setMessage(null);
@@ -490,9 +490,9 @@ function MinhasAssinaturasPage() {
       if (deleteError) throw new Error(deleteError.message);
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
-      setMessage("Requisição excluída antes da assinatura.");
+      setMessage("Solicitação excluída antes da assinatura.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao excluir requisição.");
+      setError(err instanceof Error ? err.message : "Erro ao excluir solicitação.");
     }
   };
 
@@ -557,7 +557,7 @@ function MinhasAssinaturasPage() {
                         <div>{requestDisplayCode}</div>
                         {isOutputStage && linkedOutputCode && linkedOutputCode !== requestCode ? (
                           <div className="text-xs font-normal text-muted-foreground">
-                            Requisicao: {requestCode}
+                            Solicitação: {requestCode}
                           </div>
                         ) : null}
                       </td>
@@ -571,7 +571,7 @@ function MinhasAssinaturasPage() {
                           {getStageLabel(request.status)}
                           {missingItems && (
                             <span className="text-xs text-destructive">
-                              Requisição sem itens. Refaça antes de assinar.
+                              Solicitação sem itens. Refaça antes de assinar.
                             </span>
                           )}
                           {request.return_reason && request.status === "correcao_requisicao" && (

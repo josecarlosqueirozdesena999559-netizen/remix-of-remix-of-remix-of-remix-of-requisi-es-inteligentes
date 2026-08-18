@@ -308,7 +308,7 @@ function ConfiguracoesPage() {
                 <UserRound className="h-5 w-5 text-primary" />
                 Dados do usuário
               </CardTitle>
-              <CardDescription>Informações cadastradas para identificar suas requisições.</CardDescription>
+              <CardDescription>Informações cadastradas para identificar suas solicitações.</CardDescription>
             </CardHeader>
             <CardContent>
               <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">

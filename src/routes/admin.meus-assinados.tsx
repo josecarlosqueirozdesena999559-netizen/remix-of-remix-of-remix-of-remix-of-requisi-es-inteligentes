@@ -35,9 +35,9 @@ function getCurrentMonth() {
 
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluída";
-  if (status === "requisicao_assinada") return "Requisição assinada";
-  if (status === "recebido") return "Requisição assinada";
-  if (status === "aguardando_assinatura_saida") return "Aguardando saída";
+  if (status === "requisicao_assinada") return "Solicitação assinada";
+  if (status === "recebido") return "Solicitação assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saída do SIG";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
   return status || "-";
 }
@@ -118,7 +118,7 @@ function MeusAssinadosPage() {
           setRequests(data.filter(hasOutputDocument));
         }
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar solicitações.");
       } finally {
         if (active) setLoading(false);
       }
@@ -166,7 +166,7 @@ function MeusAssinadosPage() {
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
       ) : filteredRequests.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma requisição encontrada neste mês.</Card>
+        <Card className="p-6 text-muted-foreground">Nenhuma solicitação encontrada neste mês.</Card>
       ) : (
         <Card className="p-4">
           <div className="rounded-md border overflow-x-auto">

@@ -62,7 +62,7 @@ function MinhaAssinaturaPdfPage() {
         }
 
         if (!requestResult.data) {
-          setError("Requisição não encontrada.");
+          setError("Solicitação não encontrada.");
           setLoading(false);
           return;
         }
@@ -74,7 +74,7 @@ function MinhaAssinaturaPdfPage() {
 
           if (outputUrl) {
             setPdf({
-              title: "Documento de saída",
+              title: "Documento de saída do SIG",
               fileName: `Saída-${request.saida_codigo || request.id}.pdf`,
               url: outputUrl,
             });

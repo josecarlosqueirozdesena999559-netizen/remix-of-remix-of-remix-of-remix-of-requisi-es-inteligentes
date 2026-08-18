@@ -337,7 +337,7 @@ function ControleEntradasPage() {
           <section className="rounded-md border bg-card p-5 print:border-0 print:p-0">
             <div className="mb-4 border-b pb-3">
               <p className="text-sm text-muted-foreground">Almoxarifado</p>
-              <h1 className="text-xl text-foreground">Controle de Requisicoes Criadas</h1>
+              <h1 className="text-xl text-foreground">Controle de Solicitações Criadas</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 {getMonthLabel(month)} · {selectedLocal || "Todos os locais"}
               </p>

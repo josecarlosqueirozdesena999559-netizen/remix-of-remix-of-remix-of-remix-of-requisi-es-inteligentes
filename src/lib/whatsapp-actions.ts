@@ -46,13 +46,13 @@ function validateSaveUserWhatsAppInput(input: unknown): SaveUserWhatsAppInput {
 
 function validateRequestNotificationInput(input: unknown): RequestNotificationInput {
   if (!input || typeof input !== "object") {
-    throw new Error("Dados da requisição inválidos.");
+    throw new Error("Dados da solicitação inválidos.");
   }
 
   const data = input as Partial<RequestNotificationInput>;
 
   if (!data.requestId || typeof data.requestId !== "string") {
-    throw new Error("Requisição não informada.");
+    throw new Error("Solicitação não informada.");
   }
 
   return { requestId: data.requestId };
@@ -66,7 +66,7 @@ async function getRequestNotificationData(requestId: string) {
     .maybeSingle();
 
   if (requestError) throw new Error(requestError.message);
-  if (!request) throw new Error("Requisição não encontrada.");
+  if (!request) throw new Error("Solicitação não encontrada.");
 
   let requestCode = request.saida_codigo?.trim();
   if (!requestCode) {

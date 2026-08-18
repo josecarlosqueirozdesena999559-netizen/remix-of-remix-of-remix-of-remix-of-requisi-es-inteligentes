@@ -74,9 +74,9 @@ function getCurrentMonth() {
 
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluida";
-  if (status === "requisicao_assinada") return "Requisição assinada";
-  if (status === "recebido") return "Requisicao assinada";
-  if (status === "aguardando_assinatura_saida") return "Aguardando saida";
+  if (status === "requisicao_assinada") return "Solicitação assinada";
+  if (status === "recebido") return "Solicitação assinada";
+  if (status === "aguardando_assinatura_saida") return "Aguardando saída do SIG";
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
   return status || "-";
 }
@@ -190,7 +190,7 @@ function AssinadasPage() {
         if (!active) return;
 
         if (setoresResult.error) {
-          setError(setoresResult.error.message || "Erro ao carregar requisicoes.");
+          setError(setoresResult.error.message || "Erro ao carregar solicitações.");
         } else {
           const locationOptions = (setoresResult.data ?? []) as LocationOption[];
 
@@ -206,7 +206,7 @@ function AssinadasPage() {
           setCodeByRequestId(buildGlobalRequestCodes(requests));
         }
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisicoes.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar solicitações.");
       } finally {
         if (active) setLoading(false);
       }
@@ -383,7 +383,7 @@ function AssinadasPage() {
             removeAttachmentFileSafely(adminAttachment, "admin attachment"),
           ]);
 
-          setMessage("Requisicao devolvida para correcao do usuario.");
+          setMessage("Solicitação devolvida para correção do usuário.");
         } else {
           const payload = {
             status: "recebido",
@@ -417,7 +417,7 @@ function AssinadasPage() {
             removeAttachmentFileSafely(adminAttachment, "admin attachment"),
           ]);
 
-          setMessage("Saida devolvida para ajuste do admin.");
+          setMessage("Saída do SIG devolvida para ajuste do admin.");
         }
       } else {
         await Promise.all([
@@ -451,13 +451,13 @@ function AssinadasPage() {
 
         if (updateError) throw new Error(updateError.message);
 
-        setMessage("Requisicao excluida da fila.");
+        setMessage("Solicitação excluída da fila.");
       }
 
       setData((current) => current?.filter((item) => item.id !== reviewingRequest.id));
       closeReview();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao revisar requisicao.");
+      setError(err instanceof Error ? err.message : "Erro ao revisar solicitação.");
     } finally {
       setReviewSaving(false);
     }
@@ -467,7 +467,7 @@ function AssinadasPage() {
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground">Início / Assinadas</p>
-        <h2 className="text-2xl text-foreground">Requisições assinadas</h2>
+        <h2 className="text-2xl text-foreground">Solicitações assinadas</h2>
       </div>
 
       <Card className="p-4">
@@ -497,14 +497,14 @@ function AssinadasPage() {
               />
             </label>
             <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-              Código da saída
+              Código da saída do SIG
               <Input
                 value={saidaFilter}
                 onChange={(event) => {
                   setSaidaFilter(event.target.value);
                   setSelected(null);
                 }}
-                placeholder="Filtrar por saida"
+                placeholder="Filtrar por saída do SIG"
               />
             </label>
           </div>
@@ -538,8 +538,8 @@ function AssinadasPage() {
       ) : grouped.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
           {hasCodeSearch
-            ? "Nenhuma requisicao encontrada para este codigo."
-            : "Nenhuma requisicao encontrada neste mes."}
+            ? "Nenhuma solicitação encontrada para este código."
+            : "Nenhuma solicitação encontrada neste mês."}
         </Card>
       ) : selected ? (
         <Card className="p-4">
@@ -571,7 +571,7 @@ function AssinadasPage() {
                     <th className="px-3 py-2 text-left font-normal">Usuário</th>
                     <th className="px-3 py-2 text-left font-normal">Data</th>
                     <th className="px-3 py-2 text-left font-normal">Número</th>
-                    <th className="px-3 py-2 text-left font-normal">Data saída</th>
+                    <th className="px-3 py-2 text-left font-normal">Data da saída do SIG</th>
                     <th className="px-3 py-2 text-left font-normal">Status</th>
                     <th className="px-3 py-2 text-right font-normal">PDF</th>
                     <th className="px-3 py-2 text-right font-normal">Ações</th>
@@ -598,7 +598,7 @@ function AssinadasPage() {
                           <div>{code}</div>
                           {request.saida_vinculada_codigo ? (
                             <div className="text-xs text-muted-foreground">
-                              Saida: {request.saida_vinculada_codigo}
+                              Saída do SIG: {request.saida_vinculada_codigo}
                             </div>
                           ) : null}
                         </td>
@@ -698,12 +698,12 @@ function AssinadasPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
+              {reviewMode === "devolver" ? "Devolver solicitação" : "Excluir solicitação"}
             </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
-                ? "Escolha se o erro está na requisição ou na saída para devolver o fluxo ao ponto correto."
-                : "A requisição sairá da fila, mas o histórico e o motivo ficarão registrados no sistema."}
+                ? "Escolha se o erro está na solicitação ou na saída do SIG para devolver o fluxo ao ponto correto."
+                : "A solicitação sairá da fila, mas o histórico e o motivo ficarão registrados no sistema."}
             </DialogDescription>
           </DialogHeader>
 
@@ -718,18 +718,18 @@ function AssinadasPage() {
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="requisicao" id="review-target-requisicao" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-requisicao">Erro na requisição</Label>
+                    <Label htmlFor="review-target-requisicao">Erro na solicitação</Label>
                     <span className="block text-xs text-muted-foreground">
-                      O usuário recebe a mesma requisição com os itens para corrigir e reenviar.
+                      O usuário recebe a mesma solicitação com os itens para corrigir e reenviar.
                     </span>
                   </span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3">
                   <RadioGroupItem value="saida" id="review-target-saida" />
                   <span className="space-y-1">
-                    <Label htmlFor="review-target-saida">Erro na saída</Label>
+                    <Label htmlFor="review-target-saida">Erro na saída do SIG</Label>
                     <span className="block text-xs text-muted-foreground">
-                      A saída volta para pendente, e a requisição assinada continua preservada.
+                      A saída do SIG volta para pendente, e a solicitação assinada continua preservada.
                     </span>
                   </span>
                 </label>

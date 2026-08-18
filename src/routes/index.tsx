@@ -92,7 +92,7 @@ function Index() {
             <Warehouse className="h-6 w-6" />
           </div>
           <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
-          <p className="mt-1 text-sm text-slate-500">Acesse o painel de requisições</p>
+          <p className="mt-1 text-sm text-slate-500">Acesse o painel de solicitações</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

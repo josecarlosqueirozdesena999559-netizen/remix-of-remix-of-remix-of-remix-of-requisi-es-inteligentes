@@ -561,15 +561,15 @@ function getSelectedRequestCategories(
 }
 
 function getSingleCategoryRequestMessage(category: string) {
-  return `Esta requisição já tem itens de ${category}. Envie primeiro e depois faça outra requisição para outra categoria.`;
+  return `Esta solicitação já tem itens de ${category}. Envie primeiro e depois faça outra solicitação para outra categoria.`;
 }
 
 function getRequestSaveErrorMessage(error: { code?: string; message?: string } | null) {
   const message = String(error?.message || "").trim();
-  if (!message) return "Não foi possível enviar a requisição. Tente novamente.";
+  if (!message) return "Não foi possível enviar a solicitação. Tente novamente.";
 
   if (error?.code === "P0001" || /database|databate|1000|P0001/i.test(message)) {
-    return "Não foi possível enviar a requisição. Confira se os itens pertencem a uma única categoria e tente novamente.";
+    return "Não foi possível enviar a solicitação. Confira se os itens pertencem a uma única categoria e tente novamente.";
   }
 
   return message;
@@ -669,12 +669,12 @@ function CriarRequisicaoPage() {
 
         if (itemsResult.error || requestError) {
           throw new Error(
-            itemsResult.error?.message || requestError?.message || "Erro ao carregar requisição.",
+            itemsResult.error?.message || requestError?.message || "Erro ao carregar solicitação.",
           );
         }
 
         if (editingRequestId && !canEditRequestBeforeSignature(editableRequest)) {
-          throw new Error("Esta requisição já foi assinada e não pode mais ser editada.");
+          throw new Error("Esta solicitação já foi assinada e não pode mais ser editada.");
         }
 
         const isSharedSector = isSharedSectorProfile(profile);
@@ -1097,9 +1097,9 @@ function CriarRequisicaoPage() {
           <h1 className="text-xl font-bold tracking-tight text-slate-800">
             {editingRequestId
               ? isCorrectionEdit
-                ? "Corrigir requisição"
-                : "Editar requisição"
-              : "Criar requisição"}
+                ? "Corrigir solicitação"
+                : "Editar solicitação"
+              : "Criar solicitação"}
           </h1>
         </div>
         <Button
@@ -1289,7 +1289,7 @@ function CriarRequisicaoPage() {
                   className="gap-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 px-6 font-semibold"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {editingRequestId ? "Salvar alterações" : "Enviar requisição"}
+                  {editingRequestId ? "Salvar alterações" : "Enviar solicitação"}
                 </Button>
               </div>
             </>

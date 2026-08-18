@@ -82,10 +82,10 @@ function isPendingStatus(status: string) {
 }
 
 function getStatusLabel(status: string) {
-  if (status === "aguardando_assinatura") return "Faltando assinatura da requisição";
-  if (status === "aguardando_assinatura_requisicao") return "Faltando assinatura da requisição";
-  if (status === "aguardando_assinatura_saida") return "Faltando assinatura da saída";
-  if (status === "correcao_requisicao") return "Correção da requisição";
+  if (status === "aguardando_assinatura") return "Faltando assinatura da solicitação";
+  if (status === "aguardando_assinatura_requisicao") return "Faltando assinatura da solicitação";
+  if (status === "aguardando_assinatura_saida") return "Faltando assinatura da saída do SIG";
+  if (status === "correcao_requisicao") return "Correção da solicitação";
   return status || "-";
 }
 
@@ -398,7 +398,7 @@ function ControleAssinaturasPage() {
             <Input
               value={saidaFilter}
               onChange={(event) => setSaidaFilter(event.target.value)}
-              placeholder="Filtrar por saida"
+              placeholder="Filtrar por saída do SIG"
             />
           </label>
         </div>

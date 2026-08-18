@@ -142,7 +142,7 @@ function getStatusBadge(status: string) {
   switch (status) {
     case "aguardando_assinatura_saida":
       return {
-        label: "Aguardando Assinatura de Requisição SIG",
+        label: "Aguardando assinatura da saída do SIG",
         className: "bg-orange-100 text-orange-800 border border-orange-200 font-normal",
       };
     case "aguardando_assinatura":
@@ -210,7 +210,7 @@ function AdminHome() {
     title: "",
   });
 
-  // Admin Actions State (Anexar Requisição SIG & Devolver)
+  // Admin Actions State (Anexar saída do SIG & Devolver)
   const [attachingReq, setAttachingReq] = useState<RequisicaoItem | null>(null);
   const [saidaCodigoInput, setSaidaCodigoInput] = useState("");
   const [saidaDataInput, setSaidaDataInput] = useState(getTodayInputDate());
@@ -343,7 +343,7 @@ function AdminHome() {
     }
   };
 
-  // ADMIN ACTION: Abrir Modal Anexar Requisição SIG
+  // ADMIN ACTION: Abrir Modal Anexar saída do SIG
   const handleOpenAnexarSaida = (req: RequisicaoItem) => {
     setAttachingReq(req);
     setSaidaCodigoInput(req.saida_vinculada_codigo || "");
@@ -354,7 +354,7 @@ function AdminHome() {
   const handleConfirmAnexarSaida = async () => {
     if (!attachingReq) return;
     if (stagedPdfFiles.length === 0) {
-      alert("Selecione ou arraste os PDFs da Requisição SIG antes de enviar.");
+      alert("Selecione ou arraste os PDFs da saída do SIG antes de enviar.");
       return;
     }
 
@@ -440,9 +440,9 @@ function AdminHome() {
       setAttachingReq(null);
       setStagedPdfFiles([]);
       setSaidaCodigoInput("");
-      alert("Documento de Requisição SIG enviado com sucesso!");
+      alert("Documento da saída do SIG enviado com sucesso!");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao enviar documento de Requisição SIG.");
+      alert(err instanceof Error ? err.message : "Erro ao enviar documento da saída do SIG.");
     } finally {
       setUploadingSaida(false);
     }
@@ -478,12 +478,12 @@ function AdminHome() {
   // ADMIN ACTION: Open Devolver Modal
   const handleOpenDevolucao = (req: RequisicaoItem) => {
     setDevolucaoReq(req);
-    // Se a requisição já estiver em estágio de saída ou tiver admin_attachment, padroniza opção como saída
+    // Se a solicitação já estiver em estágio de saída do SIG ou tiver admin_attachment, padroniza opção como saída do SIG
     setDevolucaoTarget(req.status === "aguardando_assinatura_saida" ? "saida" : "requisicao");
     setMotivoDevolucao("");
   };
 
-  // ADMIN ACTION: Devolver com Motivo (Requisição vs Saída)
+  // ADMIN ACTION: Devolver com Motivo (Solicitação vs Saída do SIG)
   const handleConfirmDevolucao = async () => {
     if (!devolucaoReq) return;
     const reason = motivoDevolucao.trim();
@@ -534,11 +534,11 @@ function AdminHome() {
       setMotivoDevolucao("");
       alert(
         isSaidaReturn
-          ? "Documento de saída devolvido para o admin anexar novamente!"
-          : "Requisição devolvida para correção com sucesso!",
+          ? "Documento de saída do SIG devolvido para o admin anexar novamente!"
+          : "Solicitação devolvida para correção com sucesso!",
       );
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Erro ao devolver requisição.");
+      alert(err instanceof Error ? err.message : "Erro ao devolver solicitação.");
     } finally {
       setSavingDevolucao(false);
     }
@@ -584,15 +584,15 @@ function AdminHome() {
 
     if (hasCorrectionPending) {
       return correctionPendingRequests.length === 1
-        ? "Você tem requisição devolvida para correção"
-        : "Você tem requisições devolvidas para correção";
+        ? "Você tem solicitação devolvida para correção"
+        : "Você tem solicitações devolvidas para correção";
     }
 
     if (hasOutputPending) {
-      return "Você tem requisição aguardando assinatura de saída";
+      return "Você tem solicitação aguardando assinatura de saída do SIG";
     }
 
-    return "Atenção, você precisa assinar suas requisições para prosseguir";
+    return "Atenção, você precisa assinar suas solicitações para prosseguir";
   };
 
   const getPendingBannerDescription = () => {
@@ -610,9 +610,9 @@ function AdminHome() {
   };
 
   const getPendingActionLabel = (status: string) => {
-    if (isAdmin) return "Atender Requisição";
-    if (status === "correcao_requisicao") return "Corrigir Requisição";
-    if (status === "aguardando_assinatura_saida") return "Assinar Requisição SIG";
+    if (isAdmin) return "Atender Solicitação";
+    if (status === "correcao_requisicao") return "Corrigir Solicitação";
+    if (status === "aguardando_assinatura_saida") return "Assinar saída do SIG";
     return "Ver Assinatura";
   };
 
@@ -664,9 +664,9 @@ function AdminHome() {
   });
 
   const getSignatureStatusLabel = (status: string) => {
-    if (status === "aguardando_assinatura_saida") return "Assinatura da Requisição SIG";
+    if (status === "aguardando_assinatura_saida") return "Assinatura da saída do SIG";
     if (status === "correcao_requisicao") return "Correção pendente";
-    return "Assinatura da Requisição";
+    return "Assinatura da Solicitação";
   };
 
   const handleSignatureGroupDrop = (targetKey: string) => {
@@ -699,14 +699,14 @@ function AdminHome() {
           Olá, {userName}
         </h1>
         <p className="text-xs text-slate-500 mt-1 font-normal">
-          Bem-vindo ao SOLICITE JÁ - Sistema Integrado de Gestão de Requisições.
+          Bem-vindo ao SOLICITE JÁ - Sistema Integrado de Gestão de Solicitações.
         </p>
       </div>
 
       {/* CARDS DE MÉTRICAS EM BRANCO (MÊS ATUAL) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="text-xs font-normal text-slate-500">Total de Requisições (Mês Atual)</div>
+          <div className="text-xs font-normal text-slate-500">Total de Solicitações (Mês Atual)</div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
             {monthlyCount}
           </div>
@@ -775,7 +775,7 @@ function AdminHome() {
           <p className="text-xs text-emerald-700 font-normal">
             {isAdmin
               ? "Não há solicitações pendentes para atendimento no momento."
-              : "Você não tem requisições pendentes no momento."}
+              : "Você não tem solicitações pendentes no momento."}
           </p>
         </div>
       )}
@@ -853,7 +853,7 @@ function AdminHome() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-slate-700">
                             <FileSignature className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                            <span className="truncate">Requisição {reqCode}</span>
+                            <span className="truncate">Solicitação {reqCode}</span>
                           </span>
                           {linkedOutputCode && (
                             <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">
@@ -922,7 +922,7 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Anexar Documento de Requisição SIG
+              Anexar documento da saída do SIG
             </DialogTitle>
           </DialogHeader>
 
@@ -930,7 +930,7 @@ function AdminHome() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="saida_codigo_dash" className="text-xs text-slate-600 font-normal">
-                  Número da Requisição SIG
+                  Número da saída do SIG
                 </Label>
                 <Input
                   id="saida_codigo_dash"
@@ -943,7 +943,7 @@ function AdminHome() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="saida_data_dash" className="text-xs text-slate-600 font-normal">
-                  Data da Requisição SIG
+                  Data da saída do SIG
                 </Label>
                 <Input
                   id="saida_data_dash"
@@ -957,7 +957,7 @@ function AdminHome() {
 
             {/* ÁREA DE DRAG & DROP DO PDF */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600 font-normal">Arquivos PDF de Requisição SIG</Label>
+              <Label className="text-xs text-slate-600 font-normal">Arquivos PDF da saída do SIG</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -995,7 +995,7 @@ function AdminHome() {
                   <>
                     <Upload className="w-6 h-6 text-slate-400" />
                     <span className="text-xs text-slate-600 font-normal">
-                      Arraste ou clique para selecionar os PDFs da Requisição SIG
+                      Arraste ou clique para selecionar os PDFs da saída do SIG
                     </span>
                   </>
                 )}
@@ -1029,7 +1029,7 @@ function AdminHome() {
               ) : (
                 <Send className="w-3.5 h-3.5" />
               )}
-              Enviar Requisição SIG
+              Enviar saída do SIG
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1045,7 +1045,7 @@ function AdminHome() {
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle className="text-sm font-semibold text-slate-800">
-              Devolver requisição
+              Devolver solicitação
             </DialogTitle>
           </DialogHeader>
 
@@ -1063,7 +1063,7 @@ function AdminHome() {
                   }`}
                   onClick={() => setDevolucaoTarget("requisicao")}
                 >
-                  Devolver Requisição
+                  Devolver Solicitação
                 </Button>
                 <Button
                   type="button"
@@ -1075,7 +1075,7 @@ function AdminHome() {
                   }`}
                   onClick={() => setDevolucaoTarget("saida")}
                 >
-                  Devolver Saída
+                  Devolver saída do SIG
                 </Button>
               </div>
             </div>
@@ -1089,8 +1089,8 @@ function AdminHome() {
                 rows={3}
                 placeholder={
                   devolucaoTarget === "saida"
-                    ? "Descreva o motivo para o admin anexar a saída novamente..."
-                    : "Descreva o motivo para que o solicitante possa corrigir a requisição..."
+                    ? "Descreva o motivo para o admin anexar a saída do SIG novamente..."
+                    : "Descreva o motivo para que o solicitante possa corrigir a solicitação..."
                 }
                 value={motivoDevolucao}
                 onChange={(e) => setMotivoDevolucao(e.target.value)}

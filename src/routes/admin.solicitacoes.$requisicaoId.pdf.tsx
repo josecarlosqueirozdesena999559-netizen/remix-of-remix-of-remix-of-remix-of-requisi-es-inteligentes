@@ -103,13 +103,13 @@ function SolicitacaoPdfPage() {
       if (!active) return;
 
       if (requestResult.error) {
-        setError(requestResult.error.message || "Erro ao carregar requisição.");
+        setError(requestResult.error.message || "Erro ao carregar solicitação.");
         setLoading(false);
         return;
       }
 
       if (!requestResult.data) {
-        setError("Requisição não encontrada.");
+        setError("Solicitação não encontrada.");
         setLoading(false);
         return;
       }
@@ -167,7 +167,7 @@ function SolicitacaoPdfPage() {
         <div>
           <p className="text-sm text-muted-foreground">Solicitações / PDF</p>
           <h2 className="text-2xl text-foreground">
-            {pdf ? `Requisição ${pdf.code}` : "Requisição"}
+            {pdf ? `Solicitação ${pdf.code}` : "Solicitação"}
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -201,7 +201,7 @@ function SolicitacaoPdfPage() {
       ) : pdf ? (
         <iframe
           src={pdf.url}
-          title={`Requisição ${pdf.code}`}
+          title={`Solicitação ${pdf.code}`}
           className="min-h-[720px] flex-1 rounded-md border bg-white"
         />
       ) : null}

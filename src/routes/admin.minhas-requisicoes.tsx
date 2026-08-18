@@ -117,7 +117,7 @@ function MinhasRequisicoesPage() {
         const data = await fetchUserRequests(profile);
         if (active) setRequests(data);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar requisições.");
+        if (active) setError(err instanceof Error ? err.message : "Erro ao carregar solicitações.");
       } finally {
         if (active) setLoading(false);
       }
@@ -137,8 +137,8 @@ function MinhasRequisicoesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm text-muted-foreground">Usuário / Requisições</p>
-        <h2 className="text-2xl text-foreground">Minhas requisições</h2>
+        <p className="text-sm text-muted-foreground">Usuário / Solicitações</p>
+        <h2 className="text-2xl text-foreground">Minhas solicitações</h2>
       </div>
 
       <Card className="p-4">
@@ -162,8 +162,8 @@ function MinhasRequisicoesPage() {
         <Card className="p-6 text-destructive">{error}</Card>
       ) : filteredRequests.length === 0 ? (
         <Card className="p-6 text-muted-foreground">
-          Acompanhe quais de suas requisições assinadas estão com o almoxarifado para anexo de
-          saída e separação de entrega.
+          Acompanhe quais de suas solicitações assinadas estão com o almoxarifado para anexo de
+          saída do SIG e separação de entrega.
         </Card>
       ) : (
         <Card className="p-4">
@@ -191,7 +191,7 @@ function MinhasRequisicoesPage() {
                           Com o admin
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Aguardando atendimento e anexo da saída.
+                          Aguardando atendimento e anexo da saída do SIG.
                         </p>
                       </td>
                       <td className="px-3 py-2 text-right">

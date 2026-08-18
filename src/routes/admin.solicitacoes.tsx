@@ -558,13 +558,13 @@ function Solicitacoes() {
       setUploadMessage(
         reviewMode === "devolver"
           ? isSaidaReturn
-            ? "Saída devolvida para o solicitante assinar novamente."
-            : "Requisição devolvida para correção."
-          : "Requisição excluída da fila.",
+            ? "Saída do SIG devolvida para o solicitante assinar novamente."
+            : "Solicitação devolvida para correção."
+          : "Solicitação excluída da fila.",
       );
       closeReview();
     } catch (err) {
-      setUploadMessage(err instanceof Error ? err.message : "Erro ao revisar requisição.");
+      setUploadMessage(err instanceof Error ? err.message : "Erro ao revisar solicitação.");
     } finally {
       setReviewSaving(false);
     }
@@ -621,7 +621,7 @@ function Solicitacoes() {
                   <th className="px-4 py-3 text-left">Solicitante</th>
                   <th className="px-4 py-3 text-left">Data</th>
                   <th className="px-4 py-3 text-left">Número</th>
-                  <th className="px-4 py-3 text-left">Documento de saída</th>
+                  <th className="px-4 py-3 text-left">Documento de saída do SIG</th>
                   <th className="px-4 py-3 text-center">Impresso</th>
                   <th className="px-4 py-3 text-right">PDF</th>
                   <th className="px-4 py-3 text-right">Ações</th>
@@ -656,7 +656,7 @@ function Solicitacoes() {
                                 [r.id]: event.target.value,
                               }))
                             }
-                            placeholder="Código da saída"
+                            placeholder="Código da saída do SIG"
                             className="h-8 w-40"
                           />
                           <Input
@@ -671,7 +671,7 @@ function Solicitacoes() {
                               }))
                             }
                             className="h-8 w-36"
-                            aria-label="Data da saída"
+                            aria-label="Data da saída do SIG"
                           />
                           {getAttachmentFiles(r.admin_attachment).length > 0 ? (
                             <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
@@ -682,7 +682,7 @@ function Solicitacoes() {
                             <span className="text-xs text-muted-foreground">Pendente</span>
                           )}
                           {missingItems && (
-                            <span className="text-xs text-destructive">Requisição sem itens</span>
+                            <span className="text-xs text-destructive">Solicitação sem itens</span>
                           )}
                           <input
                             id={`saida-${r.id}`}
@@ -847,12 +847,12 @@ function Solicitacoes() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reviewMode === "devolver" ? "Devolver requisição" : "Excluir requisição"}
+              {reviewMode === "devolver" ? "Devolver solicitação" : "Excluir solicitação"}
             </DialogTitle>
             <DialogDescription>
               {reviewMode === "devolver"
-                ? "O usuário receberá a mesma requisição com os itens para corrigir e reenviar."
-                : "A requisição será retirada da fila sem apagar o histórico do banco."}
+                ? "O usuário receberá a mesma solicitação com os itens para corrigir e reenviar."
+                : "A solicitação será retirada da fila sem apagar o histórico do banco."}
             </DialogDescription>
           </DialogHeader>
 
@@ -871,7 +871,7 @@ function Solicitacoes() {
                     }`}
                     onClick={() => setReviewTarget("requisicao")}
                   >
-                    Devolver Requisição
+                    Devolver Solicitação
                   </Button>
                   <Button
                     type="button"
@@ -883,7 +883,7 @@ function Solicitacoes() {
                     }`}
                     onClick={() => setReviewTarget("saida")}
                   >
-                    Devolver Saída
+                    Devolver Saída do SIG
                   </Button>
                 </div>
               </div>
@@ -896,7 +896,7 @@ function Solicitacoes() {
                 onChange={(event) => setReviewReason(event.target.value)}
                 placeholder={
                   reviewTarget === "saida"
-                    ? "Descreva o motivo para o solicitante assinar a saída novamente..."
+                    ? "Descreva o motivo para o solicitante assinar a saída do SIG novamente..."
                     : "Descreva o erro encontrado para o solicitante corrigir..."
                 }
                 rows={3}

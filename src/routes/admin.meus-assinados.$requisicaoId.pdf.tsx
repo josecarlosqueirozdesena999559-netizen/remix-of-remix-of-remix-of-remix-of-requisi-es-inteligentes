@@ -39,7 +39,7 @@ function MeuAssinadoPdfPage() {
   const { requisicaoId } = Route.useParams();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
-  const [fileName, setFileName] = useState("Requisicao.pdf");
+  const [fileName, setFileName] = useState("Solicitacao.pdf");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +66,7 @@ function MeuAssinadoPdfPage() {
       }
 
       if (!requestResult.data) {
-        setError("Requisição não encontrada.");
+        setError("Solicitação não encontrada.");
         setLoading(false);
         return;
       }

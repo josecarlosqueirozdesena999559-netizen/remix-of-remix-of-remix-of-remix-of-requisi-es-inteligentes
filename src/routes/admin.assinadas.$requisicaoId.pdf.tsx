@@ -66,7 +66,7 @@ function PdfAssinadoCompletoPage() {
       }
 
       if (!requestResult.data) {
-        setError("Requisição não encontrada.");
+        setError("Solicitação não encontrada.");
         setLoading(false);
         return;
       }

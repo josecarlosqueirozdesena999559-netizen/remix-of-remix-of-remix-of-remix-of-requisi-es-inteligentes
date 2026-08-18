@@ -384,7 +384,7 @@ const STANDARD_MESSAGE_PRESETS: StandardMessagePreset[] = [
       [
         `Ola, ${userName}.`,
         "Seu pedido [DIGITE AQUI MANUALMENTE] esta separado.",
-        "Por gentileza, assine suas requisicoes e realize a retirada.",
+        "Por gentileza, assine suas solicitações e realize a retirada.",
         "Lembramos que os pedidos so sao entregues apos a conclusao de todas as assinaturas.",
         "Obrigado!",
       ].join(" "),
@@ -404,9 +404,9 @@ type PendingSignatureReminderRequest = {
 };
 
 function getPendingSignatureLabel(status: string) {
-  if (status === "aguardando_assinatura_saida") return "assinatura da saída";
-  if (status === "correcao_requisicao") return "correção e reenvio da requisição";
-  return "assinatura da requisição";
+  if (status === "aguardando_assinatura_saida") return "assinatura da saída do SIG";
+  if (status === "correcao_requisicao") return "correção e reenvio da solicitação";
+  return "assinatura da solicitação";
 }
 
 async function buildPendingSignatureChargeMessage(phone: string, users: UserRow[]) {

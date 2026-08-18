@@ -210,7 +210,7 @@ function drawRequestPdfHeader(
     { label: "Modalidade", value: toPdfAscii("Solicitação") },
     { label: "Data", value: toPdfAscii(requestDate) },
     { label: "Programa", value: toPdfAscii(programa) },
-    { label: "Unidade requisitante", value: toPdfAscii(request.setor || "-") },
+    { label: "Unidade solicitante", value: toPdfAscii(request.setor || "-") },
     {
       label: "Solicitante",
       value: toPdfAscii(request.requesterDisplayName || request.solicitante || "-"),

@@ -65,7 +65,7 @@ import {
 
 const ALMOXARIFADO_WHATSAPP_NUMBER = "5588996374400";
 const ALMOXARIFADO_WHATSAPP_MESSAGE =
-  "Olá, gostaria de receber notificações sobre o acompanhamento das minhas requisições e entregas do almoxarifado.";
+  "Olá, gostaria de receber notificações sobre o acompanhamento das minhas solicitações e entregas do almoxarifado.";
 const ALMOXARIFADO_WHATSAPP_LINK = `https://wa.me/${ALMOXARIFADO_WHATSAPP_NUMBER}?text=${encodeURIComponent(
   ALMOXARIFADO_WHATSAPP_MESSAGE,
 )}`;
@@ -380,7 +380,7 @@ function AdminLayout() {
               </div>
 
               <div className="space-y-2">
-                <p className={sectionTitleClass}>Requisições</p>
+                <p className={sectionTitleClass}>Solicitações</p>
                 <div className="space-y-1">
                   {hasAdminSectionAccess(profile, "requisicao") ? (
                     <Link
@@ -392,7 +392,7 @@ function AdminLayout() {
                       }}
                     >
                       <FilePlus className={navIconClass(requisicaoActive)} />
-                      <span className="truncate">Criar Requisição</span>
+                      <span className="truncate">Criar Solicitação</span>
                       {checkingCreateRequest ? (
                         <Loader2 className="ml-auto h-4 w-4 animate-spin text-emerald-600" />
                       ) : null}
@@ -414,7 +414,7 @@ function AdminLayout() {
                     <ClipboardList
                       className={navIconClass(isActivePath("/admin/minhas-requisicoes"))}
                     />
-                    <span className="truncate">Minhas Requisições</span>
+                    <span className="truncate">Minhas Solicitações</span>
                   </Link>
                   <Link
                     to="/admin/meus-assinados"
@@ -518,7 +518,7 @@ function AdminLayout() {
                   }}
                 >
                   <FilePlus className={navIconClass(requisicaoActive)} />
-                  <span className="truncate">Criar Requisição</span>
+                  <span className="truncate">Criar Solicitação</span>
                   {checkingCreateRequest ? (
                     <Loader2 className="ml-auto h-4 w-4 animate-spin text-emerald-600" />
                   ) : null}
@@ -537,7 +537,7 @@ function AdminLayout() {
                   <ClipboardList
                     className={navIconClass(isActivePath("/admin/minhas-requisicoes"))}
                   />
-                  <span className="truncate">Minhas Requisições</span>
+                  <span className="truncate">Minhas Solicitações</span>
                 </Link>
                 <Link
                   to="/admin/meus-assinados"
@@ -658,7 +658,7 @@ function AdminLayout() {
                       SOLICITE JÁ
                     </span>
                     <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mt-1">
-                      Gestão de Requisições
+                      Gestão de Solicitações
                     </span>
                   </div>
                 )}

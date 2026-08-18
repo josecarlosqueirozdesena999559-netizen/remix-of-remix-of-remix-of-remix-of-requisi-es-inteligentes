@@ -61,13 +61,13 @@ export async function createSignedRequestsMonthlyPdfBlob(
 
   doc.setProperties({
     title: `Requisicoes assinadas ${monthLabel}`,
-    subject: "Relatorio mensal de requisicoes assinadas",
+    subject: "Relatório mensal de solicitações assinadas",
     creator: "Sistema Almoxarifado",
   });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
-  doc.text(toPdfText("Requisições assinadas do mês"), PAGE_MARGIN, 18);
+  doc.text(toPdfText("Solicitações assinadas do mês"), PAGE_MARGIN, 18);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10.5);
@@ -90,7 +90,7 @@ export async function createSignedRequestsMonthlyPdfBlob(
           toPdfText(row.location || "-"),
           toPdfText(row.requestDate || "-"),
         ])
-      : [[toPdfText("-"), toPdfText("Nenhuma requisição encontrada"), "-", "-"]],
+      : [[toPdfText("-"), toPdfText("Nenhuma solicitação encontrada"), "-", "-"]],
     theme: "grid",
     margin: { left: PAGE_MARGIN, right: PAGE_MARGIN, bottom: 16 },
     headStyles: {
