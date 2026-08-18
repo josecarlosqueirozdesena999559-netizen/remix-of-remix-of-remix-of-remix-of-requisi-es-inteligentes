@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Check, Eye, Loader2, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,12 +13,24 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+const REMEMBER_LOGIN_KEY = "almoxarifado.rememberedLogin";
+
 function Index() {
   const navigate = useNavigate();
   const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
+  const [rememberAccess, setRememberAccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const savedLogin = window.localStorage.getItem(REMEMBER_LOGIN_KEY);
+
+    if (savedLogin) {
+      setNome(savedLogin);
+      setRememberAccess(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +66,13 @@ function Index() {
       });
 
       if (signInError) throw new Error("Usuário ou senha inválidos");
+
+      if (rememberAccess) {
+        window.localStorage.setItem(REMEMBER_LOGIN_KEY, nomeLimpo);
+      } else {
+        window.localStorage.removeItem(REMEMBER_LOGIN_KEY);
+      }
+
       const { profile } = await getCurrentUserProfile();
 
       if (isSharedSectorProfile(profile)) {
@@ -142,15 +161,29 @@ function Index() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-slate-500">
-                <span className="flex h-4 w-4 items-center justify-center rounded bg-emerald-700 text-white">
-                  <Check className="h-3 w-3" />
-                </span>
-                Lembrar acesso
-              </label>
-              <span className="font-medium text-emerald-700">Esqueci minha senha</span>
-            </div>
+            <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-slate-500">
+              <input
+                type="checkbox"
+                checked={rememberAccess}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setRememberAccess(checked);
+
+                  if (!checked) {
+                    window.localStorage.removeItem(REMEMBER_LOGIN_KEY);
+                  }
+                }}
+                className="sr-only"
+              />
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded border ${
+                  rememberAccess ? "border-emerald-700 bg-emerald-700 text-white" : "border-slate-300 bg-white text-transparent"
+                }`}
+              >
+                <Check className="h-3 w-3" />
+              </span>
+              Lembrar acesso
+            </label>
 
             {error && (
               <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-center text-sm font-medium text-red-700">
