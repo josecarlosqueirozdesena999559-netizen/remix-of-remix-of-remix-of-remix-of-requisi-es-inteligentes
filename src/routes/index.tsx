@@ -91,9 +91,13 @@ function Index() {
             <img
               src="/login-warehouse.png"
               alt="Ilustração do almoxarifado"
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-contain object-center"
             />
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/30 via-emerald-900/10 to-emerald-950/40" />
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/35 via-transparent to-emerald-950/35" />
+            <div className="relative z-10 p-12 text-white">
+              <h1 className="text-5xl font-bold tracking-tight drop-shadow-sm">Almoxarifado</h1>
+              <p className="mt-3 text-lg text-emerald-50/90 drop-shadow-sm">Gestão de solicitações e estoque</p>
+            </div>
             <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-emerald-950/45 to-transparent" />
           </div>
 
