@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, LockKeyhole, ShieldCheck, UserRound, Warehouse } from "lucide-react";
+import { Loader2, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -94,30 +94,7 @@ function Index() {
               className="absolute inset-0 h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/30 via-emerald-900/10 to-emerald-950/40" />
-            <div className="relative z-10 flex h-full flex-col justify-between p-14 text-white">
-              <div>
-                <div className="mb-10 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-emerald-50 backdrop-blur">
-                  <Warehouse className="h-4 w-4" />
-                  Sistema do Almoxarifado
-                </div>
-                <h1 className="max-w-xl text-5xl font-bold tracking-tight">Almoxarifado</h1>
-                <p className="mt-4 max-w-md text-lg text-emerald-50/90">
-                  Gestão de solicitações, assinaturas e saída do SIG em um só lugar.
-                </p>
-              </div>
-
-              <div className="grid max-w-xl grid-cols-3 gap-3 text-sm text-emerald-50/85">
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                  Solicitações organizadas
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                  Assinaturas controladas
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                  Saída do SIG vinculada
-                </div>
-              </div>
-            </div>
+            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-emerald-950/45 to-transparent" />
           </div>
 
           <div className="flex items-center justify-center bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 px-6 py-10 sm:px-10 lg:px-16">
