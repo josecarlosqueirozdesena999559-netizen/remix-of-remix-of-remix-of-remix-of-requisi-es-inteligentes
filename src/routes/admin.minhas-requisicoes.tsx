@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import {
   getRequestOwnerCpfVariants,
   getRequestOwnerLocation,
@@ -48,8 +47,6 @@ function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
 }
 
 async function fetchUserRequests(profile: RequestOwnerProfile) {
-  if (isDemoEmptySite) return [];
-
   const pageSize = 1000;
   let from = 0;
   const requests: Requisicao[] = [];

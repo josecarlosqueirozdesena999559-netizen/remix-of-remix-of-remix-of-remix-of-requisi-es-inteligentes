@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import { getRequestArchiveMonth } from "@/lib/request-archive-month";
 import {
   getRequestOwnerCpfVariants,
@@ -51,8 +50,6 @@ function hasOutputDocument(request: Requisicao) {
 }
 
 async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
-  if (isDemoEmptySite) return [];
-
   const pageSize = 1000;
   let from = 0;
   const requests: Requisicao[] = [];

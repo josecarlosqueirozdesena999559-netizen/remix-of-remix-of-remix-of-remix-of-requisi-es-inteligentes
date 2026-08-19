@@ -3,7 +3,6 @@ import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import { supabase } from "@/integrations/supabase/client";
 import type { RequestPdfItem } from "@/lib/request-pdf";
 import {
@@ -51,12 +50,6 @@ function PdfAssinadoCompletoPage() {
     async function load() {
       setLoading(true);
       setError(null);
-
-      if (isDemoEmptySite) {
-        setError("Documento indisponivel no modo demonstracao.");
-        setLoading(false);
-        return;
-      }
 
       const requestResult = await supabase
         .from("requisicoes")

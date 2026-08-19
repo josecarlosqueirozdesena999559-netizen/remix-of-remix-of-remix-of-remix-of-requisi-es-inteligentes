@@ -14,7 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import {
   resolveCanonicalLocationNameFromCandidates,
   type LocationOption,
@@ -118,13 +117,6 @@ function ControleEntradasPage() {
       setGenerated(false);
 
       try {
-        if (isDemoEmptySite) {
-          setLocations([]);
-          setRequests([]);
-          setUsersByCpf(new Map());
-          return;
-        }
-
         const { start, end } = getMonthRange(month);
         const [requestsResult, locationsResult] = await Promise.all([
           supabase

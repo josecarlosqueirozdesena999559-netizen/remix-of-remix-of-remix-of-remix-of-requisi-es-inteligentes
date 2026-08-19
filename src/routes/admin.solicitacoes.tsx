@@ -35,7 +35,6 @@ import {
   removeAttachmentFileSafely,
   type AttachmentFile,
 } from "@/lib/attachments";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import { REQUISICOES_BUCKET, sanitizeFileName } from "@/lib/file-upload";
 import {
   isMissingLinkedOutputDateColumnError,
@@ -155,14 +154,6 @@ function Solicitacoes() {
       setLoading(true);
       setError(null);
       try {
-        if (isDemoEmptySite) {
-          setData([]);
-          setOutputCodes({});
-          setOutputDates({});
-          setCodeByRequestId(new Map());
-          return;
-        }
-
         const [initialPendingResult, setoresResult] = await Promise.all([
           supabase
             .from("requisicoes")

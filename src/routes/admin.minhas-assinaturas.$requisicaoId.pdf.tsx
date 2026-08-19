@@ -3,7 +3,6 @@ import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import {
   getAttachmentFiles,
   getRequestSignedAttachment,
@@ -44,12 +43,6 @@ function MinhaAssinaturaPdfPage() {
     async function loadPdf() {
       setLoading(true);
       setError(null);
-
-      if (isDemoEmptySite) {
-        setError("Documento indisponivel no modo demonstracao.");
-        setLoading(false);
-        return;
-      }
 
       try {
         const requestResult = await supabase

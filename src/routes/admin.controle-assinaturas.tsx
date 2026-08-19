@@ -15,7 +15,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import {
   resolveCanonicalLocationNameFromCandidates,
   type LocationOption,
@@ -121,12 +120,6 @@ function ControleAssinaturasPage() {
       setError(null);
 
       try {
-        if (isDemoEmptySite) {
-          setData([]);
-          setCodeByRequestId(new Map());
-          return;
-        }
-
         const [{ profile }, usersResult, initialRequestsResult, setoresResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase

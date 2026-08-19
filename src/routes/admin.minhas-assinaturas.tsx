@@ -21,7 +21,6 @@ import {
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
 import type { RequestPdfItem } from "@/lib/request-pdf";
-import { isDemoEmptySite } from "@/lib/demo-mode";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
@@ -178,11 +177,6 @@ function MinhasAssinaturasPage() {
     setError(null);
 
     try {
-      if (isDemoEmptySite) {
-        setRequests([]);
-        return;
-      }
-
       const { profile: authProfile } = await getCurrentUserProfile();
       const profile = isSharedSectorProfile(authProfile)
         ? await getSelectedSharedRequesterProfile(authProfile)
