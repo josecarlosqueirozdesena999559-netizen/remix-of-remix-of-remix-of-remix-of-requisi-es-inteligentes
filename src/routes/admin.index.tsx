@@ -36,6 +36,7 @@ import {
   omitLinkedOutputDateFields,
   withLinkedOutputDateFallback,
 } from "@/lib/linked-output-date";
+import { isDemoEmptySite } from "@/lib/demo-mode";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
@@ -255,6 +256,14 @@ function AdminHome() {
         if (active) {
           setProfile(dashboardProfile ?? userProfile);
           setIsAdmin(userProfile.is_admin === true);
+        }
+
+        if (isDemoEmptySite) {
+          if (active) {
+            setRequisicoes([]);
+            setHasOutputPending(false);
+          }
+          return;
         }
 
         const buildDashboardQuery = (selectColumns: string) => {

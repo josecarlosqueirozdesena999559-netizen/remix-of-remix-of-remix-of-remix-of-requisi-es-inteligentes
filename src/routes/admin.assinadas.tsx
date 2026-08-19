@@ -35,6 +35,7 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
+import { isDemoEmptySite } from "@/lib/demo-mode";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestArchiveMonth } from "@/lib/request-archive-month";
@@ -126,6 +127,8 @@ function hasOutputDocument(request: RequisicaoAssinada) {
 }
 
 async function fetchCompletedRequests() {
+  if (isDemoEmptySite) return [];
+
   const pageSize = 1000;
   let from = 0;
   const requests: RequisicaoAssinada[] = [];

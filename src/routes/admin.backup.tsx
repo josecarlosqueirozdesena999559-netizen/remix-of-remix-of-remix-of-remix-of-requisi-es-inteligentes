@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { isDemoEmptySite } from "@/lib/demo-mode";
 import { createZipBlob, downloadBlob } from "@/lib/browser-zip";
 import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
 import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
@@ -67,6 +68,8 @@ function buildBackupFilePath(month: string, request: BackupRequest, code: string
 }
 
 async function fetchCompletedRequests() {
+  if (isDemoEmptySite) return [];
+
   const pageSize = 1000;
   let from = 0;
   const requests: BackupRequest[] = [];

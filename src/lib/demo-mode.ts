@@ -1,0 +1,1 @@
+export const isDemoEmptySite = import.meta.env.VITE_DEMO_EMPTY_SITE !== "false";
