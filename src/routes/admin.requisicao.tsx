@@ -458,7 +458,7 @@ function isItemAllowedForProfileProgram(item: ItemRow, allowedProgramKeys: strin
     getComparableProgramKeys(link.programas?.nome),
   );
 
-  if (itemProgramKeys.length === 0) return false;
+  if (itemProgramKeys.length === 0) return true;
 
   return itemProgramKeys.some((key) => allowedProgramKeys.includes(key));
 }
