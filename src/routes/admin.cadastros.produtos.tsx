@@ -154,7 +154,7 @@ function ProdutosPage() {
     const options: string[] = [];
 
     if (bulkCategories.includes("G\u00eaneros aliment\u00edcios/limpeza")) {
-      options.push("Aliment\u00edcio", "Limpeza");
+      options.push("Aliment\u00edcio", "Frutas e Verduras", "Limpeza");
     }
 
     if (bulkCategories.includes("Ambulatorial")) {

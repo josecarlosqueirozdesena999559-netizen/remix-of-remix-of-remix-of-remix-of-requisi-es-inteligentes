@@ -70,7 +70,7 @@ function ProdutoFormPage() {
     const options: string[] = [];
 
     if (categorias.includes("G\u00eaneros aliment\u00edcios/limpeza")) {
-      options.push("Aliment\u00edcio", "Limpeza");
+      options.push("Aliment\u00edcio", "Frutas e Verduras", "Limpeza");
     }
 
     if (categorias.includes("Ambulatorial")) {
@@ -385,7 +385,7 @@ function ProdutoFormPage() {
                 </SelectContent>
               </Select>
               <p className="text-sm text-muted-foreground">
-                Use a subcategoria para separar itens como alimentício, limpeza, material ambulatorial e medicamentos.
+                Use a subcategoria para separar itens como alimentício, frutas e verduras, limpeza, material ambulatorial e medicamentos.
               </p>
             </div>
 

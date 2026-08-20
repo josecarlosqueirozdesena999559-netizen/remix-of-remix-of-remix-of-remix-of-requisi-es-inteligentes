@@ -10,6 +10,7 @@ export const PRODUCT_CATEGORIES = [
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 export const PRODUCT_SUBCATEGORIES = [
   "Aliment\u00edcio",
+  "Frutas e Verduras",
   "Limpeza",
   "Material Ambulatorial",
   "Medicamentos",
@@ -157,7 +158,8 @@ function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
   const searchable = `${subcategory} ${name}`;
 
   if (category.includes("aliment") || category.includes("limpeza")) {
-    if (isCleaningProduct(item)) return 1;
+    if (isFreshProduceProduct(item)) return 1;
+    if (isCleaningProduct(item)) return 2;
     if (searchable.includes("aliment") || searchable.includes("genero")) return 0;
     return 0;
   }
@@ -174,6 +176,15 @@ function getPriorityGroup(item: ProductOrderItem, activeCategory?: string) {
 export function isCleaningProduct(item: ProductOrderItem) {
   const searchable = `${normalizeProductSearchValue(item.subcategoria)} ${normalizeProductSearchValue(item.nome)}`;
   return CLEANING_KEYWORDS.some((keyword) => searchable.includes(keyword));
+}
+
+export function isFreshProduceProduct(item: ProductOrderItem) {
+  const searchable = `${normalizeProductSearchValue(item.subcategoria)} ${normalizeProductSearchValue(item.nome)}`;
+  return (
+    searchable.includes("frutas e verduras") ||
+    searchable.includes("hortifruti") ||
+    searchable.includes("hortifrut")
+  );
 }
 
 export function isMedicationProduct(item: ProductOrderItem) {

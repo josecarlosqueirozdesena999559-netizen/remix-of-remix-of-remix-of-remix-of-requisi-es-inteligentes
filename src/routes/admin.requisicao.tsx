@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import {
   isCleaningProduct,
+  isFreshProduceProduct,
   isMedicationProduct,
   normalizeProductCategory,
   normalizeProductSearchValue,
@@ -452,8 +453,18 @@ function buildNormalizedRequestSections(categories: string[]) {
           label: "Alimentos",
           baseCategory: category,
           matchesItem: (item) =>
-            productHasSubcategory(item.subcategoria, "Alimentício") || !isCleaningProduct(item),
+            productHasSubcategory(item.subcategoria, "Alimentício") ||
+            (!isFreshProduceProduct(item) && !isCleaningProduct(item)),
           order: 0,
+        },
+        {
+          id: "frutas-verduras",
+          label: "Frutas e Verduras",
+          baseCategory: category,
+          matchesItem: (item) =>
+            productHasSubcategory(item.subcategoria, "Frutas e Verduras") ||
+            isFreshProduceProduct(item),
+          order: 1,
         },
         {
           id: "limpeza",
@@ -461,7 +472,7 @@ function buildNormalizedRequestSections(categories: string[]) {
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Limpeza") || isCleaningProduct(item),
-          order: 1,
+          order: 2,
         },
       );
       return;
@@ -476,7 +487,7 @@ function buildNormalizedRequestSections(categories: string[]) {
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Material Ambulatorial") ||
             !isMedicationProduct(item),
-          order: 3,
+          order: 4,
         },
         {
           id: "ambulatorial-medicamentos",
@@ -484,7 +495,7 @@ function buildNormalizedRequestSections(categories: string[]) {
           baseCategory: category,
           matchesItem: (item) =>
             productHasSubcategory(item.subcategoria, "Medicamentos") || isMedicationProduct(item),
-          order: 4,
+          order: 5,
         },
       );
       return;
@@ -494,7 +505,7 @@ function buildNormalizedRequestSections(categories: string[]) {
       id: normalizeProductSearchValue(category).replace(/\s+/g, "-"),
       label: category,
       baseCategory: category,
-      order: isExpedienteCategory(category) ? 2 : 5,
+      order: isExpedienteCategory(category) ? 3 : 6,
     });
   });
 
