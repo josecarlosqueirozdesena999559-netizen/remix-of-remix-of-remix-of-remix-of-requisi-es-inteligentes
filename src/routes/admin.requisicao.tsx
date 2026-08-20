@@ -97,6 +97,7 @@ interface EditableRequestItem {
 interface EditableRequest {
   id: string;
   categoria: string | null;
+  setor: string | null;
   status: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
@@ -133,9 +134,10 @@ interface SectorResponsibleUserRow {
 }
 
 const requestSelectWithFeedback =
-  "id,categoria,status,solicitante,solicitante_cpf,items,return_reason";
-const requestSelectFallback = "id,categoria,status,solicitante,solicitante_cpf,items";
+  "id,categoria,setor,status,solicitante,solicitante_cpf,items,return_reason";
+const requestSelectFallback = "id,categoria,setor,status,solicitante,solicitante_cpf,items";
 const productCategorySet = new Set<string>(PRODUCT_CATEGORIES);
+const ramonRequestDestinationOptions = ["ATENÇÃO BÁSICA", "HOSPITAL", "CASA DE APOIO"];
 
 function isProductCategory(value: string) {
   return productCategorySet.has(value);
@@ -154,6 +156,25 @@ function normalizeSectorName(value: string | null | undefined) {
   return String(value || "")
     .trim()
     .toLowerCase();
+}
+
+function isRamonRequester(
+  requester: Pick<SectorUserOption, "nome" | "usuario" | "email"> | CurrentUserProfile | null,
+) {
+  const identity = [requester?.usuario, requester?.email, requester?.nome]
+    .map((value) => normalizeProductSearchValue(value))
+    .join(" ");
+
+  return (
+    identity.includes("ramonhospital") ||
+    identity.includes("ramon@sistemace") ||
+    /\bramon\b/.test(identity)
+  );
+}
+
+function getRamonDestinationValue(value: string | null | undefined) {
+  const key = normalizeProgramKey(value);
+  return ramonRequestDestinationOptions.find((option) => normalizeProgramKey(option) === key) || "";
 }
 
 function getSingleLinkedUser(value: SectorUserOption | SectorUserOption[] | null) {
@@ -594,6 +615,7 @@ function CriarRequisicaoPage() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [sectorUsers, setSectorUsers] = useState<SectorUserOption[]>([]);
   const [selectedSolicitanteId, setSelectedSolicitanteId] = useState<string>("");
+  const [selectedRamonRequestDestination, setSelectedRamonRequestDestination] = useState("");
 
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedGroupLabel, setSelectedGroupLabel] = useState("");
@@ -783,6 +805,7 @@ function CriarRequisicaoPage() {
         setAllowedProgramKeys(profileProgramKeys);
         setItems(loadedItems);
         setEditingRequestStatus(editableRequest?.status || null);
+        setSelectedRamonRequestDestination(getRamonDestinationValue(editableRequest?.setor));
         setReturnReason(editableRequest?.return_reason || null);
 
         const availableSections = buildNormalizedRequestSections(categories);
@@ -897,6 +920,11 @@ function CriarRequisicaoPage() {
     [sectionGroups, selectedGroupLabel],
   );
   const isSharedSector = isSharedSectorProfile(profile);
+  const selectedRequester = useMemo(
+    () => sectorUsers.find((user) => user.id === selectedSolicitanteId) || profile,
+    [sectorUsers, selectedSolicitanteId, profile],
+  );
+  const isRamonRequest = isRamonRequester(selectedRequester);
   const mustChooseSharedRequester = isSharedSector && !selectedSolicitanteId;
 
   const visibleSectionTables = useMemo(() => {
@@ -950,6 +978,12 @@ function CriarRequisicaoPage() {
 
     if (isSharedSector && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
       setError("Selecione o usuário do setor que está fazendo o pedido.");
+      setSaving(false);
+      return;
+    }
+
+    if (isRamonRequester(chosenSolicitante) && !selectedRamonRequestDestination) {
+      setError("Selecione se o pedido do Ramon é para Atenção Básica, Hospital ou Casa de Apoio.");
       setSaving(false);
       return;
     }
@@ -1016,11 +1050,12 @@ function CriarRequisicaoPage() {
 
     const payload = {
       categoria: requestCategory,
-      setor:
-        chosenSolicitante.unidade_nome ||
-        chosenSolicitante.setor ||
-        profile.unidade_nome ||
-        profile.setor,
+      setor: isRamonRequester(chosenSolicitante)
+        ? selectedRamonRequestDestination
+        : chosenSolicitante.unidade_nome ||
+          chosenSolicitante.setor ||
+          profile.unidade_nome ||
+          profile.setor,
       solicitante: chosenSolicitante.nome,
       solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,
       solicitante_funcao: chosenSolicitante.funcao || profile.funcao,
@@ -1180,6 +1215,33 @@ function CriarRequisicaoPage() {
                     Nenhum usuário encontrado para este setor.
                   </p>
                 ) : null}
+              </div>
+            </Card>
+          )}
+
+          {isRamonRequest && (
+            <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
+              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                Destino do pedido do Ramon
+              </div>
+              <div className="max-w-md space-y-1">
+                <Label htmlFor="select-ramon-destination" className="text-xs text-slate-500 font-normal">
+                  Selecione onde este pedido deve aparecer no setor:
+                </Label>
+                <select
+                  id="select-ramon-destination"
+                  value={selectedRamonRequestDestination}
+                  onChange={(event) => setSelectedRamonRequestDestination(event.target.value)}
+                  required
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
+                  <option value="">Selecione o setor do pedido</option>
+                  {ramonRequestDestinationOptions.map((destination) => (
+                    <option key={destination} value={destination}>
+                      {destination}
+                    </option>
+                  ))}
+                </select>
               </div>
             </Card>
           )}
