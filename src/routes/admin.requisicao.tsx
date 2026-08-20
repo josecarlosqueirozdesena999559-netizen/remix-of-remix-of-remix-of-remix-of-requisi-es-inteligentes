@@ -443,6 +443,10 @@ function isExpedienteCategory(category: string) {
   return normalizeProductSearchValue(category) === "expediente";
 }
 
+function isOdontologicoCategory(category: string | null | undefined) {
+  return normalizeProgramKey(category) === "odontologico";
+}
+
 function getProgramMatchKey(value: string | null | undefined) {
   return normalizeProgramKey(value);
 }
@@ -451,16 +455,28 @@ function getComparableProgramKeys(value: string | null | undefined) {
   return getRelatedProgramKeys(value);
 }
 
+function getItemProgramKeys(item: ItemRow) {
+  return (item.programa_produtos ?? []).flatMap((link) =>
+    getComparableProgramKeys(link.programas?.nome),
+  );
+}
+
 function isItemAllowedForProfileProgram(item: ItemRow, allowedProgramKeys: string[]) {
   if (allowedProgramKeys.length === 0) return true;
 
-  const itemProgramKeys = (item.programa_produtos ?? []).flatMap((link) =>
-    getComparableProgramKeys(link.programas?.nome),
-  );
-
+  const itemProgramKeys = getItemProgramKeys(item);
   if (itemProgramKeys.length === 0) return true;
 
   return itemProgramKeys.some((key) => allowedProgramKeys.includes(key));
+}
+
+function itemMatchesRequestSection(item: ItemRow, section: RequestSection) {
+  const matchesCategory = productHasCategory(item.categoria, section.baseCategory);
+  const matchesOdontologicoProgram =
+    isOdontologicoCategory(section.baseCategory) && getItemProgramKeys(item).includes("odontologico");
+
+  if (!matchesCategory && !matchesOdontologicoProgram) return false;
+  return !section.matchesItem || section.matchesItem(item);
 }
 
 function buildNormalizedRequestSections(categories: string[]) {
@@ -562,14 +578,7 @@ function getInitialSectionId(sections: RequestSection[], categoria: string | nul
 }
 
 function getRequestSectionForItem(item: ItemRow, sections: RequestSection[]) {
-  return (
-    sections.find((section) => {
-      return (
-        productHasCategory(item.categoria, section.baseCategory) &&
-        (!section.matchesItem || section.matchesItem(item))
-      );
-    }) || null
-  );
+  return sections.find((section) => itemMatchesRequestSection(item, section)) || null;
 }
 
 function getItemRequestCategory(item: ItemRow, sections: RequestSection[]) {
@@ -935,8 +944,7 @@ function CriarRequisicaoPage() {
     return selectedGroup.sections
       .map((section) => {
         const sectionItems = items.filter((item) => {
-          if (!productHasCategory(item.categoria, section.baseCategory)) return false;
-          if (section.matchesItem && !section.matchesItem(item)) return false;
+          if (!itemMatchesRequestSection(item, section)) return false;
 
           if (!isItemAllowedForProfileProgram(item, allowedProgramKeys)) {
             return false;
