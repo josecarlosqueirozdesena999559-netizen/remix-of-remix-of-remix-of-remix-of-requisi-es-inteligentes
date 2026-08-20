@@ -338,8 +338,11 @@ async function getAllowedProgramKeysForRequest(profile: RequestAccessProfile | n
     getResponsibleSectorProgramKeys(profile),
     getSectorProgramKeysForRequest(profile),
   ]);
+  const categoryProgramKeys = getAllowedCategories(profile).includes("Odontológico")
+    ? ["odontologico"]
+    : [];
 
-  return [...responsibleProgramKeys, ...sectorProgramKeys].filter(
+  return [...responsibleProgramKeys, ...sectorProgramKeys, ...categoryProgramKeys].filter(
     (key, index, keys) => key && keys.indexOf(key) === index,
   );
 }
