@@ -1,6 +1,7 @@
 export const PRODUCT_CATEGORIES = [
   "G\u00eaneros aliment\u00edcios/limpeza",
   "Frutas, Verduras e Prote\u00ednas",
+  "Insumos para Dietas Enterais",
   "Ambulatorial",
   "Odontol\u00f3gico",
   "Laborat\u00f3rio",
@@ -36,6 +37,10 @@ const CATEGORY_ALIASES: Record<string, ProductCategory> = {
   "Proteína": "Frutas, Verduras e Prote\u00ednas",
   "Proteínas": "Frutas, Verduras e Prote\u00ednas",
   "Frutas, Verduras e Proteinas": "Frutas, Verduras e Prote\u00ednas",
+  "Dietas Enterais": "Insumos para Dietas Enterais",
+  "Insumos Dietas Enterais": "Insumos para Dietas Enterais",
+  "Insumos para Dietas Enterais": "Insumos para Dietas Enterais",
+  "Insumos para Dietas Interais": "Insumos para Dietas Enterais",
   "GÃªneros alimentÃ­cios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
   "GÃƒÂªneros alimentÃƒÂ­cios/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
   "GÃƒÂªneros alimenticio/limpeza": "G\u00eaneros aliment\u00edcios/limpeza",
