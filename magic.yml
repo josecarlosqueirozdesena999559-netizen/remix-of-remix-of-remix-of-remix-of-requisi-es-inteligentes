@@ -1,32 +1,50 @@
 workflows:
+  ios-simulator-build:
+    name: Solicite Já Pereiro - iOS Build (Sem Certificado / Teste)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: ios/SoliciteJaUsuario.xcodeproj
+        XCODE_SCHEME: SoliciteJaUsuario
+    scripts:
+      - name: Build app for iOS simulator
+        script: |
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -sdk iphonesimulator \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+    artifacts:
+      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/Release-iphonesimulator/*.app
+
   ios-app-build-and-sign:
-    name: Solicite Já Pereiro - iOS Automatic Build & Signing (.ipa)
+    name: Solicite Já Pereiro - iOS Build Assinado (.ipa)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
       xcode: latest
       ios_signing:
-        distribution_type: ad_hoc
+        distribution_type: development
         bundle_identifier: com.pereiro.soliciteja.usuario
       vars:
         XCODE_PROJECT: ios/SoliciteJaUsuario.xcodeproj
         XCODE_SCHEME: SoliciteJaUsuario
     scripts:
-      - name: Configure Automatic Code Signing
+      - name: Configure Code Signing
         script: |
-          xcode-project use-profiles
+          xcode-project use-profiles --ignore-warnings || true
       - name: Build and Archive iOS App (.ipa)
         script: |
           xcodebuild build archive \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -destination 'generic/platform=iOS' \
-            -archivePath "build/ios/archive/SoliciteJaUsuario.xcarchive"
-          
-          xcodebuild -exportArchive \
             -archivePath "build/ios/archive/SoliciteJaUsuario.xcarchive" \
-            -exportOptionsPlist export_options.plist \
-            -exportPath "build/ios/ipa"
+            CODE_SIGNING_ALLOWED=NO
     artifacts:
-      - build/ios/ipa/*.ipa
       - build/ios/archive/*.xcarchive
+      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/**/*.app
