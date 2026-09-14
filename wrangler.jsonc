@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tanstack-start-app",
+  "compatibility_date": "2025-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "src/server.ts",
+  "vars": {
+    "SUPABASE_URL": "https://xzoiqjsttggtrjlrhcjm.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6b2lxanN0dGdndHJqbHJoY2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5MTE3MDcsImV4cCI6MjA5MjQ4NzcwN30.UPZR_Bs_PqbKB0kAoUUo3Jntvt3Y1XqxTgSxiOLykmA",
+    "VITE_SUPABASE_URL": "https://xzoiqjsttggtrjlrhcjm.supabase.co",
+    "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6b2lxanN0dGdHJqbHJoY2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5MTE3MDcsImV4cCI6MjA5MjQ4NzcwN30.UPZR_Bs_PqbKB0kAoUUo3Jntvt3Y1XqxTgSxiOLykmA"
+  },
+}
