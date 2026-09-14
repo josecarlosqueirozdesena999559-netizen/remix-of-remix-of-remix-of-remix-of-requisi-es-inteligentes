@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Plus, Search, Upload } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Search, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -90,6 +90,7 @@ function makeUserOption(
   local?: string | null,
   displayName?: string | null,
   displayCpf?: string | null,
+  effectiveUserId?: string | null,
 ) {
   const location = local?.trim() || getUserLocation(user);
   return {
@@ -97,13 +98,43 @@ function makeUserOption(
     local_nome: location,
     display_nome: hasSectorResponsibleName(displayName) ? displayName?.trim() : undefined,
     display_cpf: displayCpf?.trim() || user.cpf,
-    option_key: `${user.id}:${normalizeText(location)}:${normalizeText(displayName)}`,
+    effective_usuario_id: effectiveUserId || user.id,
+    option_key: `${effectiveUserId || user.id}:${normalizeText(location)}:${normalizeText(displayName || user.nome)}`,
   };
+}
+
+
+function onlyDigits(value: string | null | undefined) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function findRealRecipientUser(
+  users: AvulsaUserOption[],
+  displayName: string | null | undefined,
+  displayCpf: string | null | undefined,
+) {
+  const cpf = onlyDigits(displayCpf);
+  const name = normalizeText(displayName);
+
+  if (cpf) {
+    const byCpf = users.find((user) => onlyDigits(user.cpf) === cpf && !isSharedLogin(user));
+    if (byCpf) return byCpf;
+  }
+
+  if (name) {
+    const byName = users.find(
+      (user) => normalizeText(user.nome) === name && !isSharedLogin(user) && !isGenericSectorOption(user),
+    );
+    if (byName) return byName;
+  }
+
+  return null;
 }
 
 function RequisicoesAvulsasPage() {
   const [users, setUsers] = useState<AvulsaUserOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [titulo, setTitulo] = useState("");
   const [saidaCodigo, setSaidaCodigo] = useState("");
@@ -147,6 +178,7 @@ function RequisicoesAvulsasPage() {
         );
       }
 
+      const allUsers = (usersResult.data ?? []) as AvulsaUserOption[];
       const linkedOptions = (
         (sectorsResult.data ?? []) as {
           nome: string | null;
@@ -158,19 +190,28 @@ function RequisicoesAvulsasPage() {
         (sector.setor_responsaveis ?? [])
           .map((row) => getSingleUser(row.usuarios))
           .filter((user): user is AvulsaUserOption => Boolean(user))
-          .map((user) =>
-            makeUserOption(
-              user,
+          .map((user) => {
+            const sectorOption = isGenericSectorOption(user) || isSharedLogin(user);
+            const displayName = sectorOption ? sector.responsavel : user.nome;
+            const displayCpf = sector.responsavel_cpf || user.cpf;
+            const realRecipient = findRealRecipientUser(allUsers, displayName, displayCpf);
+
+            if (sectorOption && !realRecipient) return null;
+
+            return makeUserOption(
+              realRecipient || user,
               sector.nome,
-              isGenericSectorOption(user) || isSharedLogin(user) ? sector.responsavel : user.nome,
-              sector.responsavel_cpf || user.cpf,
-            ),
-          )
+              realRecipient?.nome || displayName,
+              realRecipient?.cpf || displayCpf,
+              realRecipient?.id || user.id,
+            );
+          })
+          .filter((user): user is AvulsaUserOption => Boolean(user))
           .filter(
             (user) => hasSectorResponsibleName(user.display_nome) || !isGenericSectorOption(user),
           ),
       );
-      const directOptions = ((usersResult.data ?? []) as AvulsaUserOption[])
+      const directOptions = allUsers
         .filter((user) => !isSharedLogin(user) && !isGenericSectorOption(user))
         .map((user) => makeUserOption(user));
       const seen = new Set<string>();
@@ -199,19 +240,46 @@ function RequisicoesAvulsasPage() {
 
   const selectedUser =
     users.find((user) => (user.option_key || user.id) === selectedUserId) || null;
-  const filteredUsers = useMemo(() => {
+  const sectorOptions = useMemo(() => {
     const query = normalizeText(userSearch);
-    if (!query) return users;
+    const grouped = new Map<string, AvulsaUserOption[]>();
 
-    return users.filter((user) =>
+    users.forEach((user) => {
+      const location = getUserLocation(user);
+      const current = grouped.get(location) ?? [];
+      current.push(user);
+      grouped.set(location, current);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([location, sectorUsers]) => ({ location, users: sectorUsers }))
+      .filter((sector) => {
+        if (!query) return true;
+        return (
+          normalizeText(sector.location).includes(query) ||
+          sector.users.some((user) => normalizeText(getUserListLabel(user)).includes(query))
+        );
+      })
+      .sort((a, b) => a.location.localeCompare(b.location, "pt-BR", { sensitivity: "base" }));
+  }, [userSearch, users]);
+
+  const filteredUsers = useMemo(() => {
+    if (!selectedLocation) return [];
+
+    const query = normalizeText(userSearch);
+    const sectorUsers = users.filter((user) => getUserLocation(user) === selectedLocation);
+    if (!query) return sectorUsers;
+
+    return sectorUsers.filter((user) =>
       [getUserListLabel(user), user.nome, user.usuario, user.email, user.setor, user.unidade_nome]
         .filter(Boolean)
         .some((value) => normalizeText(String(value)).includes(query)),
     );
-  }, [userSearch, users]);
+  }, [selectedLocation, userSearch, users]);
 
   const resetForm = () => {
     setSelectedUserId("");
+    setSelectedLocation("");
     setUserSearch("");
     setTitulo("");
     setSaidaCodigo("");
@@ -259,7 +327,7 @@ function RequisicoesAvulsasPage() {
         .from("assinaturas_avulsas" as any)
         .insert({
           id,
-          usuario_id: selectedUser.id,
+          usuario_id: selectedUser.effective_usuario_id || selectedUser.id,
           solicitante: getUserRecipientName(selectedUser),
           solicitante_cpf: selectedUser.display_cpf || selectedUser.cpf,
           setor: getUserLocation(selectedUser),
@@ -314,15 +382,39 @@ function RequisicoesAvulsasPage() {
             <section className="space-y-3 rounded-md border bg-muted/10 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Selecionar destinatário</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {selectedLocation ? "Selecionar usuário" : "Selecionar setor"}
+                  </h3>
                   <p className="text-xs text-muted-foreground">
-                    Nome/login e local de quem vai receber
+                    {selectedLocation
+                      ? "Escolha quem vai receber e assinar a avulsa."
+                      : "Primeiro escolha o setor para ver os usuários de lá."}
                   </p>
                 </div>
                 <span className="rounded-md bg-background px-2 py-1 text-xs text-muted-foreground">
-                  {filteredUsers.length} de {users.length}
+                  {selectedLocation
+                    ? `${filteredUsers.length} usuários`
+                    : `${sectorOptions.length} setores`}
                 </span>
               </div>
+
+              {selectedLocation ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-fit gap-2"
+                  disabled={saving}
+                  onClick={() => {
+                    setSelectedLocation("");
+                    setSelectedUserId("");
+                    setUserSearch("");
+                  }}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Voltar para setores
+                </Button>
+              ) : null}
 
               <label className="relative block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -331,14 +423,41 @@ function RequisicoesAvulsasPage() {
                   onChange={(event) => setUserSearch(event.target.value)}
                   disabled={saving}
                   className="pl-9"
-                  placeholder="Pesquisar por nome/login ou local"
+                  placeholder={selectedLocation ? "Pesquisar usuário" : "Pesquisar setor"}
                 />
               </label>
 
               <div className="max-h-80 overflow-y-auto rounded-md border bg-background">
-                {filteredUsers.length === 0 ? (
+                {!selectedLocation ? (
+                  sectorOptions.length === 0 ? (
+                    <div className="px-3 py-4 text-xs text-muted-foreground">
+                      Nenhum setor encontrado nessa busca.
+                    </div>
+                  ) : (
+                    sectorOptions.map((sector) => (
+                      <button
+                        key={sector.location}
+                        type="button"
+                        className="flex w-full flex-wrap items-center gap-2 border-b px-3 py-2.5 text-left text-xs text-foreground transition last:border-b-0 hover:bg-muted/50"
+                        disabled={saving}
+                        onClick={() => {
+                          setSelectedLocation(sector.location);
+                          setSelectedUserId("");
+                          setUserSearch("");
+                        }}
+                      >
+                        <span className="min-w-0 flex-1 truncate font-semibold">
+                          {sector.location}
+                        </span>
+                        <span className="rounded-md border bg-muted/30 px-2 py-1 text-muted-foreground">
+                          {sector.users.length} usuário(s)
+                        </span>
+                      </button>
+                    ))
+                  )
+                ) : filteredUsers.length === 0 ? (
                   <div className="px-3 py-4 text-xs text-muted-foreground">
-                    Nenhum usuário encontrado nessa busca.
+                    Nenhum usuário encontrado nesse setor.
                   </div>
                 ) : (
                   filteredUsers.map((user) => {
@@ -359,7 +478,7 @@ function RequisicoesAvulsasPage() {
                           {getUserRecipientName(user)}
                         </span>
                         <span className="max-w-full truncate rounded-md border bg-muted/30 px-2 py-1 text-muted-foreground">
-                          {getUserLocation(user)}
+                          {user.usuario || user.email || "Usuário"}
                         </span>
                       </button>
                     );
@@ -371,12 +490,14 @@ function RequisicoesAvulsasPage() {
                 {selectedUser ? (
                   <div className="space-y-1">
                     <p className="font-semibold text-foreground">
-                      Enviando para: {getUserListLabel(selectedUser)}
+                      Enviando para: {getUserRecipientName(selectedUser)}
                     </p>
-                    <p>Confira o destinatário antes de anexar o PDF.</p>
+                    <p>Setor: {getUserLocation(selectedUser)}</p>
                   </div>
+                ) : selectedLocation ? (
+                  "Selecione um usuário desse setor para confirmar o envio."
                 ) : (
-                  "Selecione um usuário na lista para confirmar o destinatário."
+                  "Selecione um setor para ver os usuários."
                 )}
               </div>
             </section>

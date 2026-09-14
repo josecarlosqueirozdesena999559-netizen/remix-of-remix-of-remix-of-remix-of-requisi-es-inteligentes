@@ -43,6 +43,7 @@ export interface AvulsaUserOption {
   display_nome?: string | null;
   display_cpf?: string | null;
   option_key?: string;
+  effective_usuario_id?: string;
 }
 
 export function getAvulsaStatusLabel(status: string) {
