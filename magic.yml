@@ -1,45 +1,37 @@
 workflows:
-  ios-app-build-and-sign:
-    name: Solicite Já Pereiro - iOS Build Assinado (.ipa)
+  ios-testflight-publishing:
+    name: Solicite Já Pereiro - Publicar no Apple TestFlight
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
       xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.pereiro.soliciteja.usuario
       vars:
         XCODE_PROJECT: ios/SoliciteJaUsuario.xcodeproj
         XCODE_SCHEME: SoliciteJaUsuario
     scripts:
-      - name: Build iOS Application
+      - name: Fetch Apple Certificates & Profiles
         script: |
-          xcodebuild \
+          xcode-project use-profiles
+      - name: Build and Archive iOS App (.ipa)
+        script: |
+          xcodebuild build archive \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
-            -sdk iphoneos \
-            -configuration Release \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+            -destination 'generic/platform=iOS' \
+            -archivePath "build/ios/archive/SoliciteJaUsuario.xcarchive"
+          
+          xcodebuild -exportArchive \
+            -archivePath "build/ios/archive/SoliciteJaUsuario.xcarchive" \
+            -exportOptionsPlist export_options.plist \
+            -exportPath "build/ios/ipa"
     artifacts:
-      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/Release-iphoneos/*.app
-      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/**/*.ipa
-
-  ios-simulator-build:
-    name: Solicite Já Pereiro - iOS Build (Sem Certificado / Teste)
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      xcode: latest
-      vars:
-        XCODE_PROJECT: ios/SoliciteJaUsuario.xcodeproj
-        XCODE_SCHEME: SoliciteJaUsuario
-    scripts:
-      - name: Build app for iOS simulator
-        script: |
-          xcodebuild \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -sdk iphonesimulator \
-            -configuration Release \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-    artifacts:
-      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/Release-iphonesimulator/*.app
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/*.xcarchive
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        expire_build_submitted_for_beta: true
