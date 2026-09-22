@@ -36,6 +36,7 @@ import {
   omitLinkedOutputDateFields,
   withLinkedOutputDateFallback,
 } from "@/lib/linked-output-date";
+import { AVULSA_PENDING_STATUSES, getAvulsaDisplayCode, type AvulsaSignatureRow } from "@/lib/avulsa-signatures";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
@@ -207,6 +208,7 @@ function AdminHome() {
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [requisicoes, setRequisicoes] = useState<RequisicaoItem[]>([]);
+  const [avulsasPendentes, setAvulsasPendentes] = useState<AvulsaSignatureRow[]>([]);
   const [hasOutputPending, setHasOutputPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -248,6 +250,7 @@ function AdminHome() {
           if (active) {
             setIsAdmin(false);
             setRequisicoes([]);
+            setAvulsasPendentes([]);
           }
           return;
         }
@@ -300,11 +303,25 @@ function AdminHome() {
         const items = withLinkedOutputDateFallback(data) as RequisicaoItem[];
         setRequisicoes(items);
 
+        if (userProfile.is_admin) {
+          setAvulsasPendentes([]);
+        } else {
+          const { data: avulsasData, error: avulsasError } = await supabase
+            .from("assinaturas_avulsas" as any)
+            .select("*")
+            .in("status", [...AVULSA_PENDING_STATUSES])
+            .order("updated_at", { ascending: false });
+
+          if (avulsasError) throw new Error(avulsasError.message);
+          setAvulsasPendentes((avulsasData ?? []) as AvulsaSignatureRow[]);
+        }
+
         const outputPending = items.some((req) => req.status === "aguardando_assinatura_saida");
         setHasOutputPending(outputPending);
       } catch (err) {
         if (active) {
           setRequisicoes([]);
+          setAvulsasPendentes([]);
           setHasOutputPending(false);
           setLoadError(err instanceof Error ? err.message : "Erro ao carregar informações do dashboard.");
         }
@@ -576,6 +593,10 @@ function AdminHome() {
   const hasCorrectionPending = !isAdmin && correctionPendingRequests.length > 0;
   const pendingTargetUrl = isAdmin ? "/admin/solicitacoes" : "/admin/minhas-assinaturas";
 
+  const pendingTotalCount = pendingRequests.length + (isAdmin ? 0 : avulsasPendentes.length);
+  const hasOnlyAvulsaPending = !isAdmin && pendingRequests.length === 0 && avulsasPendentes.length > 0;
+  const hasAnyPending = pendingRequests.length > 0 || avulsasPendentes.length > 0;
+
   const pendingMetricLabel = isAdmin
     ? "Solicitações Pendentes para Atendimento"
     : hasCorrectionPending
@@ -601,6 +622,16 @@ function AdminHome() {
       return "Você tem solicitação aguardando assinatura de saída do SIG";
     }
 
+    if (hasOnlyAvulsaPending) {
+      return avulsasPendentes.length === 1
+        ? "Você tem assinatura avulsa aguardando assinatura"
+        : "Você tem assinaturas avulsas aguardando assinatura";
+    }
+
+    if (!isAdmin && avulsasPendentes.length > 0) {
+      return "Você tem solicitações e assinaturas avulsas pendentes";
+    }
+
     return "Atenção, você precisa assinar suas solicitações para prosseguir";
   };
 
@@ -613,6 +644,14 @@ function AdminHome() {
       return correctionPendingRequests.length === pendingRequests.length
         ? "Clique aqui para abrir as opções de editar ou excluir"
         : "Clique aqui para corrigir devoluções e assinar documentos pendentes";
+    }
+
+    if (hasOnlyAvulsaPending) {
+      return "Clique aqui para acessar suas assinaturas avulsas";
+    }
+
+    if (!isAdmin && avulsasPendentes.length > 0) {
+      return "Clique aqui para acessar suas assinaturas pendentes";
     }
 
     return "Clique aqui para acessar suas assinaturas e assinar os documentos";
@@ -726,7 +765,7 @@ function AdminHome() {
             {pendingMetricLabel}
           </div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
-            {pendingRequests.length}
+            {pendingTotalCount}
           </div>
         </div>
       </div>
@@ -741,10 +780,10 @@ function AdminHome() {
         <Card className="p-6 rounded-2xl border-destructive/40 bg-destructive/10 text-destructive font-medium">
           {loadError}
         </Card>
-      ) : pendingRequests.length > 0 ? (
+      ) : hasAnyPending ? (
         <button
           type="button"
-          onClick={() => navigate({ to: pendingTargetUrl })}
+          onClick={() => navigate({ to: hasOnlyAvulsaPending ? "/admin/assinaturas-avulsas" : pendingTargetUrl })}
           className="group w-full text-left p-5 rounded-2xl border border-orange-200/90 bg-orange-50 text-orange-900 shadow-2xs hover:bg-orange-100/80 transition-all cursor-pointer space-y-3"
         >
           <div className="flex items-center justify-between">
@@ -777,6 +816,19 @@ function AdminHome() {
                 </div>
               );
             })}
+            {!isAdmin && avulsasPendentes.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between text-orange-900 font-normal"
+              >
+                <span>
+                  Avulsa {getAvulsaDisplayCode(item)}{item.saida_codigo ? ` - SIG ${item.saida_codigo}` : ""}
+                </span>
+                <span className="underline text-orange-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                  Assinar avulsa <ChevronRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            ))}
           </div>
         </button>
       ) : (

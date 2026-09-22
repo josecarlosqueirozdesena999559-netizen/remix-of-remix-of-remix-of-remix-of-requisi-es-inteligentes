@@ -23,7 +23,7 @@ import {
   getAvulsaStatusLabel,
   getRequiredAvulsaSignatureCount,
   isPdfFile,
-  uploadAvulsaPdfs,
+  uploadAvulsaPdf,
   type AvulsaSignatureRow,
 } from "@/lib/avulsa-signatures";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
@@ -41,6 +41,27 @@ function formatDate(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR");
 }
 
+function getAvulsaUploadKey(itemId: string, index: number) {
+  return `${itemId}:${index}`;
+}
+
+function getSignedAttachmentForIndex(item: AvulsaSignatureRow, index: number) {
+  const signedFiles = getAvulsaAttachmentFiles(item.signed_attachment);
+  const withSourceIndex = signedFiles.find(
+    (attachment) => Number((attachment as any).sourceIndex) === index,
+  );
+
+  if (withSourceIndex) return withSourceIndex;
+  if (signedFiles.some((attachment) => (attachment as any).sourceIndex !== undefined)) return null;
+  return signedFiles[index] || null;
+}
+
+function getSignedAvulsaCount(item: AvulsaSignatureRow) {
+  const requiredCount = getRequiredAvulsaSignatureCount(item);
+  return Array.from({ length: requiredCount }).filter((_, index) =>
+    Boolean(getSignedAttachmentForIndex(item, index)),
+  ).length;
+}
 function AssinaturasAvulsasPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -51,7 +72,7 @@ function AssinaturasAvulsasPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
+  const [stagedFiles, setStagedFiles] = useState<Record<string, File>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [returningItem, setReturningItem] = useState<AvulsaSignatureRow | null>(null);
   const [returnReason, setReturnReason] = useState("");
@@ -104,47 +125,79 @@ function AssinaturasAvulsasPage() {
 
   if (isChildRoute) return <Outlet />;
 
-  const handleUpload = async (item: AvulsaSignatureRow, files: File[] | undefined) => {
-    if (!files || files.length === 0) return;
+  const handleUploadOne = async (item: AvulsaSignatureRow, file: File | undefined, index: number) => {
+    if (!file) return;
     setMessage(null);
     setError(null);
 
-    const requiredCount = getRequiredAvulsaSignatureCount(item);
-
-    if (files.length !== requiredCount) {
-      setError(`Anexe exatamente ${requiredCount} PDF(s) assinado(s) para finalizar.`);
-      return;
-    }
-
-    if (files.some((file) => !isPdfFile(file))) {
+    if (!isPdfFile(file)) {
       setError("Envie apenas arquivos PDF.");
       return;
     }
 
+    const uploadKey = getAvulsaUploadKey(item.id, index);
     const oldSigned = getAvulsaAttachmentFiles(item.signed_attachment);
-    setUploadingId(item.id);
+    setUploadingId(uploadKey);
 
     try {
-      const attachments = await uploadAvulsaPdfs({ files, assinaturaId: item.id, signed: true });
+      const uploaded = await uploadAvulsaPdf({ file, assinaturaId: item.id, signed: true, index });
+      const nextSigned = oldSigned.filter(
+        (attachment, attachmentIndex) =>
+          Number((attachment as any).sourceIndex ?? attachmentIndex) !== index,
+      );
+      const signedAttachment = { ...uploaded, sourceIndex: index };
+      nextSigned.push(signedAttachment as any);
+      nextSigned.sort(
+        (a, b) => Number((a as any).sourceIndex ?? 0) - Number((b as any).sourceIndex ?? 0),
+      );
+
+      const requiredCount = getRequiredAvulsaSignatureCount(item);
+      const signedIndexes = new Set(
+        nextSigned.map((attachment, attachmentIndex) =>
+          Number((attachment as any).sourceIndex ?? attachmentIndex),
+        ),
+      );
+      const isComplete = Array.from({ length: requiredCount }).every((_, signedIndex) =>
+        signedIndexes.has(signedIndex),
+      );
+
       const { error: updateError } = await supabase
         .from("assinaturas_avulsas" as any)
         .update({
-          signed_attachment: attachments,
-          status: AVULSA_SIGNED_STATUS,
+          signed_attachment: nextSigned,
+          status: isComplete ? AVULSA_SIGNED_STATUS : "aguardando_assinatura",
           return_reason: null,
           returned_at: null,
-          signed_at: new Date().toISOString(),
+          signed_at: isComplete ? new Date().toISOString() : null,
         })
         .eq("id", item.id);
 
       if (updateError) throw new Error(updateError.message);
-      await Promise.all(
-        oldSigned.map((attachment) =>
-          removeAttachmentFileSafely(attachment, "old avulsa signed attachment"),
-        ),
-      );
-      setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
-      setMessage("PDFs assinados enviados para o admin.");
+
+      const replacedAttachment = getSignedAttachmentForIndex(item, index);
+      if (replacedAttachment) {
+        await removeAttachmentFileSafely(replacedAttachment, "old avulsa signed attachment");
+      }
+
+      setStagedFiles((current) => {
+        const next = { ...current };
+        delete next[uploadKey];
+        return next;
+      });
+
+      if (isComplete) {
+        setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
+        setMessage("Todos os PDFs assinados foram enviados para o admin.");
+      } else {
+        setItems((current) =>
+          current.map((currentItem) =>
+            currentItem.id === item.id
+              ? { ...currentItem, signed_attachment: nextSigned, status: "aguardando_assinatura" }
+              : currentItem,
+          ),
+        );
+        setMessage("PDF assinado enviado. Continue assinando os PDFs restantes.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar assinatura avulsa.");
     } finally {
@@ -200,11 +253,14 @@ function AssinaturasAvulsasPage() {
     }
   };
 
-  const handleDrop = (event: DragEvent<HTMLDivElement>, item: AvulsaSignatureRow) => {
+  const handleDrop = (event: DragEvent<HTMLDivElement>, item: AvulsaSignatureRow, index: number) => {
     event.preventDefault();
     setDraggingId(null);
-    const files = Array.from(event.dataTransfer.files || []);
-    if (files.length > 0) setStagedFiles((current) => ({ ...current, [item.id]: files }));
+    const file = Array.from(event.dataTransfer.files || [])[0];
+    if (file) {
+      const uploadKey = getAvulsaUploadKey(item.id, index);
+      setStagedFiles((current) => ({ ...current, [uploadKey]: file }));
+    }
   };
 
   return (
@@ -268,8 +324,9 @@ function AssinaturasAvulsasPage() {
               </thead>
               <tbody>
                 {visibleItems.map((item) => {
-                  const stagedFileList = stagedFiles[item.id] || [];
+                  const adminFiles = getAvulsaAttachmentFiles(item.admin_attachment);
                   const requiredCount = getRequiredAvulsaSignatureCount(item);
+                  const signedCount = getSignedAvulsaCount(item);
                   const isPending = item.status !== AVULSA_SIGNED_STATUS;
                   return (
                     <tr key={item.id} className="border-t">
@@ -289,7 +346,7 @@ function AssinaturasAvulsasPage() {
                         ) : null}
                         {isPending ? (
                           <div className="mt-1 text-xs text-muted-foreground">
-                            Envie {requiredCount} PDF(s) assinado(s) para concluir.
+                            Assine os PDFs separadamente: {signedCount}/{requiredCount} enviado(s).
                           </div>
                         ) : null}
                         {item.return_reason ? (
@@ -323,7 +380,7 @@ function AssinaturasAvulsasPage() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         {isPending ? (
-                          <div className="flex flex-wrap justify-end gap-2">
+                          <div className="space-y-2">
                             {item.status === "aguardando_assinatura" ? (
                               <Button
                                 type="button"
@@ -336,66 +393,82 @@ function AssinaturasAvulsasPage() {
                                 Devolver
                               </Button>
                             ) : null}
-                            <div
-                              className={`inline-flex items-center gap-2 rounded-md border px-2 py-2 ${draggingId === item.id ? "border-emerald-500 bg-emerald-50" : "border-transparent"}`}
-                              onDragEnter={() => setDraggingId(item.id)}
-                              onDragOver={(event) => event.preventDefault()}
-                              onDragLeave={() => setDraggingId(null)}
-                              onDrop={(event) => handleDrop(event, item)}
-                            >
-                              <input
-                                id={`avulsa-${item.id}`}
-                                type="file"
-                                accept="application/pdf,.pdf"
-                                multiple
-                                className="hidden"
-                                onChange={(event) => {
-                                  const files = Array.from(event.target.files || []);
-                                  if (files.length > 0)
-                                    setStagedFiles((current) => ({ ...current, [item.id]: files }));
-                                  event.currentTarget.value = "";
-                                }}
-                              />
-                              {stagedFileList.length > 0 ? (
-                                <>
-                                  <span className="max-w-44 truncate rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                                    {stagedFileList.length === 1
-                                      ? stagedFileList[0].name
-                                      : `${stagedFileList.length} PDFs selecionados`}
-                                  </span>
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    disabled={uploadingId === item.id}
-                                    onClick={() => void handleUpload(item, stagedFileList)}
-                                  >
-                                    {uploadingId === item.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Check className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-2"
-                                  disabled={uploadingId === item.id}
-                                  onClick={() =>
-                                    document.getElementById(`avulsa-${item.id}`)?.click()
-                                  }
+                            {(adminFiles.length > 0 ? adminFiles : Array.from({ length: requiredCount })).map((adminFile, index) => {
+                              const uploadKey = getAvulsaUploadKey(item.id, index);
+                              const stagedFile = stagedFiles[uploadKey];
+                              const signedFile = getSignedAttachmentForIndex(item, index);
+                              const isUploading = uploadingId === uploadKey;
+
+                              return (
+                                <div
+                                  key={uploadKey}
+                                  className={`flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 ${draggingId === uploadKey ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-background"}`}
+                                  onDragEnter={() => setDraggingId(uploadKey)}
+                                  onDragOver={(event) => event.preventDefault()}
+                                  onDragLeave={() => setDraggingId(null)}
+                                  onDrop={(event) => handleDrop(event, item, index)}
                                 >
-                                  {uploadingId === item.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  <div className="min-w-0 flex-1 text-left text-xs">
+                                    <div className="font-semibold text-foreground">
+                                      PDF {index + 1}{adminFile?.fileName ? ` - ${adminFile.fileName}` : ""}
+                                    </div>
+                                    <div className={signedFile ? "text-emerald-700" : "text-muted-foreground"}>
+                                      {signedFile ? "Assinado enviado" : "Aguardando este PDF assinado"}
+                                    </div>
+                                  </div>
+                                  <input
+                                    id={`avulsa-${item.id}-${index}`}
+                                    type="file"
+                                    accept="application/pdf,.pdf"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                      const file = Array.from(event.target.files || [])[0];
+                                      if (file) {
+                                        setStagedFiles((current) => ({ ...current, [uploadKey]: file }));
+                                      }
+                                      event.currentTarget.value = "";
+                                    }}
+                                  />
+                                  {stagedFile ? (
+                                    <>
+                                      <span className="max-w-44 truncate rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                        {stagedFile.name}
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        disabled={isUploading}
+                                        onClick={() => void handleUploadOne(item, stagedFile, index)}
+                                      >
+                                        {isUploading ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Check className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </>
                                   ) : (
-                                    <Upload className="h-4 w-4" />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-2"
+                                      disabled={isUploading}
+                                      onClick={() =>
+                                        document.getElementById(`avulsa-${item.id}-${index}`)?.click()
+                                      }
+                                    >
+                                      {isUploading ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Upload className="h-4 w-4" />
+                                      )}
+                                      {signedFile ? "Substituir" : "Anexar"}
+                                    </Button>
                                   )}
-                                  Anexar PDFs
-                                </Button>
-                              )}
-                            </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">Enviado</span>
