@@ -309,6 +309,7 @@ function AdminHome() {
           const { data: avulsasData, error: avulsasError } = await supabase
             .from("assinaturas_avulsas" as any)
             .select("*")
+            .eq("usuario_id", dashboardProfile.id)
             .in("status", [...AVULSA_PENDING_STATUSES])
             .order("updated_at", { ascending: false });
 

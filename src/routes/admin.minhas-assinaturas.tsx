@@ -73,8 +73,8 @@ function canEditUnsignedRequest(request: Requisicao) {
   );
 }
 
-function getRequiredOutputSignatureCount(request: Requisicao) {
-  return Math.max(1, getAttachmentFiles(request.admin_attachment).length);
+function getRequiredOutputSignatureCount(_request: Requisicao) {
+  return 1;
 }
 
 function needsCurrentStageSignature(request: Requisicao) {
@@ -381,14 +381,10 @@ function MinhasAssinaturasPage() {
     }
 
     const isOutputStage = request.status === "aguardando_assinatura_saida";
-    const requiredOutputCount = isOutputStage ? getRequiredOutputSignatureCount(request) : 1;
+    const requiredOutputCount = 1;
 
-    if (isOutputStage && selectedFiles.length !== requiredOutputCount) {
-      setError(
-        requiredOutputCount === 1
-          ? "Anexe 1 PDF de saída do SIG assinado."
-          : `Anexe os ${requiredOutputCount} PDFs de saída do SIG assinados.`,
-      );
+    if (isOutputStage && selectedFiles.length !== 1) {
+      setError("Anexe somente o PDF da saída do SIG assinado. A requisição fica separada.");
       return;
     }
 
@@ -732,7 +728,7 @@ function MinhasAssinaturasPage() {
                                 type="file"
                                 accept="application/pdf,.pdf"
                                 className="hidden"
-                                multiple={request.status === "aguardando_assinatura_saida"}
+
                                 onChange={(event) => {
                                   const picked = Array.from(event.target.files || []);
                                   if (picked.length > 0) {
@@ -798,7 +794,7 @@ function MinhasAssinaturasPage() {
                                     <Upload className="h-4 w-4" />
                                   )}
                                   {request.status === "aguardando_assinatura_saida"
-                                    ? `Anexar ${getRequiredOutputSignatureCount(request)} PDFs`
+                                    ? "Anexar PDF da saída"
                                     : "Anexar PDF"}
                                 </Button>
                               )}
@@ -806,7 +802,7 @@ function MinhasAssinaturasPage() {
                               {draggingId === request.id && (
                                 <span className="text-xs font-medium text-emerald-700">
                                   {request.status === "aguardando_assinatura_saida"
-                                    ? "Solte os PDFs assinados"
+                                    ? "Solte o PDF da saída assinado"
                                     : "Solte o PDF para reconhecer"}
                                 </span>
                               )}
