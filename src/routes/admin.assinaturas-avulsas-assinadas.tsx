@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Eye, Loader2, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Download, Eye, Loader2, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { removeAttachmentFileSafely } from "@/lib/attachments";
+import { removeAttachmentFileSafely, resolveAttachmentUrl, type AttachmentFile } from "@/lib/attachments";
 import {
   AVULSA_SIGNED_STATUS,
   getAvulsaAttachmentFiles,
@@ -49,6 +49,7 @@ function ControleAssinaturasAvulsasPage() {
   const [returnSaving, setReturnSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -154,6 +155,45 @@ function ControleAssinaturasAvulsasPage() {
     }
   };
 
+  const downloadAttachment = async (
+    attachment: AttachmentFile,
+    fallbackFileName: string,
+    downloadKey: string,
+  ) => {
+    setDownloadingKey(downloadKey);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const signedUrl = await resolveAttachmentUrl(attachment);
+      if (!signedUrl) {
+        setError("PDF indisponível para baixar.");
+        return;
+      }
+
+      const fileName = attachment.fileName || fallbackFileName;
+
+      try {
+        const response = await fetch(signedUrl);
+        if (!response.ok) throw new Error("download-failed");
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        window.open(signedUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao baixar PDF avulso.");
+    } finally {
+      setDownloadingKey(null);
+    }
+  };
   const remove = async (item: AvulsaSignatureRow) => {
     if (!window.confirm("Excluir esta assinatura avulsa do controle?")) return;
     setActingId(item.id);
@@ -258,6 +298,8 @@ function ControleAssinaturasAvulsasPage() {
               <tbody>
                 {filteredItems.map((item) => {
                   const isSigned = item.status === AVULSA_SIGNED_STATUS;
+                  const originalFiles = getAvulsaAttachmentFiles(item.admin_attachment);
+                  const signedFiles = getAvulsaAttachmentFiles(item.signed_attachment);
                   return (
                     <tr key={item.id} className="border-t">
                       <td className="px-3 py-2 font-semibold text-foreground">
@@ -267,10 +309,65 @@ function ControleAssinaturasAvulsasPage() {
                       <td className="px-3 py-2">
                         <div className="font-semibold text-foreground">{item.titulo}</div>
                         <div className="text-xs text-muted-foreground">
-                          {getAvulsaAttachmentFiles(
-                            isSigned ? item.signed_attachment : item.admin_attachment,
-                          ).length || 1}{" "}
-                          PDF(s)
+                          {isSigned
+                            ? `${signedFiles.length || 1} PDF(s) assinado(s)`
+                            : `${originalFiles.length || 1} PDF(s) para assinar`}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {originalFiles.map((attachment, index) => {
+                            const downloadKey = `${item.id}:original:${index}`;
+                            return (
+                              <Button
+                                key={downloadKey}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                disabled={downloadingKey === downloadKey}
+                                onClick={() =>
+                                  void downloadAttachment(
+                                    attachment,
+                                    `avulsa-${getAvulsaDisplayCode(item)}-original-${index + 1}.pdf`,
+                                    downloadKey,
+                                  )
+                                }
+                              >
+                                {downloadingKey === downloadKey ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                                Original {index + 1}
+                              </Button>
+                            );
+                          })}
+                          {signedFiles.map((attachment, index) => {
+                            const downloadKey = `${item.id}:signed:${index}`;
+                            return (
+                              <Button
+                                key={downloadKey}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs text-emerald-700"
+                                disabled={downloadingKey === downloadKey}
+                                onClick={() =>
+                                  void downloadAttachment(
+                                    attachment,
+                                    `avulsa-${getAvulsaDisplayCode(item)}-assinado-${index + 1}.pdf`,
+                                    downloadKey,
+                                  )
+                                }
+                              >
+                                {downloadingKey === downloadKey ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                                Assinado {index + 1}
+                              </Button>
+                            );
+                          })}
                         </div>
                         {item.observacao ? (
                           <div className="text-xs text-muted-foreground">
