@@ -201,12 +201,17 @@ function ControleAssinaturasAvulsasPage() {
     setError(null);
 
     try {
-      const { error: updateError } = await supabase
+      const { data: deletedItem, error: updateError } = await supabase
         .from("assinaturas_avulsas" as any)
         .update({ status: "excluido_admin" })
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .select("id,status")
+        .maybeSingle();
 
       if (updateError) throw new Error(updateError.message);
+      if (!deletedItem || deletedItem.status !== "excluido_admin") {
+        throw new Error("A exclusao nao foi confirmada. Atualize a pagina e tente novamente.");
+      }
       await Promise.all([
         ...getAvulsaAttachmentFiles(item.admin_attachment).map((attachment) =>
           removeAttachmentFileSafely(attachment, "avulsa admin attachment"),
@@ -216,6 +221,7 @@ function ControleAssinaturasAvulsasPage() {
         ),
       ]);
       setItems((current) => current.filter((currentItem) => currentItem.id !== item.id));
+      await load();
       setMessage("Assinatura avulsa excluída do controle.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao excluir assinatura avulsa.");
