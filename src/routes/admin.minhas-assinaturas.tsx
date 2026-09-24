@@ -521,7 +521,7 @@ function MinhasAssinaturasPage() {
     setError(null);
 
     try {
-      let { error: deleteError } = await supabase
+      let { data: deletedRequest, error: deleteError } = await supabase
         .from("requisicoes")
         .update({
           status: "excluida_usuario",
@@ -535,7 +535,9 @@ function MinhasAssinaturasPage() {
           "aguardando_assinatura_requisicao",
           "aguardando_assinatura_saida",
           "correcao_requisicao",
-        ]);
+        ])
+        .select("id,status")
+        .maybeSingle();
 
       if (deleteError && isMissingReturnFeedbackColumnError(deleteError.message)) {
         const fallbackDelete = await supabase
@@ -547,12 +549,18 @@ function MinhasAssinaturasPage() {
             "aguardando_assinatura_requisicao",
             "aguardando_assinatura_saida",
             "correcao_requisicao",
-          ]);
+          ])
+          .select("id,status")
+          .maybeSingle();
 
+        deletedRequest = fallbackDelete.data;
         deleteError = fallbackDelete.error;
       }
 
       if (deleteError) throw new Error(deleteError.message);
+      if (!deletedRequest || deletedRequest.status !== "excluida_usuario") {
+        throw new Error("A exclusao nao foi confirmada. Atualize a pagina e tente novamente.");
+      }
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
       setMessage("Solicitação excluída antes da assinatura.");
