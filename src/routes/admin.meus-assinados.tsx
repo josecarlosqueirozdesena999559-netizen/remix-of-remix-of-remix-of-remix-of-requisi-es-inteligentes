@@ -1,19 +1,23 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Eye, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { getAttachmentFile, getOutputSignedAttachment } from "@/lib/attachments";
+import { getRequestArchiveMonth } from "@/lib/request-archive-month";
 import {
   getRequestOwnerCpfVariants,
   getRequestOwnerLocation,
   type RequestOwnerProfile,
 } from "@/lib/request-owner";
-import { getCurrentUserProfile } from "@/lib/user-profile";
+import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
+import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
+
 export const Route = createFileRoute("/admin/meus-assinados")({
   component: MeusAssinadosPage,
 });
+
 interface Requisicao {
   id: string;
   saida_codigo: string | null;
@@ -24,6 +28,7 @@ interface Requisicao {
   signed_attachment: unknown;
   admin_attachment: unknown;
 }
+
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluída";
   if (status === "requisicao_assinada") return "Solicitação assinada";
@@ -32,14 +37,17 @@ function getStatusLabel(status: string) {
   if (status === "aguardando_assinatura") return "Aguardando assinatura";
   return status || "-";
 }
+
 function hasOutputDocument(request: Requisicao) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
     getAttachmentFile(request.admin_attachment),
   );
 }
+
 function getUniqueLocations(locations: Array<string | null | undefined>) {
   const seen = new Set<string>();
+
   return locations
     .map((location) => location?.trim())
     .filter((location): location is string => Boolean(location))
@@ -50,20 +58,26 @@ function getUniqueLocations(locations: Array<string | null | undefined>) {
       return true;
     });
 }
+
 async function getLinkedRequestLocations(profile: RequestOwnerProfile, fallbackLocation: string) {
   const profileId = "id" in profile ? String(profile.id || "") : "";
   if (!profileId) return getUniqueLocations([fallbackLocation]);
+
   const { data, error } = await supabase
     .from("setor_responsaveis")
     .select("setores(nome)")
     .eq("usuario_id", profileId);
+
   if (error) throw new Error(error.message);
+
   const linkedLocations = (data ?? []).map((row) => {
     const setor = Array.isArray(row.setores) ? row.setores[0] : row.setores;
     return setor?.nome;
   });
+
   return getUniqueLocations([fallbackLocation, ...linkedLocations]);
 }
+
 async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
   const pageSize = 1000;
   const requests: Requisicao[] = [];
@@ -71,11 +85,14 @@ async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
   const location = getRequestOwnerLocation(profile);
   const linkedLocations = await getLinkedRequestLocations(profile, location);
   const name = profile.nome?.trim() || "";
+
   if (cpfVariants.length === 0 && !(name && linkedLocations.length > 0)) {
     return requests;
   }
+
   async function fetchPages(applyScope: (query: any) => any) {
     let from = 0;
+
     while (true) {
       const query = applyScope(
         supabase
@@ -85,42 +102,58 @@ async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
           .order("updated_at", { ascending: false })
           .range(from, from + pageSize - 1),
       );
+
       const { data, error } = await query;
+
       if (error) throw new Error(error.message);
+
       const page = (data ?? []) as Requisicao[];
       requests.push(...page);
+
       if (page.length < pageSize) break;
       from += pageSize;
     }
   }
+
   if (cpfVariants.length > 0) {
     await fetchPages((query) => query.in("solicitante_cpf", cpfVariants));
   }
+
   if (name && linkedLocations.length > 0) {
     await fetchPages((query) => query.eq("solicitante", name).in("setor", linkedLocations));
   }
+
   return requests.filter((request, index, list) => {
     return list.findIndex((item) => item.id === request.id) === index;
   });
 }
+
 function MeusAssinadosPage() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isChildRoute = pathname !== "/admin/meus-assinados";
   const [requests, setRequests] = useState<Requisicao[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     let active = true;
+
     async function load() {
       setLoading(true);
       setError(null);
+
       try {
-        const { profile } = await getCurrentUserProfile();
+        const { profile: authProfile } = await getCurrentUserProfile();
+        const profile = isSharedSectorProfile(authProfile) ? await getSelectedSharedRequesterProfile(authProfile) : authProfile;
+
         if (!profile) {
+          if (isSharedSectorProfile(authProfile)) navigate({ to: "/admin/selecionar-solicitante" });
           setRequests([]);
           return;
         }
+
         const data = await fetchCompletedUserRequests(profile);
         if (active) {
           setRequests(data.filter(hasOutputDocument));
@@ -131,20 +164,42 @@ function MeusAssinadosPage() {
         if (active) setLoading(false);
       }
     }
+
     load();
+
     return () => {
       active = false;
     };
   }, []);
+
+  const filteredRequests = useMemo(() => {
+    if (selectedMonth === "all") return requests;
+    return requests.filter((request) => getRequestArchiveMonth(request) === selectedMonth);
+  }, [requests, selectedMonth]);
+
   if (isChildRoute) {
     return <Outlet />;
   }
+
   return (
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground">Usuario / Documentos assinados</p>
         <h2 className="text-2xl text-foreground">Documentos assinados</h2>
       </div>
+
+      <Card className="p-4">
+        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+          Mês
+          <input
+            type="month"
+            value={selectedMonth === "all" ? "" : selectedMonth}
+            onChange={(event) => setSelectedMonth(event.target.value || "all")}
+            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+          />
+        </label>
+      </Card>
+
       {loading ? (
         <div className="flex items-center gap-2 p-6 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -152,8 +207,8 @@ function MeusAssinadosPage() {
         </div>
       ) : error ? (
         <Card className="p-6 text-destructive">{error}</Card>
-      ) : requests.length === 0 ? (
-        <Card className="p-6 text-muted-foreground">Nenhuma solicitação encontrada.</Card>
+      ) : filteredRequests.length === 0 ? (
+        <Card className="p-6 text-muted-foreground">Nenhuma solicitação encontrada neste mês.</Card>
       ) : (
         <Card className="p-4">
           <div className="rounded-md border overflow-x-auto">
@@ -168,7 +223,7 @@ function MeusAssinadosPage() {
                 </tr>
               </thead>
               <tbody>
-                {requests.map((request) => (
+                {filteredRequests.map((request) => (
                   <tr key={request.id} className="border-t">
                     <td className="px-3 py-2 text-muted-foreground">{request.data || "-"}</td>
                     <td className="px-3 py-2 text-foreground">{request.setor || "-"}</td>
@@ -203,3 +258,4 @@ function MeusAssinadosPage() {
     </div>
   );
 }
+
