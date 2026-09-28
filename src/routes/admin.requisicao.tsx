@@ -748,8 +748,10 @@ function CriarRequisicaoPage() {
           getAllowedCategoriesForRequest(profile),
           getAllowedProgramKeysForRequest(profile),
         ]);
-        const categories =
-          profileCategories.length > 0 || profileProgramKeys.length === 0
+        const isRamonProfile = isRamonRequester(profile);
+        const categories = isRamonProfile
+          ? [...PRODUCT_CATEGORIES]
+          : profileCategories.length > 0 || profileProgramKeys.length === 0
             ? profileCategories
             : [...PRODUCT_CATEGORIES];
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
@@ -818,7 +820,7 @@ function CriarRequisicaoPage() {
         }
 
         setAllowedCategories(categories);
-        setAllowedProgramKeys(profileProgramKeys);
+        setAllowedProgramKeys(isRamonProfile ? [] : profileProgramKeys);
         setItems(loadedItems);
         setEditingRequestStatus(editableRequest?.status || null);
         setSelectedRamonRequestDestination(getRamonDestinationValue(editableRequest?.setor));
@@ -876,6 +878,7 @@ function CriarRequisicaoPage() {
 
     async function loadSelectedRequesterAccess() {
       try {
+        const isRamonSelectedRequester = isRamonRequester(selectedRequester);
         const requesterCategories = getAllowedCategories(selectedRequester);
         const resolvedCategories =
           requesterCategories.length > 0
@@ -885,8 +888,11 @@ function CriarRequisicaoPage() {
         if (!active) return;
 
         const fallbackCategories = getAllowedCategories(profile);
-        const categoriesToUse =
-          resolvedCategories.length > 0 ? resolvedCategories : fallbackCategories;
+        const categoriesToUse = isRamonSelectedRequester
+          ? [...PRODUCT_CATEGORIES]
+          : resolvedCategories.length > 0
+            ? resolvedCategories
+            : fallbackCategories;
         const nextSections = buildNormalizedRequestSections(categoriesToUse);
         const firstGroupLabel = nextSections[0] ? getSectionGroupLabel(nextSections[0]) : "";
 
@@ -953,7 +959,7 @@ function CriarRequisicaoPage() {
         const sectionItems = items.filter((item) => {
           if (!itemMatchesRequestSection(item, section)) return false;
 
-          if (!isItemAllowedForProfileProgram(item, allowedProgramKeys)) {
+          if (!isRamonRequest && !isItemAllowedForProfileProgram(item, allowedProgramKeys)) {
             return false;
           }
 
@@ -1056,7 +1062,7 @@ function CriarRequisicaoPage() {
     }
 
     const selectedBaseCategories = getSelectedRequestCategories(items, quantities, sections);
-    if (selectedBaseCategories.length > 1) {
+    if (!isRamonRequest && selectedBaseCategories.length > 1) {
       setError(getSingleCategoryRequestMessage(selectedBaseCategories[0]));
       setSaving(false);
       return;
