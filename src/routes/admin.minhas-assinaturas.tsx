@@ -447,22 +447,44 @@ function MinhasAssinaturasPage() {
         returned_at: null,
       };
 
-      const { error: updateError } = await supabase
-        .from("requisicoes")
-        .update(payload)
-        .eq("id", request.id);
+      if (/ramon/i.test(String(request.solicitante || ""))) {
+        const signedResult = await (supabase as any).rpc(
+          "register_ramon_signed_requisicao",
+          {
+            p_requisicao_id: request.id,
+            p_signed_attachment: signedAttachment,
+            p_admin_attachment: payload.admin_attachment,
+            p_status: payload.status,
+          },
+        );
+        if (signedResult.error) {
+          throw new Error(signedResult.error.message);
+        }
 
-      if (updateError) {
-        const fallbackUpdate = await supabase
+        const signedRequest = Array.isArray(signedResult.data)
+          ? signedResult.data[0]
+          : signedResult.data;
+        if (!signedRequest) {
+          throw new Error("Nao foi possivel registrar o PDF assinado no banco.");
+        }
+      } else {
+        const { error: updateError } = await supabase
           .from("requisicoes")
-          .update({
-            signed_attachment: signedAttachment,
-            status: isOutputStage ? "concluido" : "recebido",
-          })
+          .update(payload)
           .eq("id", request.id);
 
-        if (fallbackUpdate.error) {
-          throw new Error(fallbackUpdate.error.message);
+        if (updateError) {
+          const fallbackUpdate = await supabase
+            .from("requisicoes")
+            .update({
+              signed_attachment: signedAttachment,
+              status: isOutputStage ? "concluido" : "recebido",
+            })
+            .eq("id", request.id);
+
+          if (fallbackUpdate.error) {
+            throw new Error(fallbackUpdate.error.message);
+          }
         }
       }
 
