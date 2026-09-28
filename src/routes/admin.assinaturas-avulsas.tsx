@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Check, Eye, Loader2, RotateCcw, Upload } from "lucide-react";
+import { Check, Download, Loader2, RotateCcw, Upload } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { removeAttachmentFileSafely } from "@/lib/attachments";
+import { removeAttachmentFileSafely, resolveAttachmentUrl } from "@/lib/attachments";
 import {
   AVULSA_PENDING_STATUSES,
   AVULSA_SIGNED_STATUS,
@@ -77,6 +77,7 @@ function AssinaturasAvulsasPage() {
   const [returningItem, setReturningItem] = useState<AvulsaSignatureRow | null>(null);
   const [returnReason, setReturnReason] = useState("");
   const [returnSaving, setReturnSaving] = useState(false);
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
   async function loadItems() {
     setLoading(true);
@@ -263,6 +264,30 @@ function AssinaturasAvulsasPage() {
     }
   };
 
+  const handleDownloadOriginal = async (item: AvulsaSignatureRow, index: number) => {
+    const attachment = getAvulsaAttachmentFiles(item.admin_attachment)[index];
+    if (!attachment) return;
+
+    const downloadKey = getAvulsaUploadKey(item.id, index);
+    setDownloadingKey(downloadKey);
+    setError(null);
+
+    try {
+      const url = await resolveAttachmentUrl(attachment);
+      if (!url) throw new Error("PDF indispon�vel para baixar.");
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.fileName || "PDF-" + (index + 1) + ".pdf";
+      link.click();
+      link.remove();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao baixar PDF.");
+    } finally {
+      setDownloadingKey(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -361,22 +386,8 @@ function AssinaturasAvulsasPage() {
                       <td className="px-3 py-2">
                         <Badge variant="outline">{getAvulsaStatusLabel(item.status)}</Badge>
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          onClick={() =>
-                            navigate({
-                              to: "/admin/assinaturas-avulsas/$assinaturaId/pdf",
-                              params: { assinaturaId: item.id },
-                            })
-                          }
-                        >
-                          <Eye className="h-4 w-4" />
-                          Ver/Baixar
-                        </Button>
+                      <td className="px-3 py-2 text-right text-xs text-muted-foreground">
+                        {adminFiles.length > 1 ? adminFiles.length + " PDFs separados" : "1 PDF"}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {isPending ? (
@@ -416,6 +427,21 @@ function AssinaturasAvulsasPage() {
                                       {signedFile ? "Assinado enviado" : "Aguardando este PDF assinado"}
                                     </div>
                                   </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2"
+                                    disabled={!adminFile || downloadingKey === uploadKey}
+                                    onClick={() => void handleDownloadOriginal(item, index)}
+                                  >
+                                    {downloadingKey === uploadKey ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                    Baixar PDF {index + 1}
+                                  </Button>
                                   <input
                                     id={`avulsa-${item.id}-${index}`}
                                     type="file"
