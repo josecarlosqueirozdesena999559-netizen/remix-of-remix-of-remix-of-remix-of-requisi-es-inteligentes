@@ -40,7 +40,11 @@ import { AVULSA_PENDING_STATUSES, getAvulsaDisplayCode, type AvulsaSignatureRow 
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
-import { getCurrentUserProfile, isSharedSectorProfile, type CurrentUserProfile } from "@/lib/user-profile";
+import {
+  getCurrentUserProfile,
+  isSharedSectorProfile,
+  type CurrentUserProfile,
+} from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminHome,
@@ -185,7 +189,7 @@ function getStatusBadge(status: string) {
 function hasAdminOutputDocument(request: RequisicaoItem) {
   return Boolean(
     getOutputSignedAttachment(request.signed_attachment, request.status) ||
-      getAttachmentFile(request.admin_attachment),
+    getAttachmentFile(request.admin_attachment),
   );
 }
 
@@ -289,10 +293,14 @@ function AdminHome() {
           return query;
         };
 
-        let { data, error } = await buildDashboardQuery(dashboardRequestsSelectWithLinkedOutputDate);
+        let { data, error } = await buildDashboardQuery(
+          dashboardRequestsSelectWithLinkedOutputDate,
+        );
 
         if (error && isMissingLinkedOutputDateColumnError(error.message)) {
-          const fallbackResult = await buildDashboardQuery(dashboardRequestsSelectWithoutLinkedOutputDate);
+          const fallbackResult = await buildDashboardQuery(
+            dashboardRequestsSelectWithoutLinkedOutputDate,
+          );
           data = fallbackResult.data;
           error = fallbackResult.error;
         }
@@ -324,7 +332,9 @@ function AdminHome() {
           setRequisicoes([]);
           setAvulsasPendentes([]);
           setHasOutputPending(false);
-          setLoadError(err instanceof Error ? err.message : "Erro ao carregar informações do dashboard.");
+          setLoadError(
+            err instanceof Error ? err.message : "Erro ao carregar informações do dashboard.",
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -396,7 +406,13 @@ function AdminHome() {
     setUploadingSaida(true);
     const linkedCode = saidaCodigoInput.trim() || null;
     const linkedDate = saidaDataInput.trim() || getTodayInputDate();
-    const attachments: Array<{ fileName: string; storageBucket: string; storagePath: string; uploadedAt: string; kind: "output" }> = [];
+    const attachments: Array<{
+      fileName: string;
+      storageBucket: string;
+      storagePath: string;
+      uploadedAt: string;
+      kind: "output";
+    }> = [];
 
     try {
       for (const file of stagedPdfFiles) {
@@ -573,7 +589,9 @@ function AdminHome() {
   const userName = profile?.nome || "Usuário";
 
   const activeRequisicoes = requisicoes.filter((r) => !isDeletedRequest(r));
-  const currentMonthRequisicoes = activeRequisicoes.filter((r) => isCurrentMonth(r.data, r.created_at));
+  const currentMonthRequisicoes = activeRequisicoes.filter((r) =>
+    isCurrentMonth(r.data, r.created_at),
+  );
   const monthlyCount = currentMonthRequisicoes.length;
 
   const pendingRequests = activeRequisicoes.filter((r) => {
@@ -674,7 +692,6 @@ function AdminHome() {
     })),
   );
 
-
   const pendingSignatureStatuses = new Set([
     "aguardando_assinatura",
     "aguardando_assinatura_requisicao",
@@ -756,15 +773,15 @@ function AdminHome() {
       {/* CARDS DE MÉTRICAS EM BRANCO (MÊS ATUAL) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="text-xs font-normal text-slate-500">Total de Solicitações (Mês Atual)</div>
+          <div className="text-xs font-normal text-slate-500">
+            Total de Solicitações (Mês Atual)
+          </div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
             {monthlyCount}
           </div>
         </div>
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-          <div className="text-xs font-normal text-slate-500">
-            {pendingMetricLabel}
-          </div>
+          <div className="text-xs font-normal text-slate-500">{pendingMetricLabel}</div>
           <div className="text-3xl font-normal tracking-tight text-slate-900 mt-2">
             {pendingTotalCount}
           </div>
@@ -789,9 +806,7 @@ function AdminHome() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-orange-800">
-                {getPendingBannerTitle()}
-              </h3>
+              <h3 className="text-sm font-semibold text-orange-800">{getPendingBannerTitle()}</h3>
               <p className="text-xs text-orange-700 mt-0.5 font-normal">
                 {getPendingBannerDescription()}
               </p>
@@ -809,10 +824,15 @@ function AdminHome() {
                 >
                   <span>
                     Solicitação {reqCode} - {date}
+                    {isAdmin && (
+                      <span className="font-medium">
+                        {" "}
+                        - {req.solicitante?.trim() || "Solicitante não informado"}
+                      </span>
+                    )}
                   </span>
                   <span className="underline text-orange-700 font-normal group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                    {getPendingActionLabel(req.status)}{" "}
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    {getPendingActionLabel(req.status)} <ChevronRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
               );
@@ -925,7 +945,8 @@ function AdminHome() {
                           )}
                         </div>
                         <div className="mt-1 text-[10px] font-normal text-slate-500">
-                          {getSignatureStatusLabel(req.status)}{dateDisplay ? ` · ${dateDisplay}` : ""}
+                          {getSignatureStatusLabel(req.status)}
+                          {dateDisplay ? ` · ${dateDisplay}` : ""}
                         </div>
                       </button>
                     );
@@ -1020,7 +1041,9 @@ function AdminHome() {
 
             {/* ÁREA DE DRAG & DROP DO PDF */}
             <div className="space-y-1.5">
-              <Label className="text-xs text-slate-600 font-normal">Arquivos PDF da saída do SIG</Label>
+              <Label className="text-xs text-slate-600 font-normal">
+                Arquivos PDF da saída do SIG
+              </Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1051,7 +1074,9 @@ function AdminHome() {
                     {/* V SIMPLES SEM FUNDO */}
                     <Check className="w-5 h-5 text-emerald-600 shrink-0 stroke-[2.5]" />
                     <span className="text-xs font-normal truncate max-w-64">
-                      {stagedPdfFiles.length === 1 ? stagedPdfFiles[0].name : `${stagedPdfFiles.length} PDFs selecionados`}
+                      {stagedPdfFiles.length === 1
+                        ? stagedPdfFiles[0].name
+                        : `${stagedPdfFiles.length} PDFs selecionados`}
                     </span>
                   </div>
                 ) : (

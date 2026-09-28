@@ -80,7 +80,7 @@ function AdminLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [openCadastros, setOpenCadastros] = useState(pathname.startsWith("/admin/cadastros"));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = false;
   const [globalSearch, setGlobalSearch] = useState("");
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [sharedSessionActive, setSharedSessionActive] = useState(false);
@@ -620,17 +620,8 @@ function AdminLayout() {
     <div className="min-h-screen bg-white flex flex-col">
       {/* HEADER SUPERIOR */}
       <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-slate-200">
-        {/* Left: Hamburger Toggle & Search Bar */}
-        <div className="flex items-center space-x-4 flex-1 max-w-xl">
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            className="hidden md:flex p-2 text-slate-500 rounded-lg hover:bg-slate-100 hover:text-slate-700 transition-colors focus:outline-none cursor-pointer"
-            title="Alternar menu lateral"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
+        {/* Mobile navigation trigger */}
+        <div className="flex items-center flex-1 max-w-xl">
           <div className="md:hidden">
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
               <SheetTrigger asChild>
