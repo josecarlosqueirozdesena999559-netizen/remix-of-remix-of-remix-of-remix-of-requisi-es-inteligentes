@@ -558,6 +558,22 @@ function MinhasAssinaturasPage() {
       }
 
       if (deleteError) throw new Error(deleteError.message);
+
+      if (!deletedRequest && /ramon/i.test(String(request.solicitante || ""))) {
+        const cancellationResult = await (supabase as any).rpc(
+          "cancel_ramon_pending_requisicao",
+          { p_requisicao_id: request.id },
+        );
+        if (cancellationResult.error) {
+          throw new Error(cancellationResult.error.message);
+        }
+
+        const cancelledRequest = Array.isArray(cancellationResult.data)
+          ? cancellationResult.data[0]
+          : cancellationResult.data;
+        deletedRequest = cancelledRequest || null;
+      }
+
       if (!deletedRequest || deletedRequest.status !== "excluida_usuario") {
         throw new Error("A exclusao nao foi confirmada. Atualize a pagina e tente novamente.");
       }

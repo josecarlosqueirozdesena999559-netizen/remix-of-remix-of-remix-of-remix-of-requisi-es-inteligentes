@@ -1114,6 +1114,19 @@ function CriarRequisicaoPage() {
 
         requestError = fallbackResult.error;
       }
+    } else if (isRamonRequester(chosenSolicitante)) {
+      const insertResult = await (supabase as any).rpc("create_ramon_requisicao", {
+        p_categoria: payload.categoria,
+        p_setor: payload.setor,
+        p_solicitante: payload.solicitante,
+        p_solicitante_cpf: payload.solicitante_cpf,
+        p_solicitante_funcao: payload.solicitante_funcao,
+        p_data: payload.data,
+        p_items: payload.items,
+      });
+
+      requestError = insertResult.error;
+      savedRequestId = typeof insertResult.data === "string" ? insertResult.data : "";
     } else {
       const insertResult = await supabase.from("requisicoes").insert(payload).select("id").single();
       requestError = insertResult.error;
