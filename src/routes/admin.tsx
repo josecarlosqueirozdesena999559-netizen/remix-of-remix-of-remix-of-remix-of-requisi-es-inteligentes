@@ -687,25 +687,6 @@ function AdminLayout() {
           }`}
         >
           <div className="overflow-y-auto overflow-x-hidden flex-1 py-4">
-            {/* Brand Header */}
-            <div className="px-5 mb-6 flex items-center justify-between">
-              <Link to="/admin" className="flex items-center space-x-3 cursor-pointer">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 shrink-0">
-                  <FileCheck2 className="w-5 h-5" />
-                </div>
-                {!collapsed && (
-                  <div className="flex flex-col">
-                    <span className="text-lg font-extrabold tracking-tight text-emerald-800 leading-none">
-                      SOLICITE JÁ
-                    </span>
-                    <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mt-1">
-                      Gestão de Solicitações
-                    </span>
-                  </div>
-                )}
-              </Link>
-            </div>
-
             {renderNavigation(false)}
           </div>
         </aside>
