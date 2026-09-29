@@ -5,6 +5,7 @@ import {
   getAttachmentFiles,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
+  type AttachmentFile,
 } from "@/lib/attachments";
 import { formatRequestCodeDate, getRequestFileName } from "@/lib/request-code";
 import { createCombinedSignedPdfBlob } from "@/lib/combined-pdf";
@@ -29,7 +30,6 @@ interface PdfState {
 
 function MinhaAssinaturaPdfPage() {
   const { requisicaoId } = Route.useParams();
-  const navigate = useNavigate();
   const [pdf, setPdf] = useState<PdfState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
