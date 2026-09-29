@@ -147,6 +147,40 @@ async function getAuthenticatedUser(request: Request) {
   return user;
 }
 
+async function assertCanNotifyRequest(userId: string, requestId: string) {
+  const profiles = await supabaseFetch(
+    `usuarios?select=is_admin,cpf,nome,setor,unidade_nome,funcao&auth_user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+  ) as Array<{
+    is_admin: boolean | null;
+    cpf: string | null;
+    nome: string | null;
+    setor: string | null;
+    unidade_nome: string | null;
+    funcao: string | null;
+  }>;
+  const profile = profiles[0];
+  if (!profile) throw new Error("Perfil não autorizado.");
+  if (profile.is_admin) return;
+
+  const requests = await supabaseFetch(
+    `requisicoes?select=solicitante,solicitante_cpf,setor&id=eq.${encodeURIComponent(requestId)}&limit=1`,
+  ) as Array<{ solicitante: string | null; solicitante_cpf: string | null; setor: string | null }>;
+  const requisicao = requests[0];
+  if (!requisicao) throw new Error("Requisição não encontrada.");
+
+  const normalize = (value: string | null) => value?.trim().toLocaleLowerCase("pt-BR") || "";
+  const ownsByCpf = Boolean(profile.cpf?.trim() && profile.cpf.trim() === requisicao.solicitante_cpf?.trim());
+  const ownsByNameAndSector =
+    normalize(profile.nome) === normalize(requisicao.solicitante) &&
+    [profile.setor, profile.unidade_nome].some((value) => normalize(value) === normalize(requisicao.setor));
+  const sharedSectorAccess =
+    normalize(profile.funcao) === "login compartilhado" &&
+    [profile.setor, profile.unidade_nome].some((value) => normalize(value) === normalize(requisicao.setor));
+
+  if (!ownsByCpf && !ownsByNameAndSector && !sharedSectorAccess) {
+    throw new Error("Você não tem permissão para notificar sobre esta requisição.");
+  }
+}
 async function getWhatsAppSettings() {
   const envAccessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN")?.trim();
   const envPhoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
@@ -534,11 +568,12 @@ Deno.serve(async (request) => {
       throw new Error("Supabase nao configurado.");
     }
 
-    await getAuthenticatedUser(request);
+    const authenticatedUser = await getAuthenticatedUser(request);
 
     const body = await request.json().catch(() => ({}));
     const requestId = typeof body.requestId === "string" ? body.requestId : "";
     if (!requestId) throw new Error("Requisicao nao informada.");
+    await assertCanNotifyRequest(authenticatedUser.id, requestId);
 
     const notificationType = getNotificationType(body.notificationType);
     const notificationData = await getRequestNotificationData(requestId);

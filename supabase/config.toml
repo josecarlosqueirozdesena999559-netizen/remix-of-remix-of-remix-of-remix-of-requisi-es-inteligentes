@@ -1,13 +1,13 @@
 project_id = "xzoiqjsttggtrjlrhcjm"
 
 [functions.confirm-request-ready]
-verify_jwt = false
+verify_jwt = true
 
 [functions.save-user-whatsapp]
-verify_jwt = false
+verify_jwt = true
 
 [functions.notify-request-whatsapp]
-verify_jwt = false
+verify_jwt = true
 
 [functions.daily-admin-welcome-whatsapp]
 verify_jwt = false
@@ -16,4 +16,4 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.admin-whatsapp-reply]
-verify_jwt = false
+verify_jwt = true

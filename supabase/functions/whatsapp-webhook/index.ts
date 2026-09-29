@@ -1122,6 +1122,36 @@ function buildWebhookPayloadSummary(payload: any, messages: any[], statuses: Wha
   });
 }
 
+function constantTimeEqual(left: Uint8Array, right: Uint8Array) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
+async function verifyMetaWebhookSignature(request: Request, payloadText: string) {
+  const appSecret = Deno.env.get("WHATSAPP_APP_SECRET")?.trim();
+  if (!appSecret) throw new Error("WHATSAPP_APP_SECRET não configurado.");
+
+  const signatureHeader = request.headers.get("x-hub-signature-256")?.trim() || "";
+  if (!signatureHeader.startsWith("sha256=")) throw new Error("Assinatura do webhook ausente.");
+
+  const receivedHex = signatureHeader.slice("sha256=".length);
+  if (!/^[a-f0-9]{64}$/i.test(receivedHex)) throw new Error("Assinatura do webhook inválida.");
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(appSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const expected = new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadText)),
+  );
+  const received = new Uint8Array(receivedHex.match(/.{2}/g)!.map((byte) => Number.parseInt(byte, 16)));
+  if (!constantTimeEqual(expected, received)) throw new Error("Assinatura do webhook inválida.");
+}
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -1146,6 +1176,10 @@ Deno.serve(async (request) => {
 
     const settings = await getSettings();
     const payloadText = await request.text();
+    if (new TextEncoder().encode(payloadText).byteLength > 1_048_576) {
+      return jsonResponse({ ok: false, error: "Payload muito grande." }, 413);
+    }
+    await verifyMetaWebhookSignature(request, payloadText);
     await Promise.all([
       upsertSetting(WEBHOOK_LAST_POST_AT_KEY, new Date().toISOString()),
       upsertSetting(WEBHOOK_LAST_POST_RAW_KEY, summarizeWebhookPayloadText(payloadText)),

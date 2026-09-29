@@ -1,3 +1,5 @@
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -78,6 +80,24 @@ function parseQrPayload(value: unknown) {
   return parsed;
 }
 
+async function requireAuthenticatedAdmin(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Não autorizado.");
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) throw new Error("Supabase não configurado.");
+
+  const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: authHeader },
+  });
+  const user = await authResponse.json().catch(() => null) as { id?: string } | null;
+  if (!authResponse.ok || !user?.id) throw new Error("Sessão inválida.");
+
+  const profiles = await supabaseFetch(
+    `usuarios?select=is_admin,role&auth_user_id=eq.${encodeURIComponent(user.id)}&limit=1`,
+  ) as Array<{ is_admin: boolean | null; role: string | null }>;
+  if (!profiles[0]?.is_admin && profiles[0]?.role !== "admin") {
+    throw new Error("Apenas administradores podem confirmar a retirada.");
+  }
+}
 async function supabaseFetch(path: string, init: RequestInit = {}) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -191,6 +211,7 @@ Deno.serve(async (request) => {
   }
 
   try {
+    await requireAuthenticatedAdmin(request);
     const body = await request.json().catch(() => null);
     const qrPayload = parseQrPayload(body?.qrPayload);
 
