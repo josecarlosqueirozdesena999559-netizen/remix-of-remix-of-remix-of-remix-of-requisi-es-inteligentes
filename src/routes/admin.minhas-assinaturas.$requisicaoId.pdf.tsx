@@ -1,8 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { PdfDocumentViewer } from "@/components/PdfDocumentViewer";
 import {
   getAttachmentFiles,
   getRequestSignedAttachment,
@@ -70,7 +68,9 @@ function MinhaAssinaturaPdfPage() {
         const request = requestResult.data as Requisicao;
 
         if (request.status === "aguardando_assinatura_saida") {
-          const outputUrl = await resolveAttachmentUrl(request.admin_attachment as AttachmentFile | null);
+          const outputUrl = await resolveAttachmentUrl(
+            request.admin_attachment as AttachmentFile | null,
+          );
 
           if (outputUrl) {
             setPdf({
@@ -150,49 +150,16 @@ function MinhaAssinaturaPdfPage() {
       if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
   }, [requisicaoId]);
-
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">Minhas assinaturas / PDF</p>
-          <h2 className="text-2xl text-foreground">{pdf?.title || "PDF"}</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {pdf && (
-            <Button asChild variant="outline" className="gap-2">
-              <a href={pdf.url} download={pdf.fileName}>
-                <Download className="h-4 w-4" />
-                Baixar
-              </a>
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-2"
-            onClick={() => navigate({ to: "/admin/minhas-assinaturas" })}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar
-          </Button>
-        </div>
-      </div>
-
-      {loading ? (
-        <Card className="flex min-h-80 items-center justify-center gap-2 p-6 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando PDF...
-        </Card>
-      ) : error ? (
-        <Card className="p-6 text-destructive">{error}</Card>
-      ) : pdf ? (
-        <iframe
-          src={pdf.url}
-          title={pdf.title}
-          className="min-h-[720px] flex-1 rounded-md border bg-white"
-        />
-      ) : null}
-    </div>
+    <PdfDocumentViewer
+      title="Visualizador de documento"
+      subtitle={pdf?.title || "Documento para assinatura"}
+      url={pdf?.url}
+      fileName={pdf?.fileName}
+      loading={loading}
+      loadingLabel="Carregando PDF..."
+      error={error}
+      onBack={() => window.history.back()}
+    />
   );
 }

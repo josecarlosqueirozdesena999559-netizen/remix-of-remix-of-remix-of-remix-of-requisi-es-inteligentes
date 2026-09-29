@@ -485,7 +485,7 @@ function ControleAssinaturasPage() {
                               className="gap-2"
                               onClick={() =>
                                 navigate({
-                                  to: "/admin/solicitacoes/$requisicaoId/pdf",
+                                  to: "/admin/minhas-assinaturas/$requisicaoId/pdf",
                                   params: { requisicaoId: request.id },
                                 })
                               }

@@ -71,6 +71,27 @@ const ALMOXARIFADO_WHATSAPP_LINK = `https://wa.me/${ALMOXARIFADO_WHATSAPP_NUMBER
   ALMOXARIFADO_WHATSAPP_MESSAGE,
 )}`;
 
+const routeLabels: Array<[string, string]> = [
+  ["/admin/controle-assinaturas", "Controle de assinaturas"],
+  ["/admin/minhas-assinaturas", "Minhas assinaturas"],
+  ["/admin/meus-assinados", "Documentos assinados"],
+  ["/admin/assinadas", "Solicitações assinadas"],
+  ["/admin/solicitacoes", "Solicitações"],
+  ["/admin/requisicao", "Nova solicitação"],
+  ["/admin/requisicoes-avulsas", "Requisições avulsas"],
+  ["/admin/assinaturas-avulsas", "Assinaturas avulsas"],
+  ["/admin/conversas", "Conversas"],
+  ["/admin/controle-entradas", "Controle de entradas"],
+  ["/admin/configuracoes", "Configurações"],
+  ["/admin/cadastros", "Cadastros"],
+];
+
+function getCurrentRouteLabel(pathname: string) {
+  if (pathname === "/admin") return "Dashboard";
+  const match = routeLabels.find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
+  if (!match) return "Dashboard";
+  return pathname.endsWith("/pdf") ? `${match[1]} / Visualizar documento` : match[1];
+}
 export const Route = createFileRoute("/admin")({
   component: AdminLayout,
 });
@@ -78,6 +99,7 @@ export const Route = createFileRoute("/admin")({
 function AdminLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const currentRouteLabel = getCurrentRouteLabel(pathname);
   const [openCadastros, setOpenCadastros] = useState(pathname.startsWith("/admin/cadastros"));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const collapsed = false;
@@ -621,7 +643,7 @@ function AdminLayout() {
       {/* HEADER SUPERIOR */}
       <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-slate-200">
         {/* Mobile navigation trigger */}
-        <div className="flex items-center flex-1 max-w-xl">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="md:hidden">
             <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
               <SheetTrigger asChild>
@@ -639,6 +661,16 @@ function AdminLayout() {
                 {renderNavigation(true)}
               </SheetContent>
             </Sheet>
+          </div>
+          <div className="hidden min-w-0 items-center gap-2 text-xs sm:flex">
+            <Link
+              to="/admin"
+              className="shrink-0 text-slate-500 transition-colors hover:text-emerald-700"
+            >
+              Início
+            </Link>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
+            <span className="truncate font-semibold text-slate-800">{currentRouteLabel}</span>
           </div>
         </div>
 
