@@ -83,7 +83,7 @@ function Index() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4 py-8 text-slate-900">
-      <main className="w-full max-w-sm p-7">
+      <main className="w-full max-w-xs rounded-lg border border-slate-200 bg-white p-6">
         <div className="mb-7 text-center">
           <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
           <p className="mt-1 text-sm text-slate-500">Acesse o painel de solicitações</p>
