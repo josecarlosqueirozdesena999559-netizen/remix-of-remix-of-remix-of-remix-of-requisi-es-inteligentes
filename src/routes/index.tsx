@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, LockKeyhole, Warehouse } from "lucide-react";
+import { Loader2, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,7 +72,7 @@ function Index() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-white px-4">
         <div className="flex flex-col items-center gap-3 text-emerald-700">
           <Loader2 className="h-10 w-10 animate-spin" />
           <p className="text-sm">Carregando...</p>
@@ -83,14 +82,9 @@ function Index() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8 text-slate-900">
-      <div className="absolute inset-x-0 top-0 h-48 bg-emerald-700" />
-      <div className="absolute inset-x-0 top-48 h-px bg-emerald-900/10" />
-      <Card className="relative w-full max-w-sm rounded-lg border-slate-200 bg-white p-7 shadow-xl shadow-slate-900/10">
-        <div className="mb-7 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-700 text-white shadow-sm">
-            <Warehouse className="h-6 w-6" />
-          </div>
+    <div className="flex min-h-screen items-center justify-center bg-white px-4 py-8 text-slate-900">
+      <main className="w-full max-w-sm p-7">
+        <div className="mb-7 text-center">
           <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
           <p className="mt-1 text-sm text-slate-500">Acesse o painel de solicitações</p>
         </div>
@@ -142,7 +136,7 @@ function Index() {
             Entrar
           </Button>
         </form>
-      </Card>
+      </main>
     </div>
   );
 }
