@@ -1,8 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { PdfDocumentViewer } from "@/components/PdfDocumentViewer";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAttachmentUrl } from "@/lib/attachments";
 import {
@@ -18,7 +16,6 @@ export const Route = createFileRoute("/admin/assinaturas-avulsas/$assinaturaId/p
 
 function AssinaturaAvulsaPdfPage() {
   const { assinaturaId } = Route.useParams();
-  const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [fileName, setFileName] = useState("documento-avulso.pdf");
   const [title, setTitle] = useState("Assinatura avulsa");
@@ -111,47 +108,15 @@ function AssinaturaAvulsaPdfPage() {
   }, [assinaturaId]);
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-col space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Assinaturas avulsas / PDF</p>
-          <h2 className="text-2xl text-foreground">{title}</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          {url ? (
-            <Button asChild variant="outline" className="gap-2">
-              <a href={url} download={fileName}>
-                <Download className="h-4 w-4" />
-                Baixar
-              </a>
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-2"
-            onClick={() => navigate({ to: "/admin/assinaturas-avulsas" })}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar
-          </Button>
-        </div>
-      </div>
-
-      {loading ? (
-        <Card className="flex min-h-80 items-center justify-center gap-2 p-6 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Carregando documento...
-        </Card>
-      ) : error ? (
-        <Card className="p-6 text-destructive">{error}</Card>
-      ) : url ? (
-        <iframe
-          src={url}
-          title={title}
-          className="min-h-[720px] flex-1 rounded-md border bg-white"
-        />
-      ) : null}
-    </div>
+    <PdfDocumentViewer
+      title="Visualizador de documento"
+      subtitle={title}
+      url={url}
+      fileName={fileName}
+      loading={loading}
+      loadingLabel={"Carregando documento..."}
+      error={error}
+      onBack={() => window.history.back()}
+    />
   );
 }
