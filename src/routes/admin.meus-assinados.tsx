@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Eye, Loader2 } from "lucide-react";
+import { CalendarDays, Eye, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -133,7 +133,7 @@ function MeusAssinadosPage() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isChildRoute = pathname !== "/admin/meus-assinados";
   const [requests, setRequests] = useState<Requisicao[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState(() => getCurrentMonth());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -189,15 +189,27 @@ function MeusAssinadosPage() {
       </div>
 
       <Card className="p-4">
-        <label className="flex max-w-xs flex-col gap-2 text-sm text-muted-foreground">
-          Mês
-          <input
-            type="month"
-            value={selectedMonth === "all" ? "" : selectedMonth}
-            onChange={(event) => setSelectedMonth(event.target.value || "all")}
-            className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
-          />
-        </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex w-full max-w-xs flex-col gap-2 text-sm text-muted-foreground">
+            Mês
+            <input
+              type="month"
+              value={selectedMonth === "all" ? "" : selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value || getCurrentMonth())}
+              className="h-9 rounded-md border bg-background px-3 text-sm text-foreground"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={() => setSelectedMonth(getCurrentMonth())}
+            disabled={selectedMonth === getCurrentMonth()}
+          >
+            <CalendarDays className="h-4 w-4" />
+            Mês atual
+          </Button>
+        </div>
       </Card>
 
       {loading ? (
