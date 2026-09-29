@@ -83,13 +83,13 @@ function Index() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4 py-8 text-slate-900">
-      <main className="w-full max-w-xs rounded-lg border border-slate-200 bg-white p-6">
-        <div className="mb-7 text-center">
+      <main className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-5">
+        <div className="mb-4 text-center">
           <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
           <p className="mt-1 text-sm text-slate-500">Acesse o painel de solicitações</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="nome" className="text-slate-700">
               Usuário
@@ -123,14 +123,14 @@ function Index() {
           </div>
 
           {error && (
-            <p className="rounded border border-destructive/20 bg-destructive/5 px-2 py-1 text-center text-xs text-destructive">
+            <p className="rounded border border-destructive/20 bg-destructive/5 px-2 py-1 text-center text-xs text-destructive sm:col-span-2">
               {error}
             </p>
           )}
 
           <Button
             type="submit"
-            className="h-11 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800"
+            className="h-11 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800 sm:col-span-2"
           >
             <LockKeyhole className="h-4 w-4" />
             Entrar
