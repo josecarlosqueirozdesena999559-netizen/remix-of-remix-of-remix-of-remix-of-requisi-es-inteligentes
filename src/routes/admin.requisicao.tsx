@@ -62,6 +62,7 @@ interface ItemRow {
 interface CustomRequestItem {
   id: string;
   name: string;
+  stock: string;
   quantity: string;
   category: string;
   sectionLabel: string;
@@ -651,6 +652,7 @@ function CriarRequisicaoPage() {
   const [customItems, setCustomItems] = useState<CustomRequestItem[]>([]);
   const [showCustomItemForm, setShowCustomItemForm] = useState(false);
   const [customItemName, setCustomItemName] = useState("");
+  const [customItemStock, setCustomItemStock] = useState("");
   const [customItemQuantity, setCustomItemQuantity] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -869,6 +871,7 @@ function CriarRequisicaoPage() {
                 nextCustomItems.push({
                   id: `custom-edit-${index}`,
                   name,
+                  stock: String(requestItem.stock ?? requestItem.qtdDisponivel ?? "").trim(),
                   quantity,
                   category: String(
                     requestItem.categoria || editableRequest.categoria || categories[0] || "Outros",
@@ -1108,8 +1111,8 @@ function CriarRequisicaoPage() {
       description: item.name,
       unit: "Unidade",
       unidade: "Unidade",
-      stock: "-",
-      qtdDisponivel: "-",
+      stock: item.stock || "-",
+      qtdDisponivel: item.stock || "-",
       need: item.quantity,
       qtdNecessaria: item.quantity,
       quantidade_solicitada: item.quantity,
@@ -1396,7 +1399,7 @@ function CriarRequisicaoPage() {
                 </div>
 
                 {showCustomItemForm ? (
-                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-white p-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_140px_140px_auto] sm:items-end">
                     <label className="space-y-1 text-xs font-medium text-slate-700">
                       Nome do item
                       <Input
@@ -1407,7 +1410,19 @@ function CriarRequisicaoPage() {
                       />
                     </label>
                     <label className="space-y-1 text-xs font-medium text-slate-700">
-                      Quantidade
+                      Quantidade em estoque
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={customItemStock}
+                        onChange={(event) => setCustomItemStock(event.target.value)}
+                        placeholder="0"
+                        className="rounded-lg"
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-slate-700">
+                      Quantidade solicitada
                       <Input
                         type="number"
                         min="1"
@@ -1423,12 +1438,20 @@ function CriarRequisicaoPage() {
                       className="gap-2"
                       onClick={() => {
                         const name = customItemName.trim();
+                        const stock = customItemStock.trim();
                         const quantity = customItemQuantity.trim();
                         const activeSection =
                           sections.find((section) => section.id === selectedSectionId) ||
                           selectedGroup?.sections[0];
-                        if (!name || !quantity || Number(quantity) <= 0 || !activeSection) {
-                          setError("Informe o nome e uma quantidade válida para adicionar o item.");
+                        if (
+                          !name ||
+                          stock === "" ||
+                          Number(stock) < 0 ||
+                          !quantity ||
+                          Number(quantity) <= 0 ||
+                          !activeSection
+                        ) {
+                          setError("Informe o nome, o estoque e uma quantidade solicitada válida.");
                           return;
                         }
                         setCustomItems((current) => [
@@ -1436,6 +1459,7 @@ function CriarRequisicaoPage() {
                           {
                             id: `custom-${Date.now()}`,
                             name,
+                            stock,
                             quantity,
                             category: activeSection.baseCategory,
                             sectionLabel: activeSection.label,
@@ -1443,6 +1467,7 @@ function CriarRequisicaoPage() {
                           },
                         ]);
                         setCustomItemName("");
+                        setCustomItemStock("");
                         setCustomItemQuantity("");
                         setShowCustomItemForm(false);
                         setError(null);
@@ -1463,7 +1488,9 @@ function CriarRequisicaoPage() {
                       >
                         <div className="min-w-0">
                           <p className="truncate font-medium text-slate-800">{item.name}</p>
-                          <p className="text-xs text-slate-500">Quantidade: {item.quantity}</p>
+                          <p className="text-xs text-slate-500">
+                            Estoque: {item.stock} · Solicitada: {item.quantity}
+                          </p>
                         </div>
                         <Button
                           type="button"
