@@ -5,10 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
+  getSelectedSharedRequesterProfile,
   getSharedSectorUsers,
   setSelectedSharedRequesterId,
 } from "@/lib/shared-sector-session";
-import { getCurrentUserProfile, isSharedSectorProfile, type CurrentUserProfile } from "@/lib/user-profile";
+import {
+  getCurrentUserProfile,
+  isSharedSectorProfile,
+  type CurrentUserProfile,
+} from "@/lib/user-profile";
 
 export const Route = createFileRoute("/admin/selecionar-solicitante")({
   component: SelecionarSolicitantePage,
@@ -40,6 +45,12 @@ function SelecionarSolicitantePage() {
         const { profile } = await getCurrentUserProfile();
 
         if (!isSharedSectorProfile(profile)) {
+          navigate({ to: "/admin" });
+          return;
+        }
+
+        const selectedRequester = await getSelectedSharedRequesterProfile(profile);
+        if (selectedRequester) {
           navigate({ to: "/admin" });
           return;
         }

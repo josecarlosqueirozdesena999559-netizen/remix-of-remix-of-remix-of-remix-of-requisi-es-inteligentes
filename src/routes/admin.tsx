@@ -100,6 +100,7 @@ function AdminLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const currentRouteLabel = getCurrentRouteLabel(pathname);
+  const isRequesterSelectionPage = pathname === "/admin/selecionar-solicitante";
   const [openCadastros, setOpenCadastros] = useState(pathname.startsWith("/admin/cadastros"));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const collapsed = false;
@@ -714,7 +715,7 @@ function AdminLayout() {
       {/* SIDEBAR & MAIN LAYOUT */}
       <div className="flex flex-1 overflow-hidden">
         <aside
-          className={`hidden md:flex flex-col bg-white border-r border-slate-200/95 justify-between transition-all duration-300 z-20 shadow-xs ${
+          className={`hidden ${isRequesterSelectionPage ? "md:hidden" : "md:flex"} flex-col bg-white border-r border-slate-200/95 justify-between transition-all duration-300 z-20 shadow-xs ${
             collapsed ? "w-20" : "w-64"
           }`}
         >

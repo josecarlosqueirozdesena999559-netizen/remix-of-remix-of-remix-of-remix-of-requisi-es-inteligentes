@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Search, UserCheck, X } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -57,6 +57,15 @@ interface ItemRow {
       nome: string;
     } | null;
   }[];
+}
+
+interface CustomRequestItem {
+  id: string;
+  name: string;
+  quantity: string;
+  category: string;
+  sectionLabel: string;
+  sectionOrder: number;
 }
 
 interface SectorUserOption {
@@ -242,10 +251,7 @@ async function getCpfFallbackByRequesterName(name: string | null | undefined) {
   const normalizedName = normalizeSectorName(name);
   if (!normalizedName) return null;
 
-  const { data, error } = await supabase
-    .from("usuarios")
-    .select("nome,cpf")
-    .not("cpf", "is", null);
+  const { data, error } = await supabase.from("usuarios").select("nome,cpf").not("cpf", "is", null);
 
   if (error) throw new Error(error.message);
 
@@ -255,7 +261,10 @@ async function getCpfFallbackByRequesterName(name: string | null | undefined) {
 
   return match?.cpf?.trim() || null;
 }
-async function getAllowedCategoriesForRequest(profile: RequestAccessProfile | null, fallbackProfile?: RequestAccessProfile | null) {
+async function getAllowedCategoriesForRequest(
+  profile: RequestAccessProfile | null,
+  fallbackProfile?: RequestAccessProfile | null,
+) {
   if (!profile) return [];
 
   const profileCategories = getAllowedCategories(profile);
@@ -480,7 +489,8 @@ function isItemAllowedForProfileProgram(item: ItemRow, allowedProgramKeys: strin
 function itemMatchesRequestSection(item: ItemRow, section: RequestSection) {
   const matchesCategory = productHasCategory(item.categoria, section.baseCategory);
   const matchesOdontologicoProgram =
-    isOdontologicoCategory(section.baseCategory) && getItemProgramKeys(item).includes("odontologico");
+    isOdontologicoCategory(section.baseCategory) &&
+    getItemProgramKeys(item).includes("odontologico");
 
   if (!matchesCategory && !matchesOdontologicoProgram) return false;
   return !section.matchesItem || section.matchesItem(item);
@@ -638,6 +648,10 @@ function CriarRequisicaoPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stocks, setStocks] = useState<Record<string, string>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [customItems, setCustomItems] = useState<CustomRequestItem[]>([]);
+  const [showCustomItemForm, setShowCustomItemForm] = useState(false);
+  const [customItemName, setCustomItemName] = useState("");
+  const [customItemQuantity, setCustomItemQuantity] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -676,7 +690,9 @@ function CriarRequisicaoPage() {
           getCurrentUserProfile(),
           supabase
             .from("itens")
-            .select("id,nome,unidade,categoria,subcategoria,imagem_url,imagem_path,programa_produtos(programas(id,nome))")
+            .select(
+              "id,nome,unidade,categoria,subcategoria,imagem_url,imagem_path,programa_produtos(programas(id,nome))",
+            )
             .order("nome", { ascending: true }),
           editingRequestId
             ? supabase
@@ -813,7 +829,10 @@ function CriarRequisicaoPage() {
           }
         } else if (profile && !isSharedSector) {
           setSelectedSolicitanteId(profile.id);
-        } else if (selectedSharedRequester && filteredSectorUsers.some((user) => user.id === selectedSharedRequester.id)) {
+        } else if (
+          selectedSharedRequester &&
+          filteredSectorUsers.some((user) => user.id === selectedSharedRequester.id)
+        ) {
           setSelectedSolicitanteId(selectedSharedRequester.id);
         } else {
           setSelectedSolicitanteId("");
@@ -832,10 +851,34 @@ function CriarRequisicaoPage() {
         if (editableRequest?.items?.length) {
           const nextStocks: Record<string, string> = {};
           const nextQuantities: Record<string, string> = {};
+          const nextCustomItems: CustomRequestItem[] = [];
 
-          editableRequest.items.forEach((requestItem) => {
+          editableRequest.items.forEach((requestItem, index) => {
             const matchedItem = findMatchingLoadedItem(requestItem, loadedItems, availableSections);
-            if (!matchedItem) return;
+            if (!matchedItem) {
+              const name = String(
+                requestItem.nome || requestItem.item || requestItem.description || "",
+              ).trim();
+              const quantity = String(
+                requestItem.need ??
+                  requestItem.qtdNecessaria ??
+                  requestItem.quantidade_solicitada ??
+                  "",
+              ).trim();
+              if (name && quantity) {
+                nextCustomItems.push({
+                  id: `custom-edit-${index}`,
+                  name,
+                  quantity,
+                  category: String(
+                    requestItem.categoria || editableRequest.categoria || categories[0] || "Outros",
+                  ),
+                  sectionLabel: String(requestItem.request_section || "Itens não cadastrados"),
+                  sectionOrder: Number(requestItem.request_section_order ?? 98),
+                });
+              }
+              return;
+            }
 
             nextStocks[matchedItem.id] = String(
               requestItem.stock ?? requestItem.qtdDisponivel ?? "",
@@ -850,9 +893,11 @@ function CriarRequisicaoPage() {
 
           setStocks(nextStocks);
           setQuantities(nextQuantities);
+          setCustomItems(nextCustomItems);
         } else {
           setStocks({});
           setQuantities({});
+          setCustomItems([]);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro ao carregar itens.");
@@ -992,9 +1037,10 @@ function CriarRequisicaoPage() {
     const fallbackCpf = rawChosenSolicitante?.cpf
       ? null
       : await getCpfFallbackByRequesterName(rawChosenSolicitante?.nome);
-    const chosenSolicitante = rawChosenSolicitante && fallbackCpf
-      ? { ...rawChosenSolicitante, cpf: fallbackCpf }
-      : rawChosenSolicitante;
+    const chosenSolicitante =
+      rawChosenSolicitante && fallbackCpf
+        ? { ...rawChosenSolicitante, cpf: fallbackCpf }
+        : rawChosenSolicitante;
     const isSharedSector = isSharedSectorProfile(profile);
 
     if (isSharedSector && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
@@ -1018,7 +1064,7 @@ function CriarRequisicaoPage() {
       setSaving(false);
       return;
     }
-    const selectedItems = items
+    const selectedCatalogItems = items
       .map((item) => {
         const quantity = quantities[item.id];
         if (!hasRequestedQuantity(quantity)) return null;
@@ -1054,6 +1100,33 @@ function CriarRequisicaoPage() {
           sensitivity: "base",
         });
       });
+
+    const selectedCustomItems = customItems.map((item) => ({
+      item_id: null,
+      item: item.name,
+      nome: item.name,
+      description: item.name,
+      unit: "Unidade",
+      unidade: "Unidade",
+      stock: "-",
+      qtdDisponivel: "-",
+      need: item.quantity,
+      qtdNecessaria: item.quantity,
+      quantidade_solicitada: item.quantity,
+      categoria: item.category,
+      subcategoria: "Item não cadastrado",
+      request_section: item.sectionLabel,
+      request_section_order: item.sectionOrder,
+      imagem_url: null,
+      imagem_path: null,
+    }));
+    const selectedItems = [...selectedCatalogItems, ...selectedCustomItems].sort((a, b) => {
+      const orderDiff = (a.request_section_order ?? 99) - (b.request_section_order ?? 99);
+      if (orderDiff !== 0) return orderDiff;
+      return String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", {
+        sensitivity: "base",
+      });
+    });
 
     if (selectedItems.length === 0) {
       setError("Informe a quantidade de pelo menos um item.");
@@ -1218,50 +1291,16 @@ function CriarRequisicaoPage() {
             </Card>
           )}
 
-          {isSharedSector && (
-            <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
-              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
-                <UserCheck className="w-4 h-4 text-emerald-600" />
-                Solicitante Responsável do Setor (
-                {profile?.unidade_nome || profile?.setor || "Geral"})
-              </div>
-              <div className="max-w-md space-y-1">
-                <Label htmlFor="select-solicitante" className="text-xs text-slate-500 font-normal">
-                  Selecione o profissional que está fazendo esta solicitação:
-                </Label>
-                <select
-                  id="select-solicitante"
-                  value={selectedSolicitanteId}
-                  onChange={(e) => {
-                    setSelectedSolicitanteId(e.target.value);
-                    if (e.target.value) setSelectedSharedRequesterId(e.target.value);
-                  }}
-                  required
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  <option value="">Selecione um usuário do setor</option>
-                  {sectorUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.nome} {user.funcao ? `(${user.funcao})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {sectorUsers.length === 0 ? (
-                  <p className="text-xs font-medium text-destructive">
-                    Nenhum usuário encontrado para este setor.
-                  </p>
-                ) : null}
-              </div>
-            </Card>
-          )}
-
           {isRamonRequest && (
             <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
               <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
                 Destino do pedido do Ramon
               </div>
               <div className="max-w-md space-y-1">
-                <Label htmlFor="select-ramon-destination" className="text-xs text-slate-500 font-normal">
+                <Label
+                  htmlFor="select-ramon-destination"
+                  className="text-xs text-slate-500 font-normal"
+                >
                   Selecione onde este pedido deve aparecer no setor:
                 </Label>
                 <select
@@ -1332,6 +1371,120 @@ function CriarRequisicaoPage() {
                 </div>
               </Card>
 
+              <Card className="rounded-2xl border-amber-200 bg-amber-50/70 p-4 shadow-xs">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-950">Faltou algum item?</p>
+                    <p className="mt-0.5 text-xs text-amber-800">
+                      Clique no mais e informe o nome e a quantidade. O item também será incluído no
+                      PDF.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-2 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                    onClick={() => {
+                      setCustomItemName(searchQuery.trim());
+                      setShowCustomItemForm((current) => !current);
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar item
+                  </Button>
+                </div>
+
+                {showCustomItemForm ? (
+                  <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-white p-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+                    <label className="space-y-1 text-xs font-medium text-slate-700">
+                      Nome do item
+                      <Input
+                        value={customItemName}
+                        onChange={(event) => setCustomItemName(event.target.value)}
+                        placeholder="Digite o nome do item"
+                        className="rounded-lg"
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs font-medium text-slate-700">
+                      Quantidade
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={customItemQuantity}
+                        onChange={(event) => setCustomItemQuantity(event.target.value)}
+                        placeholder="0"
+                        className="rounded-lg"
+                      />
+                    </label>
+                    <Button
+                      type="button"
+                      className="gap-2"
+                      onClick={() => {
+                        const name = customItemName.trim();
+                        const quantity = customItemQuantity.trim();
+                        const activeSection =
+                          sections.find((section) => section.id === selectedSectionId) ||
+                          selectedGroup?.sections[0];
+                        if (!name || !quantity || Number(quantity) <= 0 || !activeSection) {
+                          setError("Informe o nome e uma quantidade válida para adicionar o item.");
+                          return;
+                        }
+                        setCustomItems((current) => [
+                          ...current,
+                          {
+                            id: `custom-${Date.now()}`,
+                            name,
+                            quantity,
+                            category: activeSection.baseCategory,
+                            sectionLabel: activeSection.label,
+                            sectionOrder: activeSection.order,
+                          },
+                        ]);
+                        setCustomItemName("");
+                        setCustomItemQuantity("");
+                        setShowCustomItemForm(false);
+                        setError(null);
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Incluir
+                    </Button>
+                  </div>
+                ) : null}
+
+                {customItems.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {customItems.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-slate-800">{item.name}</p>
+                          <p className="text-xs text-slate-500">Quantidade: {item.quantity}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 text-slate-500 hover:text-red-600"
+                          aria-label={`Remover ${item.name}`}
+                          onClick={() =>
+                            setCustomItems((current) =>
+                              current.filter((currentItem) => currentItem.id !== item.id),
+                            )
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </Card>
+
               <div className="space-y-6">
                 {visibleSectionTables.map(({ section, items: sectionItems }) => (
                   <Card
@@ -1357,8 +1510,17 @@ function CriarRequisicaoPage() {
                               <td className="px-4 py-3 font-medium text-slate-800">
                                 <div className="flex items-center gap-3">
                                   {item.imagem_url ? (
-                                    <a href={item.imagem_url} target="_blank" rel="noreferrer" className="shrink-0">
-                                      <img src={item.imagem_url} alt={item.nome} className="h-12 w-12 rounded-md border object-cover" />
+                                    <a
+                                      href={item.imagem_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="shrink-0"
+                                    >
+                                      <img
+                                        src={item.imagem_url}
+                                        alt={item.nome}
+                                        className="h-12 w-12 rounded-md border object-cover"
+                                      />
                                     </a>
                                   ) : null}
                                   <span>{item.nome}</span>
@@ -1417,5 +1579,3 @@ function CriarRequisicaoPage() {
     </div>
   );
 }
-
-
