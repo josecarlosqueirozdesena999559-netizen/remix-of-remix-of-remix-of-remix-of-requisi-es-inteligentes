@@ -1,4 +1,5 @@
-import { ArrowLeft, Download, Loader2, Printer } from "lucide-react";
+import { Download, Loader2, Printer, X } from "lucide-react";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -23,6 +24,21 @@ export function PdfDocumentViewer({
   error,
   onBack,
 }: PdfDocumentViewerProps) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onBack();
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onBack]);
+
   const handlePrint = () => {
     if (!url) return;
     const printWindow = window.open(url, "_blank", "noopener,noreferrer");
@@ -30,48 +46,68 @@ export function PdfDocumentViewer({
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col gap-3">
-      <Card className="flex flex-col gap-3 rounded-lg border-slate-200 bg-white px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Voltar">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-2 backdrop-blur-[1px] sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onBack();
+      }}
+    >
+      <Card className="flex h-[94vh] w-full max-w-6xl flex-col gap-0 overflow-hidden rounded-xl border-slate-200 bg-white p-0 shadow-2xl sm:h-[90vh]">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-4">
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold text-slate-900">{title}</h1>
             {subtitle ? <p className="truncate text-xs text-slate-500">{subtitle}</p> : null}
           </div>
-        </div>
-        {url ? (
-          <div className="flex items-center gap-2 pl-12 sm:pl-0">
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <a href={url} download={fileName}>
-                <Download className="h-4 w-4" />
-                Baixar
-              </a>
-            </Button>
-            <Button type="button" size="sm" className="gap-2" onClick={handlePrint}>
-              <Printer className="h-4 w-4" />
-              Imprimir
+
+          <div className="flex shrink-0 items-center gap-2">
+            {url ? (
+              <>
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                  <a href={url} download={fileName}>
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">Baixar</span>
+                  </a>
+                </Button>
+                <Button type="button" size="sm" className="gap-2" onClick={handlePrint}>
+                  <Printer className="h-4 w-4" />
+                  <span className="hidden sm:inline">Imprimir</span>
+                </Button>
+              </>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onBack}
+              aria-label="Fechar visualizador"
+            >
+              <X className="h-5 w-5" />
             </Button>
           </div>
-        ) : null}
+        </header>
+
+        <div className="min-h-0 flex-1 bg-slate-200">
+          {loading ? (
+            <div className="flex h-full min-h-80 items-center justify-center gap-2 text-slate-600">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {loadingLabel}
+            </div>
+          ) : error ? (
+            <div className="m-4 rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+              {error}
+            </div>
+          ) : url ? (
+            <iframe
+              src={`${url}#toolbar=1&navpanes=1&view=FitH`}
+              title={title}
+              className="h-full min-h-[520px] w-full border-0 bg-slate-200"
+            />
+          ) : null}
+        </div>
       </Card>
-      {loading ? (
-        <Card className="flex min-h-80 flex-1 items-center justify-center gap-2 border-slate-200 text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {loadingLabel}
-        </Card>
-      ) : error ? (
-        <Card className="border-red-200 bg-red-50 p-6 text-sm text-red-700">{error}</Card>
-      ) : url ? (
-        <Card className="flex-1 overflow-hidden rounded-lg border-slate-200 bg-slate-200 p-0 shadow-sm">
-          <iframe
-            src={`${url}#toolbar=1&navpanes=1&view=FitH`}
-            title={title}
-            className="h-[calc(100vh-13rem)] min-h-[620px] w-full border-0 bg-slate-200"
-          />
-        </Card>
-      ) : null}
     </div>
   );
 }

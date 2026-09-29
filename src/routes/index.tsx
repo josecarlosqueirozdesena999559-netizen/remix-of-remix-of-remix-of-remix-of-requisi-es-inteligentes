@@ -83,13 +83,13 @@ function Index() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4 py-8 text-slate-900">
-      <main className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-5">
+      <main className="w-full max-w-xs rounded-lg border border-slate-200 bg-white p-5">
         <div className="mb-4 text-center">
           <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
           <p className="mt-1 text-sm text-slate-500">Acesse o painel de solicitações</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="nome" className="text-slate-700">
               Usuário
@@ -99,7 +99,7 @@ function Index() {
               type="text"
               autoComplete="username"
               placeholder="Usuário"
-              className="h-11 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
+              className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
               required
@@ -115,7 +115,7 @@ function Index() {
               type="password"
               autoComplete="current-password"
               placeholder="Senha"
-              className="h-11 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
+              className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
@@ -123,14 +123,14 @@ function Index() {
           </div>
 
           {error && (
-            <p className="rounded border border-destructive/20 bg-destructive/5 px-2 py-1 text-center text-xs text-destructive sm:col-span-2">
+            <p className="rounded border border-destructive/20 bg-destructive/5 px-2 py-1 text-center text-xs text-destructive">
               {error}
             </p>
           )}
 
           <Button
             type="submit"
-            className="h-11 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800 sm:col-span-2"
+            className="h-10 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800"
           >
             <LockKeyhole className="h-4 w-4" />
             Entrar
