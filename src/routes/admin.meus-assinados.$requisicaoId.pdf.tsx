@@ -22,6 +22,7 @@ interface Requisicao {
   saida_codigo: string | null;
   categoria: string | null;
   setor: string | null;
+  programa?: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
   solicitante_funcao: string | null;
@@ -51,7 +52,7 @@ function MeuAssinadoPdfPage() {
       const requestResult = await supabase
         .from("requisicoes")
         .select(
-          "id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment",
+          "id,saida_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment",
         )
         .eq("id", requisicaoId)
         .maybeSingle();

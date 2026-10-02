@@ -46,7 +46,7 @@ function MinhaAssinaturaPdfPage() {
         const requestResult = await supabase
           .from("requisicoes")
           .select(
-            "id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment,signed_attachment",
+            "id,saida_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment,signed_attachment",
           )
           .eq("id", requisicaoId)
           .maybeSingle();

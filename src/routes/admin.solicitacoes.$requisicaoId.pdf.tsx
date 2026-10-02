@@ -16,6 +16,7 @@ interface Requisicao {
   saida_codigo: string | null;
   categoria: string | null;
   setor: string | null;
+  programa?: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
   solicitante_funcao: string | null;
@@ -47,13 +48,13 @@ function SolicitacaoPdfPage() {
       request: Requisicao,
       code: string,
     ): Promise<RequestPdfData> {
-      let programa = request.setor || "-";
+      let programa = request.programa || request.setor || "-";
       let requesterDisplayName = request.solicitante || "-";
       let requesterDisplayCpf = request.solicitante_cpf || "-";
       let requesterDisplayRole = request.solicitante_funcao || "Solicitante do setor";
 
       const sectorName = request.setor?.trim();
-      if (sectorName) {
+      if (sectorName && !request.programa) {
         const { data: setorData } = await supabase
           .from("setores")
           .select("programa")
@@ -95,7 +96,7 @@ function SolicitacaoPdfPage() {
       const requestResult = await supabase
         .from("requisicoes")
         .select(
-          "id,saida_codigo,categoria,setor,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment",
+          "id,saida_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment",
         )
         .eq("id", requisicaoId)
         .maybeSingle();

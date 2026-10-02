@@ -13,6 +13,7 @@ export interface SignedRequestProcessPdfRow {
   saida_codigo: string | null;
   categoria: string | null;
   setor: string | null;
+  programa?: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
   solicitante_funcao: string | null;

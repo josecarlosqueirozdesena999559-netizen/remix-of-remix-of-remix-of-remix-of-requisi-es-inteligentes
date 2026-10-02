@@ -111,6 +111,7 @@ interface EditableRequestItem {
 interface EditableRequest {
   id: string;
   categoria: string | null;
+  programa?: string | null;
   setor: string | null;
   status: string | null;
   solicitante: string | null;
@@ -137,6 +138,11 @@ interface SetorPermissionRow {
   programa?: string | null;
 }
 
+interface ProgramOption {
+  id: string;
+  nome: string;
+}
+
 interface ResponsibleSectorProgramRow {
   programas: {
     nome: string | null;
@@ -148,8 +154,10 @@ interface SectorResponsibleUserRow {
 }
 
 const requestSelectWithFeedback =
-  "id,categoria,setor,status,solicitante,solicitante_cpf,items,return_reason";
-const requestSelectFallback = "id,categoria,setor,status,solicitante,solicitante_cpf,items";
+  "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items,return_reason";
+const requestSelectFallback = "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items";
+const ramonEnteralSector = "RAMON - DIETAS ENTERAIS";
+const ramonEnteralCategory = "Insumos para Dietas Enterais";
 const productCategorySet = new Set<string>(PRODUCT_CATEGORIES);
 const ramonRequestDestinationOptions = ["ATENÇÃO BÁSICA", "HOSPITAL", "CASA DE APOIO"];
 
@@ -642,7 +650,8 @@ function CriarRequisicaoPage() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [sectorUsers, setSectorUsers] = useState<SectorUserOption[]>([]);
   const [selectedSolicitanteId, setSelectedSolicitanteId] = useState<string>("");
-  const [selectedRamonRequestDestination, setSelectedRamonRequestDestination] = useState("");
+  const [selectedRamonProgram, setSelectedRamonProgram] = useState("");
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
 
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedGroupLabel, setSelectedGroupLabel] = useState("");
@@ -688,7 +697,7 @@ function CriarRequisicaoPage() {
       setError(null);
 
       try {
-        const [{ profile }, itemsResult, requestResult, usuariosResult] = await Promise.all([
+        const [{ profile }, itemsResult, programsResult, requestResult, usuariosResult] = await Promise.all([
           getCurrentUserProfile(),
           supabase
             .from("itens")
@@ -696,6 +705,7 @@ function CriarRequisicaoPage() {
               "id,nome,unidade,categoria,subcategoria,imagem_url,imagem_path,programa_produtos(programas(id,nome))",
             )
             .order("nome", { ascending: true }),
+          supabase.from("programas").select("id,nome").order("nome", { ascending: true }),
           editingRequestId
             ? supabase
                 .from("requisicoes")
@@ -734,9 +744,9 @@ function CriarRequisicaoPage() {
             : null;
         }
 
-        if (itemsResult.error || requestError) {
+        if (itemsResult.error || programsResult.error || requestError) {
           throw new Error(
-            itemsResult.error?.message || requestError?.message || "Erro ao carregar solicitação.",
+            itemsResult.error?.message || programsResult.error?.message || requestError?.message || "Erro ao carregar solicitação.",
           );
         }
 
@@ -768,7 +778,7 @@ function CriarRequisicaoPage() {
         ]);
         const isRamonProfile = isRamonRequester(profile);
         const categories = isRamonProfile
-          ? [...PRODUCT_CATEGORIES]
+          ? [ramonEnteralCategory]
           : profileCategories.length > 0 || profileProgramKeys.length === 0
             ? profileCategories
             : [...PRODUCT_CATEGORIES];
@@ -842,6 +852,8 @@ function CriarRequisicaoPage() {
 
         setAllowedCategories(categories);
         setAllowedProgramKeys(isRamonProfile ? [] : profileProgramKeys);
+        setPrograms((programsResult.data ?? []) as ProgramOption[]);
+        setSelectedRamonProgram(editableRequest?.programa || "");
         setItems(loadedItems);
         setEditingRequestStatus(editableRequest?.status || null);
         setSelectedRamonRequestDestination(getRamonDestinationValue(editableRequest?.setor));
@@ -937,7 +949,7 @@ function CriarRequisicaoPage() {
 
         const fallbackCategories = getAllowedCategories(profile);
         const categoriesToUse = isRamonSelectedRequester
-          ? [...PRODUCT_CATEGORIES]
+          ? [ramonEnteralCategory]
           : resolvedCategories.length > 0
             ? resolvedCategories
             : fallbackCategories;
@@ -1052,8 +1064,8 @@ function CriarRequisicaoPage() {
       return;
     }
 
-    if (isRamonRequester(chosenSolicitante) && !selectedRamonRequestDestination) {
-      setError("Selecione se o pedido do Ramon é para Atenção Básica, Hospital ou Casa de Apoio.");
+    if (isRamonRequester(chosenSolicitante) && !selectedRamonProgram) {
+      setError("Selecione o programa que deve aparecer no PDF.");
       setSaving(false);
       return;
     }
@@ -1150,11 +1162,12 @@ function CriarRequisicaoPage() {
     const payload = {
       categoria: requestCategory,
       setor: isRamonRequester(chosenSolicitante)
-        ? selectedRamonRequestDestination
+        ? ramonEnteralSector
         : chosenSolicitante.unidade_nome ||
           chosenSolicitante.setor ||
           profile.unidade_nome ||
           profile.setor,
+      programa: isRamonRequester(chosenSolicitante) ? selectedRamonProgram : null,
       solicitante: chosenSolicitante.nome,
       solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,
       solicitante_funcao: chosenSolicitante.funcao || profile.funcao,
@@ -1200,6 +1213,7 @@ function CriarRequisicaoPage() {
       const insertResult = await (supabase as any).rpc("create_ramon_requisicao", {
         p_categoria: payload.categoria,
         p_setor: payload.setor,
+        p_programa: payload.programa,
         p_solicitante: payload.solicitante,
         p_solicitante_cpf: payload.solicitante_cpf,
         p_solicitante_funcao: payload.solicitante_funcao,
@@ -1296,28 +1310,17 @@ function CriarRequisicaoPage() {
 
           {isRamonRequest && (
             <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
-              <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
-                Destino do pedido do Ramon
-              </div>
+              <div className="text-xs font-semibold text-slate-800">Programa do pedido</div>
               <div className="max-w-md space-y-1">
-                <Label
-                  htmlFor="select-ramon-destination"
-                  className="text-xs text-slate-500 font-normal"
-                >
-                  Selecione onde este pedido deve aparecer no setor:
+                <Label htmlFor="select-ramon-program" className="text-xs text-slate-500 font-normal">
+                  Escolha o programa que ser� impresso no PDF:
                 </Label>
-                <select
-                  id="select-ramon-destination"
-                  value={selectedRamonRequestDestination}
-                  onChange={(event) => setSelectedRamonRequestDestination(event.target.value)}
-                  required
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  <option value="">Selecione o setor do pedido</option>
-                  {ramonRequestDestinationOptions.map((destination) => (
-                    <option key={destination} value={destination}>
-                      {destination}
-                    </option>
+                <select id="select-ramon-program" value={selectedRamonProgram}
+                  onChange={(event) => setSelectedRamonProgram(event.target.value)} required
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                  <option value="">Selecione o programa</option>
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.nome}>{program.nome}</option>
                   ))}
                 </select>
               </div>

@@ -8,6 +8,7 @@ export interface RequisicaoPdfRow {
   saida_codigo: string | null;
   categoria: string | null;
   setor: string | null;
+  programa?: string | null;
   solicitante: string | null;
   solicitante_cpf: string | null;
   solicitante_funcao: string | null;
@@ -18,13 +19,13 @@ export interface RequisicaoPdfRow {
 }
 
 export async function resolveRequestForPdf(request: RequisicaoPdfRow, code: string): Promise<RequestPdfData> {
-  let programa = request.setor || "-";
+  let programa = request.programa || request.setor || "-";
   let requesterDisplayName = request.solicitante || "-";
   let requesterDisplayCpf = request.solicitante_cpf || "-";
   let requesterDisplayRole = request.solicitante_funcao || "Solicitante do setor";
 
   const sectorName = request.setor?.trim();
-  if (sectorName) {
+  if (sectorName && !request.programa) {
     const { data: setorData } = await supabase
       .from("setores")
       .select("nome,programa")
