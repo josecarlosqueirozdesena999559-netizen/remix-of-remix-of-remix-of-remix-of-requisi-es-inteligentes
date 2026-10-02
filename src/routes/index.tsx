@@ -61,8 +61,7 @@ function Index() {
       } else if (profile?.is_admin) {
         navigate({ to: "/admin" });
       } else {
-        await supabase.auth.signOut();
-        throw new Error("Usuario ou senha");
+        navigate({ to: "/admin" });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Usuario ou senha");
