@@ -157,7 +157,11 @@ const requestSelectWithFeedback =
   "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items,return_reason";
 const requestSelectFallback = "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items";
 const ramonEnteralSector = "RAMON - DIETAS ENTERAIS";
-const ramonEnteralCategory = "Insumos para Dietas Enterais";
+const ramonAllowedCategories = [
+  "Insumos para Dietas Enterais",
+  "Frutas, Verduras e Prote�nas",
+  "G�neros aliment�cios/limpeza",
+];
 const productCategorySet = new Set<string>(PRODUCT_CATEGORIES);
 const ramonRequestDestinationOptions = ["ATENÇÃO BÁSICA", "HOSPITAL", "CASA DE APOIO"];
 
@@ -778,7 +782,7 @@ function CriarRequisicaoPage() {
         ]);
         const isRamonProfile = isRamonRequester(profile);
         const categories = isRamonProfile
-          ? [ramonEnteralCategory]
+          ? ramonAllowedCategories
           : profileCategories.length > 0 || profileProgramKeys.length === 0
             ? profileCategories
             : [...PRODUCT_CATEGORIES];
@@ -949,7 +953,7 @@ function CriarRequisicaoPage() {
 
         const fallbackCategories = getAllowedCategories(profile);
         const categoriesToUse = isRamonSelectedRequester
-          ? [ramonEnteralCategory]
+          ? ramonAllowedCategories
           : resolvedCategories.length > 0
             ? resolvedCategories
             : fallbackCategories;
