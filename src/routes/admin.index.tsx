@@ -930,7 +930,12 @@ function AdminHome() {
                       <button
                         key={req.id}
                         type="button"
-                        onClick={() => navigate({ to: "/admin/minhas-assinaturas" })}
+                        onClick={() =>
+                          navigate({
+                            to: "/admin/minhas-assinaturas/$requisicaoId/pdf",
+                            params: { requisicaoId: req.id },
+                          })
+                        }
                         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
                       >
                         <div className="flex items-center justify-between gap-2">
