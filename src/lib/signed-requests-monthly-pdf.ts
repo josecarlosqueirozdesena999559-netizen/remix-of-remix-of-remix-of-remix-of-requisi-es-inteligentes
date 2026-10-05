@@ -11,9 +11,11 @@ type JsPdfWithAutoTable = jsPDF & {
 
 export interface SignedRequestMonthlyPdfRow {
   code: string;
+  outputCode: string;
   requester: string;
   location: string;
   requestDate: string;
+  outputDate: string;
 }
 
 function toPdfText(value: unknown) {
@@ -51,7 +53,7 @@ export async function createSignedRequestsMonthlyPdfBlob(
   month: string,
   rows: SignedRequestMonthlyPdfRow[],
 ) {
-  const doc = new jsPDF() as JsPdfWithAutoTable;
+  const doc = new jsPDF({ orientation: "landscape" }) as JsPdfWithAutoTable;
   const sortedRows = sortRows(rows);
   const monthLabel = formatMonthLabel(month);
   const generatedAt = new Intl.DateTimeFormat("pt-BR", {
@@ -79,18 +81,29 @@ export async function createSignedRequestsMonthlyPdfBlob(
     startY: 46,
     head: [[
       toPdfText("Número"),
+      toPdfText("Saída do SIG"),
       toPdfText("Requisitante"),
-      toPdfText("Local"),
-      toPdfText("Data"),
+      toPdfText("Setor"),
+      toPdfText("Data da solicitação"),
+      toPdfText("Data da saída"),
     ]],
     body: sortedRows.length
       ? sortedRows.map((row) => [
           toPdfText(row.code || "-"),
+          toPdfText(row.outputCode || "-"),
           toPdfText(row.requester || "-"),
           toPdfText(row.location || "-"),
           toPdfText(row.requestDate || "-"),
+          toPdfText(row.outputDate || "-"),
         ])
-      : [[toPdfText("-"), toPdfText("Nenhuma solicitação encontrada"), "-", "-"]],
+      : [[
+          toPdfText("-"),
+          toPdfText("-"),
+          toPdfText("Nenhuma solicitação encontrada"),
+          toPdfText("-"),
+          toPdfText("-"),
+          toPdfText("-"),
+        ]],
     theme: "grid",
     margin: { left: PAGE_MARGIN, right: PAGE_MARGIN, bottom: 16 },
     headStyles: {
@@ -110,10 +123,12 @@ export async function createSignedRequestsMonthlyPdfBlob(
       valign: "middle",
     },
     columnStyles: {
-      0: { cellWidth: 26, halign: "center" },
-      1: { cellWidth: 58 },
-      2: { cellWidth: 72 },
-      3: { cellWidth: 28, halign: "center" },
+      0: { cellWidth: 30, halign: "center" },
+      1: { cellWidth: 36, halign: "center" },
+      2: { cellWidth: 54 },
+      3: { cellWidth: 82 },
+      4: { cellWidth: 32, halign: "center" },
+      5: { cellWidth: 32, halign: "center" },
     },
     styles: {
       overflow: "linebreak",

@@ -3,9 +3,11 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronRight,
   FileText,
   Loader2,
   RotateCcw,
+  Search,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -132,6 +134,7 @@ function Solicitacoes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [sectorFilter, setSectorFilter] = useState("");
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [uploadMessageType, setUploadMessageType] = useState<"success" | "error">("success");
@@ -290,6 +293,12 @@ function Solicitacoes() {
     });
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [data]);
+
+  const visibleGroups = useMemo(() => {
+    const query = sectorFilter.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return grouped;
+    return grouped.filter(([sector]) => sector.toLocaleLowerCase("pt-BR").includes(query));
+  }, [grouped, sectorFilter]);
 
   if (isChildRoute) {
     return <Outlet />;
@@ -844,21 +853,45 @@ function Solicitacoes() {
           </div>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {grouped.map(([setor, items]) => (
-            <button
-              key={setor}
-              type="button"
-              onClick={() => setSelected(setor)}
-              className="rounded-md border-l-4 border-primary/60 bg-card p-4 text-left transition-colors hover:bg-accent/50"
-            >
-              <p className="text-foreground">{setor}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {items.length} {items.length === 1 ? "registro" : "registros"}
-              </p>
-            </button>
-          ))}
-        </div>
+        <Card className="space-y-4 rounded-2xl border-slate-200/80 bg-white p-5 shadow-xs">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Solicitações por setor</h2>
+              <p className="text-xs text-slate-500">Selecione um setor para visualizar as solicitações pendentes.</p>
+            </div>
+            <label className="relative w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={sectorFilter}
+                onChange={(event) => setSectorFilter(event.target.value)}
+                placeholder="Buscar setor..."
+                className="pl-9"
+              />
+            </label>
+          </div>
+          <div className="space-y-2">
+            {visibleGroups.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Nenhum setor encontrado.</div>
+            ) : (
+              visibleGroups.map(([setor, items]) => (
+                <button
+                  key={setor}
+                  type="button"
+                  onClick={() => setSelected(setor)}
+                  className="flex w-full items-center justify-between gap-4 rounded-xl border border-slate-200 border-l-4 border-l-emerald-500 bg-white px-4 py-3 text-left shadow-xs transition hover:border-emerald-300 hover:bg-emerald-50/40"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-slate-800">{setor}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      {items.length} {items.length === 1 ? "solicitação pendente" : "solicitações pendentes"}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                </button>
+              ))
+            )}
+          </div>
+        </Card>
       )}
 
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
