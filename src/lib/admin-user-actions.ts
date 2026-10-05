@@ -61,6 +61,31 @@ function createLoginFromEmail(email: string) {
   return email.split("@")[0]?.trim() || email.trim();
 }
 
+function normalizeCpf(value: unknown) {
+  const cpf = cleanString(value);
+  if (!cpf) return null;
+
+  const digits = cpf.replace(/\D/g, "");
+  if (digits.length !== 11) {
+    throw new Error("Informe um CPF com 11 dígitos.");
+  }
+
+  return digits;
+}
+
+function readableSupabaseError(error: unknown, fallback: string) {
+  const candidate = error as { code?: string; message?: string } | null;
+  const message = candidate?.message || fallback;
+
+  if (candidate?.code === "23505" || /duplicate key|already registered/i.test(message)) {
+    if (/cpf/i.test(message)) return "Este CPF já está cadastrado para outro usuário.";
+    if (/email/i.test(message)) return "Este email já está cadastrado para outro usuário.";
+    return "Já existe um usuário com esses dados.";
+  }
+
+  return message;
+}
+
 function validateUserPayload(input: unknown): AdminUserPayload {
   if (!input || typeof input !== "object") {
     throw new Error("Dados do usuário inválidos.");
@@ -91,7 +116,7 @@ function validateUserPayload(input: unknown): AdminUserPayload {
     nome,
     usuario,
     email,
-    cpf: cleanString(data.cpf) || null,
+    cpf: normalizeCpf(data.cpf),
     funcao: cleanString(data.funcao) || null,
     setor: cleanString(data.setor) || null,
     unidade_nome: cleanString(data.unidade_nome) || null,
@@ -158,12 +183,21 @@ async function findAuthUserByEmail(email: string) {
   return null;
 }
 
-async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: string | null) {
+async function ensureAuthUser(
+  payload: AdminUserPayload,
+  currentAuthUserId?: string | null,
+  isExistingProfile = false,
+) {
   const authUserId = currentAuthUserId?.trim();
   const email = payload.email || createInternalEmail(payload.usuario);
-  const existingAuthUser = authUserId
-    ? { id: authUserId }
-    : await findAuthUserByEmail(email);
+  let existingAuthUser: { id: string } | null = null;
+
+  if (authUserId) {
+    const { data, error } = await (supabaseAdmin as any).auth.admin.getUserById(authUserId);
+    if (!error && data?.user?.id) existingAuthUser = { id: data.user.id };
+  }
+
+  if (!existingAuthUser) existingAuthUser = await findAuthUserByEmail(email);
 
   if (existingAuthUser?.id) {
     const updatePayload: Record<string, unknown> = {
@@ -184,6 +218,9 @@ async function ensureAuthUser(payload: AdminUserPayload, currentAuthUserId?: str
   }
 
   if (!payload.password || payload.password.length < 6) {
+    // Cadastros antigos podem apontar para um usuário removido do Supabase Auth.
+    // Nome e CPF continuam editáveis; ao definir uma nova senha o login é recriado.
+    if (isExistingProfile) return null;
     throw new Error("Informe uma senha com pelo menos 6 caracteres para criar o login.");
   }
 
@@ -217,12 +254,13 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
       setor: string | null;
       unidade_nome: string | null;
       categorias_permitidas: unknown;
+      cpf: string | null;
     } | null = null;
 
     if (payload.id) {
       const { data: profile, error } = await (supabaseAdmin as any)
         .from("usuarios")
-        .select("auth_user_id,email,is_admin,role,funcao,setor,unidade_nome,categorias_permitidas")
+        .select("auth_user_id,email,is_admin,role,funcao,setor,unidade_nome,categorias_permitidas,cpf")
         .eq("id", payload.id)
         .maybeSingle();
 
@@ -290,6 +328,22 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
       );
     }
 
+    if (payload.cpf) {
+      const { data: cpfProfiles, error: cpfError } = await (supabaseAdmin as any)
+        .from("usuarios")
+        .select("id,cpf")
+        .not("cpf", "is", null);
+
+      if (cpfError) throw new Error(readableSupabaseError(cpfError, "Erro ao validar o CPF."));
+
+      const duplicatedCpf = (cpfProfiles ?? []).some(
+        (profile: { id: string; cpf: string | null }) =>
+          profile.id !== payload.id && profile.cpf?.replace(/\D/g, "") === payload.cpf,
+      );
+
+      if (duplicatedCpf) throw new Error("Este CPF já está cadastrado para outro usuário.");
+    }
+
     // Preserve the existing auth email for edits. The app authenticates by
     // `usuario` via `resolve_login_email`, so changing profile fields should
     // not force an auth email rotation.
@@ -298,7 +352,11 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
       email: currentProfile?.email || payload.email,
     };
 
-    const authUserId = await ensureAuthUser(authPayload, currentProfile?.auth_user_id);
+    const authUserId = await ensureAuthUser(
+      authPayload,
+      currentProfile?.auth_user_id,
+      Boolean(currentProfile),
+    );
 
     const preservedAdminSections =
       currentProfile?.is_admin && Array.isArray(currentProfile.categorias_permitidas)
@@ -342,7 +400,9 @@ export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({
           .single()
       : await (supabaseAdmin as any).from("usuarios").insert(profilePayload).select("id").single();
 
-    if (result.error) throw new Error(result.error.message);
+    if (result.error) {
+      throw new Error(readableSupabaseError(result.error, "Não foi possível salvar o usuário."));
+    }
 
     return { id: result.data.id };
   });

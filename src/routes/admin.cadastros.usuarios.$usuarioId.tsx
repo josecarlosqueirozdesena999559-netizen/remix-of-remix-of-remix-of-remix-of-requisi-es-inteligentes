@@ -34,6 +34,7 @@ function UsuarioFormPage() {
   const isNew = usuarioId === "novo";
 
   const [nome, setNome] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("123456");
@@ -79,6 +80,7 @@ function UsuarioFormPage() {
 
       const usuario = data as UsuarioRow;
       setNome(usuario.nome);
+      setUsuario(usuario.usuario ?? usuario.email?.split("@")[0] ?? "");
       setCpf(usuario.cpf ?? "");
       setEmail(usuario.email ?? "");
       setSenha("");
@@ -98,10 +100,18 @@ function UsuarioFormPage() {
     setError(null);
 
     const nomeLimpo = nome.trim();
+    const usuarioLimpo = usuario.trim();
     const emailLimpo = email.trim().toLowerCase();
 
-    if (!nomeLimpo || !emailLimpo) {
-      setError("Informe nome e email.");
+    if (!nomeLimpo || !usuarioLimpo || !emailLimpo) {
+      setError("Informe nome, usuário de acesso e email.");
+      setSaving(false);
+      return;
+    }
+
+    const cpfLimpo = cpf.replace(/\D/g, "");
+    if (cpfLimpo && cpfLimpo.length !== 11) {
+      setError("Informe um CPF com 11 dígitos.");
       setSaving(false);
       return;
     }
@@ -109,9 +119,9 @@ function UsuarioFormPage() {
     const payload = {
       id: isNew ? null : usuarioId,
       nome: nomeLimpo,
-      usuario: emailLimpo.split("@")[0] || emailLimpo,
+      usuario: usuarioLimpo,
       email: emailLimpo,
-      cpf: cpf.trim() || null,
+      cpf: cpfLimpo || null,
       password: senha.trim() || null,
     };
 
@@ -193,26 +203,39 @@ function UsuarioFormPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="cpf">CPF</Label>
+                <Label htmlFor="usuario">Usuário de acesso</Label>
                 <Input
-                  id="cpf"
-                  value={cpf}
-                  onChange={(event) => setCpf(event.target.value)}
-                  placeholder="CPF"
+                  id="usuario"
+                  value={usuario}
+                  onChange={(event) => setUsuario(event.target.value)}
+                  placeholder="Nome usado para entrar"
+                  required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="cpf">CPF</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="email@exemplo.com"
-                  required
+                  id="cpf"
+                  value={cpf}
+                  onChange={(event) => setCpf(event.target.value.replace(/\D/g, "").slice(0, 11))}
+                  placeholder="Somente números"
+                  inputMode="numeric"
+                  maxLength={11}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="email@exemplo.com"
+                required
+              />
             </div>
 
             <div className="space-y-2">
