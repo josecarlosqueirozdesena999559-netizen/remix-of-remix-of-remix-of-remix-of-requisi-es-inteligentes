@@ -704,7 +704,7 @@ function AssinadasPage() {
           </div>
         </Card>
       ) : (
-        <Card className="space-y-4 rounded-2xl border-slate-200/80 bg-white p-5 shadow-xs">
+        <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">Assinados por setor</h3>
@@ -742,7 +742,7 @@ function AssinadasPage() {
               ))
             )}
           </div>
-        </Card>
+        </div>
       )}
 
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>

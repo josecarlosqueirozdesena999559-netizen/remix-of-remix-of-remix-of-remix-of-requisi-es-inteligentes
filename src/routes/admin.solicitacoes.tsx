@@ -642,7 +642,7 @@ function Solicitacoes() {
           )}
 
           <div className="rounded-xl overflow-x-auto border border-slate-200">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[11px] tracking-wider border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-left">Solicitante</th>
@@ -665,7 +665,7 @@ function Solicitacoes() {
                       <td className="px-3 py-2 text-foreground">{code}</td>
                       <td className="px-3 py-2">
                         <div
-                          className={`flex flex-wrap items-center gap-2 rounded-md border px-2 py-2 transition-colors ${
+                          className={`grid min-w-[370px] grid-cols-2 items-center gap-2 rounded-md border px-2 py-2 transition-colors ${
                             draggingId === r.id
                               ? "border-emerald-500 bg-emerald-50"
                               : "border-transparent"
@@ -684,7 +684,7 @@ function Solicitacoes() {
                               }))
                             }
                             placeholder="Código da saída do SIG"
-                            className="h-8 w-40"
+                            className="h-9 w-full"
                           />
                           <Input
                             type="date"
@@ -697,7 +697,7 @@ function Solicitacoes() {
                                 [r.id]: event.target.value,
                               }))
                             }
-                            className="h-8 w-36"
+                            className="h-9 w-full"
                             aria-label="Data da saída do SIG"
                           />
                           {getAttachmentFiles(r.admin_attachment).length > 0 ? (
@@ -728,7 +728,7 @@ function Solicitacoes() {
                           />
 
                           {stagedFiles[r.id] ? (
-                            <div className="flex items-center gap-2">
+                            <div className="col-span-2 flex flex-wrap items-center gap-2">
                               <span className="max-w-44 truncate rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
                                 {stagedFiles[r.id].length === 1
                                   ? `PDF: ${stagedFiles[r.id][0].name}`
@@ -764,7 +764,7 @@ function Solicitacoes() {
                               type="button"
                               variant="outline"
                               size="sm"
-                              className={`gap-2 rounded-xl ${draggingId === r.id ? "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50" : ""}`}
+                              className={`col-span-2 w-fit gap-2 rounded-xl ${draggingId === r.id ? "border-emerald-500 bg-emerald-50 text-emerald-900 hover:bg-emerald-50" : ""}`}
                               disabled={uploadingId === r.id || missingItems}
                               onClick={() => document.getElementById(`saida-${r.id}`)?.click()}
                             >
@@ -778,7 +778,7 @@ function Solicitacoes() {
                           )}
 
                           {draggingId === r.id && (
-                            <span className="text-xs font-semibold text-emerald-700">
+                            <span className="col-span-2 text-xs font-semibold text-emerald-700">
                               Solte os PDFs para reconhecer
                             </span>
                           )}
@@ -853,7 +853,7 @@ function Solicitacoes() {
           </div>
         </Card>
       ) : (
-        <Card className="space-y-4 rounded-2xl border-slate-200/80 bg-white p-5 shadow-xs">
+        <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-800">Solicitações por setor</h2>
@@ -891,7 +891,7 @@ function Solicitacoes() {
               ))
             )}
           </div>
-        </Card>
+        </div>
       )}
 
       <Dialog open={Boolean(reviewingRequest)} onOpenChange={(open) => !open && closeReview()}>
