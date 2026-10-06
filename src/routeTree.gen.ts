@@ -9,45 +9,45 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AppRouteImport } from './routes/app'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AdminWhatsappUsuariosRouteImport } from './routes/admin.whatsapp-usuarios'
-import { Route as AdminSolicitacoesRouteImport } from './routes/admin.solicitacoes'
-import { Route as AdminSelecionarSolicitanteRouteImport } from './routes/admin.selecionar-solicitante'
-import { Route as AdminRequisicoesAvulsasRouteImport } from './routes/admin.requisicoes-avulsas'
-import { Route as AdminRequisicaoRouteImport } from './routes/admin.requisicao'
-import { Route as AdminMinhasRequisicoesRouteImport } from './routes/admin.minhas-requisicoes'
-import { Route as AdminMinhasAssinaturasRouteImport } from './routes/admin.minhas-assinaturas'
-import { Route as AdminMeusAssinadosRouteImport } from './routes/admin.meus-assinados'
-import { Route as AdminConversasRouteImport } from './routes/admin.conversas'
-import { Route as AdminControleEntradasRouteImport } from './routes/admin.controle-entradas'
-import { Route as AdminControleAssinaturasRouteImport } from './routes/admin.controle-assinaturas'
-import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
-import { Route as AdminCompletarCadastroRouteImport } from './routes/admin.completar-cadastro'
-import { Route as AdminBackupRouteImport } from './routes/admin.backup'
-import { Route as AdminAssinaturasAvulsasAssinadasRouteImport } from './routes/admin.assinaturas-avulsas-assinadas'
-import { Route as AdminAssinaturasAvulsasRouteImport } from './routes/admin.assinaturas-avulsas'
 import { Route as AdminAssinadasRouteImport } from './routes/admin.assinadas'
-import { Route as AdminCadastrosUsuariosRouteImport } from './routes/admin.cadastros.usuarios'
-import { Route as AdminCadastrosSetoresPrincipaisRouteImport } from './routes/admin.cadastros.setores-principais'
-import { Route as AdminCadastrosProgramasRouteImport } from './routes/admin.cadastros.programas'
-import { Route as AdminCadastrosProdutosRouteImport } from './routes/admin.cadastros.produtos'
+import { Route as AdminAssinaturasAvulsasRouteImport } from './routes/admin.assinaturas-avulsas'
+import { Route as AdminAssinaturasAvulsasAssinadasRouteImport } from './routes/admin.assinaturas-avulsas-assinadas'
+import { Route as AdminBackupRouteImport } from './routes/admin.backup'
+import { Route as AdminCompletarCadastroRouteImport } from './routes/admin.completar-cadastro'
+import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
+import { Route as AdminControleAssinaturasRouteImport } from './routes/admin.controle-assinaturas'
+import { Route as AdminControleEntradasRouteImport } from './routes/admin.controle-entradas'
+import { Route as AdminConversasRouteImport } from './routes/admin.conversas'
+import { Route as AdminMeusAssinadosRouteImport } from './routes/admin.meus-assinados'
+import { Route as AdminMinhasAssinaturasRouteImport } from './routes/admin.minhas-assinaturas'
+import { Route as AdminMinhasRequisicoesRouteImport } from './routes/admin.minhas-requisicoes'
+import { Route as AdminRequisicaoRouteImport } from './routes/admin.requisicao'
+import { Route as AdminRequisicoesAvulsasRouteImport } from './routes/admin.requisicoes-avulsas'
+import { Route as AdminSelecionarSolicitanteRouteImport } from './routes/admin.selecionar-solicitante'
+import { Route as AdminSolicitacoesRouteImport } from './routes/admin.solicitacoes'
+import { Route as AdminWhatsappUsuariosRouteImport } from './routes/admin.whatsapp-usuarios'
 import { Route as AdminCadastrosLocaisRouteImport } from './routes/admin.cadastros.locais'
-import { Route as AdminSolicitacoesRequisicaoIdPdfRouteImport } from './routes/admin.solicitacoes.$requisicaoId.pdf'
-import { Route as AdminMinhasAssinaturasRequisicaoIdPdfRouteImport } from './routes/admin.minhas-assinaturas.$requisicaoId.pdf'
-import { Route as AdminMeusAssinadosRequisicaoIdPdfRouteImport } from './routes/admin.meus-assinados.$requisicaoId.pdf'
-import { Route as AdminCadastrosUsuariosUsuarioIdRouteImport } from './routes/admin.cadastros.usuarios.$usuarioId'
-import { Route as AdminCadastrosProgramasProgramaIdRouteImport } from './routes/admin.cadastros.programas.$programaId'
-import { Route as AdminCadastrosProdutosProdutoIdRouteImport } from './routes/admin.cadastros.produtos.$produtoId'
-import { Route as AdminCadastrosLocaisLocalIdRouteImport } from './routes/admin.cadastros.locais.$localId'
-import { Route as AdminAssinaturasAvulsasAssinaturaIdPdfRouteImport } from './routes/admin.assinaturas-avulsas.$assinaturaId.pdf'
+import { Route as AdminCadastrosProdutosRouteImport } from './routes/admin.cadastros.produtos'
+import { Route as AdminCadastrosProgramasRouteImport } from './routes/admin.cadastros.programas'
+import { Route as AdminCadastrosSetoresPrincipaisRouteImport } from './routes/admin.cadastros.setores-principais'
+import { Route as AdminCadastrosUsuariosRouteImport } from './routes/admin.cadastros.usuarios'
 import { Route as AdminAssinadasRequisicaoIdPdfRouteImport } from './routes/admin.assinadas.$requisicaoId.pdf'
+import { Route as AdminAssinaturasAvulsasAssinaturaIdPdfRouteImport } from './routes/admin.assinaturas-avulsas.$assinaturaId.pdf'
+import { Route as AdminCadastrosLocaisLocalIdRouteImport } from './routes/admin.cadastros.locais.$localId'
+import { Route as AdminCadastrosProdutosProdutoIdRouteImport } from './routes/admin.cadastros.produtos.$produtoId'
+import { Route as AdminCadastrosProgramasProgramaIdRouteImport } from './routes/admin.cadastros.programas.$programaId'
+import { Route as AdminCadastrosUsuariosUsuarioIdRouteImport } from './routes/admin.cadastros.usuarios.$usuarioId'
+import { Route as AdminMeusAssinadosRequisicaoIdPdfRouteImport } from './routes/admin.meus-assinados.$requisicaoId.pdf'
+import { Route as AdminMinhasAssinaturasRequisicaoIdPdfRouteImport } from './routes/admin.minhas-assinaturas.$requisicaoId.pdf'
+import { Route as AdminSolicitacoesRequisicaoIdPdfRouteImport } from './routes/admin.solicitacoes.$requisicaoId.pdf'
 
-const AppRoute = AppRouteImport.update({
-  id: '/app',
-  path: '/app',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -55,9 +55,9 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -65,76 +65,14 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminWhatsappUsuariosRoute = AdminWhatsappUsuariosRouteImport.update({
-  id: '/whatsapp-usuarios',
-  path: '/whatsapp-usuarios',
+const AdminAssinadasRoute = AdminAssinadasRouteImport.update({
+  id: '/assinadas',
+  path: '/assinadas',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminSolicitacoesRoute = AdminSolicitacoesRouteImport.update({
-  id: '/solicitacoes',
-  path: '/solicitacoes',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminSelecionarSolicitanteRoute =
-  AdminSelecionarSolicitanteRouteImport.update({
-    id: '/selecionar-solicitante',
-    path: '/selecionar-solicitante',
-    getParentRoute: () => AdminRoute,
-  } as any)
-const AdminRequisicoesAvulsasRoute = AdminRequisicoesAvulsasRouteImport.update({
-  id: '/requisicoes-avulsas',
-  path: '/requisicoes-avulsas',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminRequisicaoRoute = AdminRequisicaoRouteImport.update({
-  id: '/requisicao',
-  path: '/requisicao',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminMinhasRequisicoesRoute = AdminMinhasRequisicoesRouteImport.update({
-  id: '/minhas-requisicoes',
-  path: '/minhas-requisicoes',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminMinhasAssinaturasRoute = AdminMinhasAssinaturasRouteImport.update({
-  id: '/minhas-assinaturas',
-  path: '/minhas-assinaturas',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminMeusAssinadosRoute = AdminMeusAssinadosRouteImport.update({
-  id: '/meus-assinados',
-  path: '/meus-assinados',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminConversasRoute = AdminConversasRouteImport.update({
-  id: '/conversas',
-  path: '/conversas',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminControleEntradasRoute = AdminControleEntradasRouteImport.update({
-  id: '/controle-entradas',
-  path: '/controle-entradas',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminControleAssinaturasRoute =
-  AdminControleAssinaturasRouteImport.update({
-    id: '/controle-assinaturas',
-    path: '/controle-assinaturas',
-    getParentRoute: () => AdminRoute,
-  } as any)
-const AdminConfiguracoesRoute = AdminConfiguracoesRouteImport.update({
-  id: '/configuracoes',
-  path: '/configuracoes',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminCompletarCadastroRoute = AdminCompletarCadastroRouteImport.update({
-  id: '/completar-cadastro',
-  path: '/completar-cadastro',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminBackupRoute = AdminBackupRouteImport.update({
-  id: '/backup',
-  path: '/backup',
+const AdminAssinaturasAvulsasRoute = AdminAssinaturasAvulsasRouteImport.update({
+  id: '/assinaturas-avulsas',
+  path: '/assinaturas-avulsas',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminAssinaturasAvulsasAssinadasRoute =
@@ -143,19 +81,91 @@ const AdminAssinaturasAvulsasAssinadasRoute =
     path: '/assinaturas-avulsas-assinadas',
     getParentRoute: () => AdminRoute,
   } as any)
-const AdminAssinaturasAvulsasRoute = AdminAssinaturasAvulsasRouteImport.update({
-  id: '/assinaturas-avulsas',
-  path: '/assinaturas-avulsas',
+const AdminBackupRoute = AdminBackupRouteImport.update({
+  id: '/backup',
+  path: '/backup',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminAssinadasRoute = AdminAssinadasRouteImport.update({
-  id: '/assinadas',
-  path: '/assinadas',
+const AdminCompletarCadastroRoute = AdminCompletarCadastroRouteImport.update({
+  id: '/completar-cadastro',
+  path: '/completar-cadastro',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminCadastrosUsuariosRoute = AdminCadastrosUsuariosRouteImport.update({
-  id: '/cadastros/usuarios',
-  path: '/cadastros/usuarios',
+const AdminConfiguracoesRoute = AdminConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminControleAssinaturasRoute =
+  AdminControleAssinaturasRouteImport.update({
+    id: '/controle-assinaturas',
+    path: '/controle-assinaturas',
+    getParentRoute: () => AdminRoute,
+  } as any)
+const AdminControleEntradasRoute = AdminControleEntradasRouteImport.update({
+  id: '/controle-entradas',
+  path: '/controle-entradas',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminConversasRoute = AdminConversasRouteImport.update({
+  id: '/conversas',
+  path: '/conversas',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMeusAssinadosRoute = AdminMeusAssinadosRouteImport.update({
+  id: '/meus-assinados',
+  path: '/meus-assinados',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMinhasAssinaturasRoute = AdminMinhasAssinaturasRouteImport.update({
+  id: '/minhas-assinaturas',
+  path: '/minhas-assinaturas',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMinhasRequisicoesRoute = AdminMinhasRequisicoesRouteImport.update({
+  id: '/minhas-requisicoes',
+  path: '/minhas-requisicoes',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRequisicaoRoute = AdminRequisicaoRouteImport.update({
+  id: '/requisicao',
+  path: '/requisicao',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRequisicoesAvulsasRoute = AdminRequisicoesAvulsasRouteImport.update({
+  id: '/requisicoes-avulsas',
+  path: '/requisicoes-avulsas',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSelecionarSolicitanteRoute =
+  AdminSelecionarSolicitanteRouteImport.update({
+    id: '/selecionar-solicitante',
+    path: '/selecionar-solicitante',
+    getParentRoute: () => AdminRoute,
+  } as any)
+const AdminSolicitacoesRoute = AdminSolicitacoesRouteImport.update({
+  id: '/solicitacoes',
+  path: '/solicitacoes',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminWhatsappUsuariosRoute = AdminWhatsappUsuariosRouteImport.update({
+  id: '/whatsapp-usuarios',
+  path: '/whatsapp-usuarios',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCadastrosLocaisRoute = AdminCadastrosLocaisRouteImport.update({
+  id: '/cadastros/locais',
+  path: '/cadastros/locais',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCadastrosProdutosRoute = AdminCadastrosProdutosRouteImport.update({
+  id: '/cadastros/produtos',
+  path: '/cadastros/produtos',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCadastrosProgramasRoute = AdminCadastrosProgramasRouteImport.update({
+  id: '/cadastros/programas',
+  path: '/cadastros/programas',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminCadastrosSetoresPrincipaisRoute =
@@ -164,62 +174,16 @@ const AdminCadastrosSetoresPrincipaisRoute =
     path: '/cadastros/setores-principais',
     getParentRoute: () => AdminRoute,
   } as any)
-const AdminCadastrosProgramasRoute = AdminCadastrosProgramasRouteImport.update({
-  id: '/cadastros/programas',
-  path: '/cadastros/programas',
+const AdminCadastrosUsuariosRoute = AdminCadastrosUsuariosRouteImport.update({
+  id: '/cadastros/usuarios',
+  path: '/cadastros/usuarios',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminCadastrosProdutosRoute = AdminCadastrosProdutosRouteImport.update({
-  id: '/cadastros/produtos',
-  path: '/cadastros/produtos',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminCadastrosLocaisRoute = AdminCadastrosLocaisRouteImport.update({
-  id: '/cadastros/locais',
-  path: '/cadastros/locais',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminSolicitacoesRequisicaoIdPdfRoute =
-  AdminSolicitacoesRequisicaoIdPdfRouteImport.update({
+const AdminAssinadasRequisicaoIdPdfRoute =
+  AdminAssinadasRequisicaoIdPdfRouteImport.update({
     id: '/$requisicaoId/pdf',
     path: '/$requisicaoId/pdf',
-    getParentRoute: () => AdminSolicitacoesRoute,
-  } as any)
-const AdminMinhasAssinaturasRequisicaoIdPdfRoute =
-  AdminMinhasAssinaturasRequisicaoIdPdfRouteImport.update({
-    id: '/$requisicaoId/pdf',
-    path: '/$requisicaoId/pdf',
-    getParentRoute: () => AdminMinhasAssinaturasRoute,
-  } as any)
-const AdminMeusAssinadosRequisicaoIdPdfRoute =
-  AdminMeusAssinadosRequisicaoIdPdfRouteImport.update({
-    id: '/$requisicaoId/pdf',
-    path: '/$requisicaoId/pdf',
-    getParentRoute: () => AdminMeusAssinadosRoute,
-  } as any)
-const AdminCadastrosUsuariosUsuarioIdRoute =
-  AdminCadastrosUsuariosUsuarioIdRouteImport.update({
-    id: '/$usuarioId',
-    path: '/$usuarioId',
-    getParentRoute: () => AdminCadastrosUsuariosRoute,
-  } as any)
-const AdminCadastrosProgramasProgramaIdRoute =
-  AdminCadastrosProgramasProgramaIdRouteImport.update({
-    id: '/$programaId',
-    path: '/$programaId',
-    getParentRoute: () => AdminCadastrosProgramasRoute,
-  } as any)
-const AdminCadastrosProdutosProdutoIdRoute =
-  AdminCadastrosProdutosProdutoIdRouteImport.update({
-    id: '/$produtoId',
-    path: '/$produtoId',
-    getParentRoute: () => AdminCadastrosProdutosRoute,
-  } as any)
-const AdminCadastrosLocaisLocalIdRoute =
-  AdminCadastrosLocaisLocalIdRouteImport.update({
-    id: '/$localId',
-    path: '/$localId',
-    getParentRoute: () => AdminCadastrosLocaisRoute,
+    getParentRoute: () => AdminAssinadasRoute,
   } as any)
 const AdminAssinaturasAvulsasAssinaturaIdPdfRoute =
   AdminAssinaturasAvulsasAssinaturaIdPdfRouteImport.update({
@@ -227,11 +191,47 @@ const AdminAssinaturasAvulsasAssinaturaIdPdfRoute =
     path: '/$assinaturaId/pdf',
     getParentRoute: () => AdminAssinaturasAvulsasRoute,
   } as any)
-const AdminAssinadasRequisicaoIdPdfRoute =
-  AdminAssinadasRequisicaoIdPdfRouteImport.update({
+const AdminCadastrosLocaisLocalIdRoute =
+  AdminCadastrosLocaisLocalIdRouteImport.update({
+    id: '/$localId',
+    path: '/$localId',
+    getParentRoute: () => AdminCadastrosLocaisRoute,
+  } as any)
+const AdminCadastrosProdutosProdutoIdRoute =
+  AdminCadastrosProdutosProdutoIdRouteImport.update({
+    id: '/$produtoId',
+    path: '/$produtoId',
+    getParentRoute: () => AdminCadastrosProdutosRoute,
+  } as any)
+const AdminCadastrosProgramasProgramaIdRoute =
+  AdminCadastrosProgramasProgramaIdRouteImport.update({
+    id: '/$programaId',
+    path: '/$programaId',
+    getParentRoute: () => AdminCadastrosProgramasRoute,
+  } as any)
+const AdminCadastrosUsuariosUsuarioIdRoute =
+  AdminCadastrosUsuariosUsuarioIdRouteImport.update({
+    id: '/$usuarioId',
+    path: '/$usuarioId',
+    getParentRoute: () => AdminCadastrosUsuariosRoute,
+  } as any)
+const AdminMeusAssinadosRequisicaoIdPdfRoute =
+  AdminMeusAssinadosRequisicaoIdPdfRouteImport.update({
     id: '/$requisicaoId/pdf',
     path: '/$requisicaoId/pdf',
-    getParentRoute: () => AdminAssinadasRoute,
+    getParentRoute: () => AdminMeusAssinadosRoute,
+  } as any)
+const AdminMinhasAssinaturasRequisicaoIdPdfRoute =
+  AdminMinhasAssinaturasRequisicaoIdPdfRouteImport.update({
+    id: '/$requisicaoId/pdf',
+    path: '/$requisicaoId/pdf',
+    getParentRoute: () => AdminMinhasAssinaturasRoute,
+  } as any)
+const AdminSolicitacoesRequisicaoIdPdfRoute =
+  AdminSolicitacoesRequisicaoIdPdfRouteImport.update({
+    id: '/$requisicaoId/pdf',
+    path: '/$requisicaoId/pdf',
+    getParentRoute: () => AdminSolicitacoesRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -466,11 +466,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/app': {
-      id: '/app'
-      path: '/app'
-      fullPath: '/app'
-      preLoaderRoute: typeof AppRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -480,11 +480,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -494,109 +494,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/whatsapp-usuarios': {
-      id: '/admin/whatsapp-usuarios'
-      path: '/whatsapp-usuarios'
-      fullPath: '/admin/whatsapp-usuarios'
-      preLoaderRoute: typeof AdminWhatsappUsuariosRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/solicitacoes': {
-      id: '/admin/solicitacoes'
-      path: '/solicitacoes'
-      fullPath: '/admin/solicitacoes'
-      preLoaderRoute: typeof AdminSolicitacoesRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/selecionar-solicitante': {
-      id: '/admin/selecionar-solicitante'
-      path: '/selecionar-solicitante'
-      fullPath: '/admin/selecionar-solicitante'
-      preLoaderRoute: typeof AdminSelecionarSolicitanteRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/requisicoes-avulsas': {
-      id: '/admin/requisicoes-avulsas'
-      path: '/requisicoes-avulsas'
-      fullPath: '/admin/requisicoes-avulsas'
-      preLoaderRoute: typeof AdminRequisicoesAvulsasRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/requisicao': {
-      id: '/admin/requisicao'
-      path: '/requisicao'
-      fullPath: '/admin/requisicao'
-      preLoaderRoute: typeof AdminRequisicaoRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/minhas-requisicoes': {
-      id: '/admin/minhas-requisicoes'
-      path: '/minhas-requisicoes'
-      fullPath: '/admin/minhas-requisicoes'
-      preLoaderRoute: typeof AdminMinhasRequisicoesRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/minhas-assinaturas': {
-      id: '/admin/minhas-assinaturas'
-      path: '/minhas-assinaturas'
-      fullPath: '/admin/minhas-assinaturas'
-      preLoaderRoute: typeof AdminMinhasAssinaturasRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/meus-assinados': {
-      id: '/admin/meus-assinados'
-      path: '/meus-assinados'
-      fullPath: '/admin/meus-assinados'
-      preLoaderRoute: typeof AdminMeusAssinadosRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/conversas': {
-      id: '/admin/conversas'
-      path: '/conversas'
-      fullPath: '/admin/conversas'
-      preLoaderRoute: typeof AdminConversasRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/controle-entradas': {
-      id: '/admin/controle-entradas'
-      path: '/controle-entradas'
-      fullPath: '/admin/controle-entradas'
-      preLoaderRoute: typeof AdminControleEntradasRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/controle-assinaturas': {
-      id: '/admin/controle-assinaturas'
-      path: '/controle-assinaturas'
-      fullPath: '/admin/controle-assinaturas'
-      preLoaderRoute: typeof AdminControleAssinaturasRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/configuracoes': {
-      id: '/admin/configuracoes'
-      path: '/configuracoes'
-      fullPath: '/admin/configuracoes'
-      preLoaderRoute: typeof AdminConfiguracoesRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/completar-cadastro': {
-      id: '/admin/completar-cadastro'
-      path: '/completar-cadastro'
-      fullPath: '/admin/completar-cadastro'
-      preLoaderRoute: typeof AdminCompletarCadastroRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/backup': {
-      id: '/admin/backup'
-      path: '/backup'
-      fullPath: '/admin/backup'
-      preLoaderRoute: typeof AdminBackupRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/assinaturas-avulsas-assinadas': {
-      id: '/admin/assinaturas-avulsas-assinadas'
-      path: '/assinaturas-avulsas-assinadas'
-      fullPath: '/admin/assinaturas-avulsas-assinadas'
-      preLoaderRoute: typeof AdminAssinaturasAvulsasAssinadasRouteImport
+    '/admin/assinadas': {
+      id: '/admin/assinadas'
+      path: '/assinadas'
+      fullPath: '/admin/assinadas'
+      preLoaderRoute: typeof AdminAssinadasRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/assinaturas-avulsas': {
@@ -606,39 +508,109 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAssinaturasAvulsasRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/assinadas': {
-      id: '/admin/assinadas'
-      path: '/assinadas'
-      fullPath: '/admin/assinadas'
-      preLoaderRoute: typeof AdminAssinadasRouteImport
+    '/admin/assinaturas-avulsas-assinadas': {
+      id: '/admin/assinaturas-avulsas-assinadas'
+      path: '/assinaturas-avulsas-assinadas'
+      fullPath: '/admin/assinaturas-avulsas-assinadas'
+      preLoaderRoute: typeof AdminAssinaturasAvulsasAssinadasRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/cadastros/usuarios': {
-      id: '/admin/cadastros/usuarios'
-      path: '/cadastros/usuarios'
-      fullPath: '/admin/cadastros/usuarios'
-      preLoaderRoute: typeof AdminCadastrosUsuariosRouteImport
+    '/admin/backup': {
+      id: '/admin/backup'
+      path: '/backup'
+      fullPath: '/admin/backup'
+      preLoaderRoute: typeof AdminBackupRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/cadastros/setores-principais': {
-      id: '/admin/cadastros/setores-principais'
-      path: '/cadastros/setores-principais'
-      fullPath: '/admin/cadastros/setores-principais'
-      preLoaderRoute: typeof AdminCadastrosSetoresPrincipaisRouteImport
+    '/admin/completar-cadastro': {
+      id: '/admin/completar-cadastro'
+      path: '/completar-cadastro'
+      fullPath: '/admin/completar-cadastro'
+      preLoaderRoute: typeof AdminCompletarCadastroRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/cadastros/programas': {
-      id: '/admin/cadastros/programas'
-      path: '/cadastros/programas'
-      fullPath: '/admin/cadastros/programas'
-      preLoaderRoute: typeof AdminCadastrosProgramasRouteImport
+    '/admin/configuracoes': {
+      id: '/admin/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/admin/configuracoes'
+      preLoaderRoute: typeof AdminConfiguracoesRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/cadastros/produtos': {
-      id: '/admin/cadastros/produtos'
-      path: '/cadastros/produtos'
-      fullPath: '/admin/cadastros/produtos'
-      preLoaderRoute: typeof AdminCadastrosProdutosRouteImport
+    '/admin/controle-assinaturas': {
+      id: '/admin/controle-assinaturas'
+      path: '/controle-assinaturas'
+      fullPath: '/admin/controle-assinaturas'
+      preLoaderRoute: typeof AdminControleAssinaturasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/controle-entradas': {
+      id: '/admin/controle-entradas'
+      path: '/controle-entradas'
+      fullPath: '/admin/controle-entradas'
+      preLoaderRoute: typeof AdminControleEntradasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/conversas': {
+      id: '/admin/conversas'
+      path: '/conversas'
+      fullPath: '/admin/conversas'
+      preLoaderRoute: typeof AdminConversasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/meus-assinados': {
+      id: '/admin/meus-assinados'
+      path: '/meus-assinados'
+      fullPath: '/admin/meus-assinados'
+      preLoaderRoute: typeof AdminMeusAssinadosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/minhas-assinaturas': {
+      id: '/admin/minhas-assinaturas'
+      path: '/minhas-assinaturas'
+      fullPath: '/admin/minhas-assinaturas'
+      preLoaderRoute: typeof AdminMinhasAssinaturasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/minhas-requisicoes': {
+      id: '/admin/minhas-requisicoes'
+      path: '/minhas-requisicoes'
+      fullPath: '/admin/minhas-requisicoes'
+      preLoaderRoute: typeof AdminMinhasRequisicoesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/requisicao': {
+      id: '/admin/requisicao'
+      path: '/requisicao'
+      fullPath: '/admin/requisicao'
+      preLoaderRoute: typeof AdminRequisicaoRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/requisicoes-avulsas': {
+      id: '/admin/requisicoes-avulsas'
+      path: '/requisicoes-avulsas'
+      fullPath: '/admin/requisicoes-avulsas'
+      preLoaderRoute: typeof AdminRequisicoesAvulsasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/selecionar-solicitante': {
+      id: '/admin/selecionar-solicitante'
+      path: '/selecionar-solicitante'
+      fullPath: '/admin/selecionar-solicitante'
+      preLoaderRoute: typeof AdminSelecionarSolicitanteRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/solicitacoes': {
+      id: '/admin/solicitacoes'
+      path: '/solicitacoes'
+      fullPath: '/admin/solicitacoes'
+      preLoaderRoute: typeof AdminSolicitacoesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/whatsapp-usuarios': {
+      id: '/admin/whatsapp-usuarios'
+      path: '/whatsapp-usuarios'
+      fullPath: '/admin/whatsapp-usuarios'
+      preLoaderRoute: typeof AdminWhatsappUsuariosRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/cadastros/locais': {
@@ -648,54 +620,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCadastrosLocaisRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/solicitacoes/$requisicaoId/pdf': {
-      id: '/admin/solicitacoes/$requisicaoId/pdf'
+    '/admin/cadastros/produtos': {
+      id: '/admin/cadastros/produtos'
+      path: '/cadastros/produtos'
+      fullPath: '/admin/cadastros/produtos'
+      preLoaderRoute: typeof AdminCadastrosProdutosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/cadastros/programas': {
+      id: '/admin/cadastros/programas'
+      path: '/cadastros/programas'
+      fullPath: '/admin/cadastros/programas'
+      preLoaderRoute: typeof AdminCadastrosProgramasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/cadastros/setores-principais': {
+      id: '/admin/cadastros/setores-principais'
+      path: '/cadastros/setores-principais'
+      fullPath: '/admin/cadastros/setores-principais'
+      preLoaderRoute: typeof AdminCadastrosSetoresPrincipaisRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/cadastros/usuarios': {
+      id: '/admin/cadastros/usuarios'
+      path: '/cadastros/usuarios'
+      fullPath: '/admin/cadastros/usuarios'
+      preLoaderRoute: typeof AdminCadastrosUsuariosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/assinadas/$requisicaoId/pdf': {
+      id: '/admin/assinadas/$requisicaoId/pdf'
       path: '/$requisicaoId/pdf'
-      fullPath: '/admin/solicitacoes/$requisicaoId/pdf'
-      preLoaderRoute: typeof AdminSolicitacoesRequisicaoIdPdfRouteImport
-      parentRoute: typeof AdminSolicitacoesRoute
-    }
-    '/admin/minhas-assinaturas/$requisicaoId/pdf': {
-      id: '/admin/minhas-assinaturas/$requisicaoId/pdf'
-      path: '/$requisicaoId/pdf'
-      fullPath: '/admin/minhas-assinaturas/$requisicaoId/pdf'
-      preLoaderRoute: typeof AdminMinhasAssinaturasRequisicaoIdPdfRouteImport
-      parentRoute: typeof AdminMinhasAssinaturasRoute
-    }
-    '/admin/meus-assinados/$requisicaoId/pdf': {
-      id: '/admin/meus-assinados/$requisicaoId/pdf'
-      path: '/$requisicaoId/pdf'
-      fullPath: '/admin/meus-assinados/$requisicaoId/pdf'
-      preLoaderRoute: typeof AdminMeusAssinadosRequisicaoIdPdfRouteImport
-      parentRoute: typeof AdminMeusAssinadosRoute
-    }
-    '/admin/cadastros/usuarios/$usuarioId': {
-      id: '/admin/cadastros/usuarios/$usuarioId'
-      path: '/$usuarioId'
-      fullPath: '/admin/cadastros/usuarios/$usuarioId'
-      preLoaderRoute: typeof AdminCadastrosUsuariosUsuarioIdRouteImport
-      parentRoute: typeof AdminCadastrosUsuariosRoute
-    }
-    '/admin/cadastros/programas/$programaId': {
-      id: '/admin/cadastros/programas/$programaId'
-      path: '/$programaId'
-      fullPath: '/admin/cadastros/programas/$programaId'
-      preLoaderRoute: typeof AdminCadastrosProgramasProgramaIdRouteImport
-      parentRoute: typeof AdminCadastrosProgramasRoute
-    }
-    '/admin/cadastros/produtos/$produtoId': {
-      id: '/admin/cadastros/produtos/$produtoId'
-      path: '/$produtoId'
-      fullPath: '/admin/cadastros/produtos/$produtoId'
-      preLoaderRoute: typeof AdminCadastrosProdutosProdutoIdRouteImport
-      parentRoute: typeof AdminCadastrosProdutosRoute
-    }
-    '/admin/cadastros/locais/$localId': {
-      id: '/admin/cadastros/locais/$localId'
-      path: '/$localId'
-      fullPath: '/admin/cadastros/locais/$localId'
-      preLoaderRoute: typeof AdminCadastrosLocaisLocalIdRouteImport
-      parentRoute: typeof AdminCadastrosLocaisRoute
+      fullPath: '/admin/assinadas/$requisicaoId/pdf'
+      preLoaderRoute: typeof AdminAssinadasRequisicaoIdPdfRouteImport
+      parentRoute: typeof AdminAssinadasRoute
     }
     '/admin/assinaturas-avulsas/$assinaturaId/pdf': {
       id: '/admin/assinaturas-avulsas/$assinaturaId/pdf'
@@ -704,12 +662,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAssinaturasAvulsasAssinaturaIdPdfRouteImport
       parentRoute: typeof AdminAssinaturasAvulsasRoute
     }
-    '/admin/assinadas/$requisicaoId/pdf': {
-      id: '/admin/assinadas/$requisicaoId/pdf'
+    '/admin/cadastros/locais/$localId': {
+      id: '/admin/cadastros/locais/$localId'
+      path: '/$localId'
+      fullPath: '/admin/cadastros/locais/$localId'
+      preLoaderRoute: typeof AdminCadastrosLocaisLocalIdRouteImport
+      parentRoute: typeof AdminCadastrosLocaisRoute
+    }
+    '/admin/cadastros/produtos/$produtoId': {
+      id: '/admin/cadastros/produtos/$produtoId'
+      path: '/$produtoId'
+      fullPath: '/admin/cadastros/produtos/$produtoId'
+      preLoaderRoute: typeof AdminCadastrosProdutosProdutoIdRouteImport
+      parentRoute: typeof AdminCadastrosProdutosRoute
+    }
+    '/admin/cadastros/programas/$programaId': {
+      id: '/admin/cadastros/programas/$programaId'
+      path: '/$programaId'
+      fullPath: '/admin/cadastros/programas/$programaId'
+      preLoaderRoute: typeof AdminCadastrosProgramasProgramaIdRouteImport
+      parentRoute: typeof AdminCadastrosProgramasRoute
+    }
+    '/admin/cadastros/usuarios/$usuarioId': {
+      id: '/admin/cadastros/usuarios/$usuarioId'
+      path: '/$usuarioId'
+      fullPath: '/admin/cadastros/usuarios/$usuarioId'
+      preLoaderRoute: typeof AdminCadastrosUsuariosUsuarioIdRouteImport
+      parentRoute: typeof AdminCadastrosUsuariosRoute
+    }
+    '/admin/meus-assinados/$requisicaoId/pdf': {
+      id: '/admin/meus-assinados/$requisicaoId/pdf'
       path: '/$requisicaoId/pdf'
-      fullPath: '/admin/assinadas/$requisicaoId/pdf'
-      preLoaderRoute: typeof AdminAssinadasRequisicaoIdPdfRouteImport
-      parentRoute: typeof AdminAssinadasRoute
+      fullPath: '/admin/meus-assinados/$requisicaoId/pdf'
+      preLoaderRoute: typeof AdminMeusAssinadosRequisicaoIdPdfRouteImport
+      parentRoute: typeof AdminMeusAssinadosRoute
+    }
+    '/admin/minhas-assinaturas/$requisicaoId/pdf': {
+      id: '/admin/minhas-assinaturas/$requisicaoId/pdf'
+      path: '/$requisicaoId/pdf'
+      fullPath: '/admin/minhas-assinaturas/$requisicaoId/pdf'
+      preLoaderRoute: typeof AdminMinhasAssinaturasRequisicaoIdPdfRouteImport
+      parentRoute: typeof AdminMinhasAssinaturasRoute
+    }
+    '/admin/solicitacoes/$requisicaoId/pdf': {
+      id: '/admin/solicitacoes/$requisicaoId/pdf'
+      path: '/$requisicaoId/pdf'
+      fullPath: '/admin/solicitacoes/$requisicaoId/pdf'
+      preLoaderRoute: typeof AdminSolicitacoesRequisicaoIdPdfRouteImport
+      parentRoute: typeof AdminSolicitacoesRoute
     }
   }
 }
