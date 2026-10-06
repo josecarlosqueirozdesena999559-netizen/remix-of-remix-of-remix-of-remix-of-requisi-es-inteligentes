@@ -1,13 +1,5 @@
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-
-const PAGE_MARGIN = 14;
-
-type JsPdfWithAutoTable = jsPDF & {
-  lastAutoTable?: {
-    finalY: number;
-  };
-};
+import { ALMOXARIFADO_WHATSAPP_NUMBER } from "@/lib/almoxarifado-contact";
+import { createAdministrativePdfBlob, toPdfText } from "@/lib/pdf-document";
 
 export interface SignedRequestMonthlyPdfRow {
   code: string;
@@ -16,12 +8,6 @@ export interface SignedRequestMonthlyPdfRow {
   location: string;
   requestDate: string;
   outputDate: string;
-}
-
-function toPdfText(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFC")
-    .replace(/[\u0000-\u001F\u007F]/g, "");
 }
 
 function formatMonthLabel(month: string) {
@@ -53,7 +39,6 @@ export async function createSignedRequestsMonthlyPdfBlob(
   month: string,
   rows: SignedRequestMonthlyPdfRow[],
 ) {
-  const doc = new jsPDF({ orientation: "landscape" }) as JsPdfWithAutoTable;
   const sortedRows = sortRows(rows);
   const monthLabel = formatMonthLabel(month);
   const generatedAt = new Intl.DateTimeFormat("pt-BR", {
@@ -61,83 +46,36 @@ export async function createSignedRequestsMonthlyPdfBlob(
     timeStyle: "short",
   }).format(new Date());
 
-  doc.setProperties({
-    title: `Requisicoes assinadas ${monthLabel}`,
-    subject: "Relatório mensal de solicitações assinadas",
-    creator: "Sistema Almoxarifado",
+  return createAdministrativePdfBlob({
+    title: "Relatório mensal de requisições assinadas",
+    subject: `Relatório mensal de requisições assinadas — ${monthLabel}`,
+    documentInfo: [
+      { label: "Modalidade", value: "Relatório" },
+      { label: "Mês de referência", value: monthLabel },
+      { label: "Total de registros", value: String(sortedRows.length) },
+      { label: "Gerado em", value: generatedAt },
+    ],
+    table: {
+      sectionTitle: "Requisições do período",
+      columns: [
+        { title: "NÚMERO", width: 22, align: "center" },
+        { title: "REQUISITANTE", width: 42, align: "left" },
+        { title: "SETOR SOLICITANTE", width: 54, align: "left" },
+        { title: "DATA DA SOLICITAÇÃO", width: 31, align: "center" },
+        { title: "DATA DA SAÍDA", width: 31, align: "center" },
+      ],
+      rows: sortedRows.map((row) => [
+        toPdfText(row.code || "—"),
+        toPdfText(row.requester || "—"),
+        toPdfText(row.location || "—"),
+        toPdfText(row.requestDate || "—"),
+        toPdfText(row.outputDate || "—"),
+      ]),
+      emptyRow: ["—", "Nenhuma requisição encontrada", "—", "—", "—"],
+      fontSize: 7.5,
+    },
+    contactNumber: ALMOXARIFADO_WHATSAPP_NUMBER,
   });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  doc.text(toPdfText("Solicitações assinadas do mês"), PAGE_MARGIN, 18);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
-  doc.text(toPdfText(`Mês: ${monthLabel}`), PAGE_MARGIN, 26);
-  doc.text(toPdfText(`Total: ${sortedRows.length}`), PAGE_MARGIN, 32);
-  doc.text(toPdfText(`Gerado em: ${generatedAt}`), PAGE_MARGIN, 38);
-
-  autoTable(doc, {
-    startY: 46,
-    head: [[
-      toPdfText("Número"),
-      toPdfText("Saída do SIG"),
-      toPdfText("Requisitante"),
-      toPdfText("Setor"),
-      toPdfText("Data da solicitação"),
-      toPdfText("Data da saída"),
-    ]],
-    body: sortedRows.length
-      ? sortedRows.map((row) => [
-          toPdfText(row.code || "-"),
-          toPdfText(row.outputCode || "-"),
-          toPdfText(row.requester || "-"),
-          toPdfText(row.location || "-"),
-          toPdfText(row.requestDate || "-"),
-          toPdfText(row.outputDate || "-"),
-        ])
-      : [[
-          toPdfText("-"),
-          toPdfText("-"),
-          toPdfText("Nenhuma solicitação encontrada"),
-          toPdfText("-"),
-          toPdfText("-"),
-          toPdfText("-"),
-        ]],
-    theme: "grid",
-    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN, bottom: 16 },
-    headStyles: {
-      fillColor: [244, 244, 244],
-      textColor: [20, 20, 20],
-      fontStyle: "bold",
-      lineColor: [0, 0, 0],
-      lineWidth: 0.25,
-      halign: "center",
-      fontSize: 9,
-    },
-    bodyStyles: {
-      fontSize: 8.8,
-      textColor: [20, 20, 20],
-      lineColor: [0, 0, 0],
-      lineWidth: 0.2,
-      valign: "middle",
-    },
-    columnStyles: {
-      0: { cellWidth: 30, halign: "center" },
-      1: { cellWidth: 36, halign: "center" },
-      2: { cellWidth: 54 },
-      3: { cellWidth: 82 },
-      4: { cellWidth: 32, halign: "center" },
-      5: { cellWidth: 32, halign: "center" },
-    },
-    styles: {
-      overflow: "linebreak",
-      font: "helvetica",
-      cellPadding: 1.8,
-    },
-  });
-
-  return doc.output("blob");
 }
 
 export async function downloadSignedRequestsMonthlyPdf(

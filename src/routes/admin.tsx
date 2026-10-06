@@ -64,8 +64,8 @@ import {
   isUserProfileIncomplete,
   type CurrentUserProfile,
 } from "@/lib/user-profile";
+import { ALMOXARIFADO_WHATSAPP_NUMBER } from "@/lib/almoxarifado-contact";
 
-const ALMOXARIFADO_WHATSAPP_NUMBER = "5588996374400";
 const ALMOXARIFADO_WHATSAPP_MESSAGE =
   "Olá, gostaria de receber notificações sobre o acompanhamento das minhas solicitações e entregas do almoxarifado.";
 const ALMOXARIFADO_WHATSAPP_LINK = `https://wa.me/${ALMOXARIFADO_WHATSAPP_NUMBER}?text=${encodeURIComponent(

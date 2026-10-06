@@ -1,16 +1,18 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { ALMOXARIFADO_WHATSAPP_NUMBER } from "@/lib/almoxarifado-contact";
+import { formatPdfPhone, toPdfText as toPdfAscii } from "@/lib/pdf-document";
 import { formatProgramName } from "@/lib/program-options";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
-const PDF_PAGE_BOTTOM_MARGIN = 6;
-const PDF_SIGNATURE_SECTION_HEIGHT = 58;
+const PDF_PAGE_BOTTOM_MARGIN = 22;
+const PDF_SIGNATURE_SECTION_HEIGHT = 72;
 const PDF_SIGNATURE_SECTION_GAP = 6;
-const PDF_SIGNATURE_PAGE_START_Y = 24;
+const PDF_SIGNATURE_PAGE_START_Y = PDF_TABLE_START_Y + PDF_SIGNATURE_SECTION_GAP;
 
-const WAREHOUSE_RESPONSIBLE_ROLE = "Responsável pelo almoxarifado";
+const WAREHOUSE_RESPONSIBLE_ROLE = "Responsável pela entrega";
 
 let pdfLogoDataUrlPromise: Promise<string | null> | null = null;
 
@@ -51,12 +53,6 @@ export interface RequestPdfData {
   requesterDisplayCpf?: string | null;
   requesterDisplayRole?: string | null;
   items?: RequestPdfItem[] | null;
-}
-
-function toPdfAscii(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFC")
-    .replace(/[\u0000-\u001F\u007F]/g, "");
 }
 
 function getRequestCode(request: RequestPdfData) {
@@ -132,12 +128,11 @@ function getRequestItemsForPdf(request: RequestPdfData) {
     const item = normalizeRequestItem(rawItem);
 
     return [
-      toPdfAscii(index + 1),
+      toPdfAscii(String(index + 1).padStart(2, "0")),
       toPdfAscii(getRequestItemPdfDescription(item)),
       toPdfAscii(item.unit || "-"),
       toPdfAscii(item.stock ?? item.qtdDisponivel ?? "-"),
       toPdfAscii(getRequestedQuantity(item) ?? "-"),
-      " ",
     ];
   });
 }
@@ -161,13 +156,7 @@ async function loadPdfLogoDataUrl() {
   return pdfLogoDataUrlPromise;
 }
 
-function drawRequestPdfHeader(
-  doc: jsPDF,
-  request: RequestPdfData,
-  logoDataUrl: string | null,
-  pageNumber: number,
-  totalPages: number,
-) {
+function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: string | null) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const contentWidth = pageWidth - PDF_MARGIN * 2;
   const leftColX = PDF_MARGIN + 2;
@@ -198,7 +187,6 @@ function drawRequestPdfHeader(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(toPdfAscii(`Pag.: ${pageNumber}/${totalPages}`), rightColX, 18, { align: "right" });
   doc.text(toPdfAscii(`Data: ${requestDate}`), rightColX, 26, { align: "right" });
   doc.line(PDF_MARGIN, lineY + 6, pageWidth - PDF_MARGIN, lineY + 6);
 
@@ -209,17 +197,17 @@ function drawRequestPdfHeader(
   doc.text(toPdfAscii("ALMOXARIFADO DA SAÚDE"), PDF_MARGIN + 22, 45);
 
   const headers = [
-    { label: "Código", value: toPdfAscii(getRequestCode(request)) },
+    { label: "Número", value: toPdfAscii(getRequestCode(request)) },
     { label: "Modalidade", value: toPdfAscii("Solicitação") },
     { label: "Data", value: toPdfAscii(requestDate) },
     { label: "Programa", value: toPdfAscii(programa) },
-    { label: "Unidade solicitante", value: toPdfAscii(request.setor || "-") },
+    { label: "Setor", value: toPdfAscii(request.setor || "-") },
     {
-      label: "Solicitante",
+      label: "Responsável",
       value: toPdfAscii(request.requesterDisplayName || request.solicitante || "-"),
     },
   ];
-  const widths = [22, 22, 18, 34, 42, contentWidth - 22 - 22 - 18 - 34 - 42];
+  const widths = [30, 22, 18, 34, 38, 40];
   let currentX = PDF_MARGIN;
 
   headers.forEach((header, index) => {
@@ -228,10 +216,14 @@ function drawRequestPdfHeader(
     doc.setFontSize(8.4);
     doc.text(toPdfAscii(header.label), currentX + width / 2, 54, { align: "center" });
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.text(toPdfAscii(header.value), currentX + width / 2, 61, {
+    const value = toPdfAscii(header.value);
+    const maxWidth = width - 4;
+    const naturalWidth = doc.getTextWidth(value);
+    const valueFontSize =
+      naturalWidth > maxWidth ? Math.max(6.8, (8.5 * maxWidth) / naturalWidth) : 8.5;
+    doc.setFontSize(valueFontSize);
+    doc.text(value, currentX + width / 2, 61, {
       align: "center",
-      maxWidth: width - 2,
     });
     currentX += width;
   });
@@ -248,6 +240,30 @@ function drawRequestPdfHeader(
   if (cpf && cpf !== "-") {
     doc.text(toPdfAscii(`CPF: ${cpf}`), pageWidth - PDF_MARGIN, 72, { align: "right" });
   }
+}
+
+function drawRequestPdfFooter(doc: jsPDF, pageNumber: number, totalPages: number) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const lineY = pageHeight - 17.5;
+  const footerText = `Almoxarifado da Saúde · Contato: ${formatPdfPhone(ALMOXARIFADO_WHATSAPP_NUMBER)}`;
+
+  doc.setDrawColor(175, 179, 184);
+  doc.setLineWidth(0.2);
+  doc.line(PDF_MARGIN, lineY, pageWidth - PDF_MARGIN, lineY);
+
+  doc.setTextColor(75, 75, 75);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.2);
+  doc.text(toPdfAscii(footerText), PDF_MARGIN, pageHeight - 9, {
+    maxWidth: pageWidth - PDF_MARGIN * 2 - 40,
+  });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.2);
+  doc.text(`Página ${pageNumber} de ${totalPages}`, pageWidth - PDF_MARGIN, pageHeight - 9, {
+    align: "right",
+  });
 }
 
 function drawSignatureBlock(
@@ -301,7 +317,11 @@ function drawSignatureBlock(
 }
 
 export async function createRequestPdfBlob(request: RequestPdfData) {
-  const doc = new jsPDF() as JsPdfWithAutoTable;
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  }) as JsPdfWithAutoTable;
   const logoDataUrl = await loadPdfLogoDataUrl();
   const bodyRows = getRequestItemsForPdf(request);
 
@@ -317,71 +337,79 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
       [
         toPdfAscii("Item"),
         toPdfAscii("Descrição"),
-        toPdfAscii("Und."),
-        toPdfAscii("Saldo Atual"),
-        toPdfAscii("Qtd. Req."),
-        toPdfAscii("Qtd. Forn."),
+        toPdfAscii("Unidade"),
+        toPdfAscii("Qtd. disponível no setor"),
+        toPdfAscii("Qtd. solicitada"),
       ],
     ],
-    body: bodyRows.length
-      ? bodyRows
-      : [["-", toPdfAscii("Nenhum item preenchido"), "-", "-", "-", "-"]],
+    body: bodyRows.length ? bodyRows : [["-", toPdfAscii("Nenhum item solicitado"), "-", "-", "-"]],
     theme: "grid",
-    margin: { left: PDF_MARGIN, right: PDF_MARGIN, top: PDF_TABLE_START_Y, bottom: 16 },
+    margin: {
+      left: PDF_MARGIN,
+      right: PDF_MARGIN,
+      top: PDF_TABLE_START_Y,
+      bottom: PDF_PAGE_BOTTOM_MARGIN,
+    },
+    showHead: "everyPage",
+    rowPageBreak: "auto",
     headStyles: {
       fillColor: [244, 244, 244],
       textColor: [10, 10, 10],
       fontStyle: "bold",
       halign: "center",
-      lineColor: [0, 0, 0],
-      lineWidth: 0.3,
-      fontSize: 8.8,
+      lineColor: [165, 169, 173],
+      lineWidth: 0.2,
+      fontSize: 8.2,
     },
     bodyStyles: {
       fontSize: 8.6,
-      textColor: [0, 0, 0],
-      lineColor: [0, 0, 0],
-      lineWidth: 0.25,
+      textColor: [25, 25, 25],
+      lineColor: [190, 194, 198],
+      lineWidth: 0.15,
       valign: "middle",
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: "center" },
-      1: { cellWidth: 80 },
+      0: { cellWidth: 14, halign: "center" },
+      1: { cellWidth: 76, halign: "left" },
       2: { cellWidth: 16, halign: "center" },
-      3: { cellWidth: 24, halign: "center" },
-      4: { cellWidth: 24, halign: "center" },
-      5: { cellWidth: 24, halign: "center" },
+      3: { cellWidth: 44, halign: "center" },
+      4: { cellWidth: 32, halign: "center" },
     },
     styles: {
       overflow: "linebreak",
-      cellPadding: 1.8,
+      cellPadding: 2,
       font: "helvetica",
     },
   });
 
   const finalY = doc.lastAutoTable?.finalY ?? PDF_TABLE_START_Y;
   const pageHeight = doc.internal.pageSize.getHeight();
+  const preferredSignatureTop = Math.max(
+    finalY + PDF_SIGNATURE_SECTION_GAP,
+    pageHeight - PDF_PAGE_BOTTOM_MARGIN - PDF_SIGNATURE_SECTION_HEIGHT,
+  );
   const signaturesNeedExtraPage =
-    finalY + PDF_SIGNATURE_SECTION_GAP + PDF_SIGNATURE_SECTION_HEIGHT >
-    pageHeight - PDF_PAGE_BOTTOM_MARGIN;
+    preferredSignatureTop + PDF_SIGNATURE_SECTION_HEIGHT > pageHeight - PDF_PAGE_BOTTOM_MARGIN;
 
   if (signaturesNeedExtraPage) {
     doc.addPage();
   }
 
   const finalTotalPages = doc.getNumberOfPages();
-  const pagesWithDocumentHeader = signaturesNeedExtraPage ? finalTotalPages - 1 : finalTotalPages;
   for (let page = 1; page <= finalTotalPages; page += 1) {
     doc.setPage(page);
-    if (page > pagesWithDocumentHeader) continue;
-    drawRequestPdfHeader(doc, request, logoDataUrl, page, finalTotalPages);
+    drawRequestPdfHeader(doc, request, logoDataUrl);
+    drawRequestPdfFooter(doc, page, finalTotalPages);
   }
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const footerTopY = signaturesNeedExtraPage
-    ? PDF_SIGNATURE_PAGE_START_Y
-    : finalY + PDF_SIGNATURE_SECTION_GAP;
+    ? Math.max(
+        PDF_SIGNATURE_PAGE_START_Y,
+        pageHeight - PDF_PAGE_BOTTOM_MARGIN - PDF_SIGNATURE_SECTION_HEIGHT,
+      )
+    : preferredSignatureTop;
 
   doc.setPage(finalTotalPages);
   drawSignatureBlock(
@@ -390,7 +418,7 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     footerTopY,
     request.requesterDisplayName || request.solicitante || "-",
     request.requesterDisplayCpf || request.solicitante_cpf || "-",
-    request.requesterDisplayRole || request.solicitante_funcao || "Solicitante do setor",
+    "Responsável pelo setor",
   );
   drawSignatureBlock(
     doc,
@@ -402,6 +430,13 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     false,
     false,
   );
+
+  doc.setTextColor(45, 45, 45);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.3);
+  doc.text("Data do recebimento: ____ / ____ / ______", pageWidth / 2, footerTopY + 63, {
+    align: "center",
+  });
 
   return doc.output("blob");
 }
