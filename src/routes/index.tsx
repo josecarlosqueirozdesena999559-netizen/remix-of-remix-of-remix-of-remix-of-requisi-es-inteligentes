@@ -1,16 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Loader2, LockKeyhole } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { supabase } from "@/integrations/supabase/client";
-import { clearSelectedSharedRequesterId } from "@/lib/shared-sector-session";
+import {
+  clearSelectedSharedRequesterId,
+  getSelectedSharedRequesterProfile,
+  setSelectedSharedRequesterId,
+} from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
+import { resolveLoginEmail, searchLoginOptions, type LoginOption } from "@/lib/login-options";
 
-// Set to false to bring back the login page after maintenance is complete.
-const MAINTENANCE_MODE = true;
+const MIN_LOGIN_QUERY_LENGTH = 2;
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -18,62 +21,195 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const navigate = useNavigate();
-  const [nome, setNome] = useState("");
-  const [senha, setSenha] = useState("");
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const [loginQuery, setLoginQuery] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginOptions, setLoginOptions] = useState<LoginOption[]>([]);
+  const [selectedLogin, setSelectedLogin] = useState<LoginOption | null>(null);
+  const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (MAINTENANCE_MODE) {
-    return <MaintenanceScreen />;
-  }
+  useEffect(() => {
+    const query = loginQuery.trim();
+    if (selectedLogin) {
+      setLoginOptions([]);
+      setOptionsOpen(false);
+      setSearching(false);
+      return;
+    }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (query.length < MIN_LOGIN_QUERY_LENGTH) {
+      setLoginOptions([]);
+      setOptionsOpen(false);
+      setSearching(false);
+      setLookupError(null);
+      return;
+    }
+
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      setSearching(true);
+      setLookupError(null);
+
+      void searchLoginOptions(query)
+        .then((options) => {
+          if (!active) return;
+          setLoginOptions(options);
+          setActiveOptionIndex(options.length > 0 ? 0 : -1);
+          setOptionsOpen(true);
+        })
+        .catch(() => {
+          if (!active) return;
+          setLoginOptions([]);
+          setLookupError("Não foi possível carregar a lista de usuários. Tente novamente.");
+          setOptionsOpen(true);
+        })
+        .finally(() => {
+          if (active) setSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [loginQuery, selectedLogin]);
+
+  const handleLoginQueryChange = (value: string) => {
+    setLoginQuery(value);
+    setSelectedLogin(null);
+    setPassword("");
+    setLoginOptions([]);
+    setSearching(value.trim().length >= MIN_LOGIN_QUERY_LENGTH);
     setError(null);
+    setLookupError(null);
+    setActiveOptionIndex(-1);
+    setOptionsOpen(value.trim().length >= MIN_LOGIN_QUERY_LENGTH);
+    clearSelectedSharedRequesterId();
+  };
+
+  const handleChooseLogin = (option: LoginOption) => {
+    setSelectedLogin(option);
+    setLoginQuery(option.displayName);
+    setPassword("");
+    setError(null);
+    setLookupError(null);
+    setOptionsOpen(false);
+    setActiveOptionIndex(-1);
+    clearSelectedSharedRequesterId();
+
+    if (option.isShared && option.requesterId) {
+      setSelectedSharedRequesterId(option.requesterId);
+    }
+
+    window.setTimeout(() => passwordInputRef.current?.focus(), 0);
+  };
+
+  const handleLoginKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" && loginOptions.length > 0) {
+      event.preventDefault();
+      setOptionsOpen(true);
+      setActiveOptionIndex((current) => (current + 1) % loginOptions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp" && loginOptions.length > 0) {
+      event.preventDefault();
+      setOptionsOpen(true);
+      setActiveOptionIndex((current) => (current <= 0 ? loginOptions.length - 1 : current - 1));
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setOptionsOpen(false);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const activeOption = loginOptions[activeOptionIndex];
+      if (!selectedLogin && activeOption) {
+        handleChooseLogin(activeOption);
+      } else if (selectedLogin) {
+        passwordInputRef.current?.focus();
+      } else {
+        setError("Digite seu usuário ou nome e selecione uma opção da lista.");
+      }
+    }
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+
+    if (!selectedLogin) {
+      setError("Selecione seu acesso na lista antes de continuar.");
+      return;
+    }
+    if (!password) {
+      setError("Digite sua senha.");
+      return;
+    }
+    if (selectedLogin.isShared && !selectedLogin.requesterId) {
+      setError("Selecione a pessoa vinculada ao posto antes de entrar.");
+      return;
+    }
+
     setLoading(true);
+    let completed = false;
 
     try {
-      const nomeLimpo = nome.trim();
-      const normalizedLogin = nomeLimpo.toLowerCase();
-      const isAdminLogin = normalizedLogin === "admin";
-      const isEmailLogin = nomeLimpo.includes("@");
+      const normalizedLogin = selectedLogin.login.trim().toLowerCase();
       let email = "";
 
-      if (isAdminLogin) {
+      if (normalizedLogin === "admin") {
         email = "admin@pereiro.ce.gov.br";
-      } else if (isEmailLogin) {
-        email = nomeLimpo;
       } else {
-        const { data: resolvedEmail, error: resolveError } = await (supabase as any).rpc(
-          "resolve_login_email",
-          { p_usuario: nomeLimpo },
-        );
-
-        if (resolveError) throw new Error(resolveError.message);
-        email = typeof resolvedEmail === "string" ? resolvedEmail : "";
+        email = (await resolveLoginEmail(selectedLogin.login)) ?? "";
       }
 
-      if (!email) throw new Error("Usuario ou senha");
+      if (!email) throw new Error("Usuário ou senha inválidos.");
+
+      if (selectedLogin.isShared && selectedLogin.requesterId) {
+        setSelectedSharedRequesterId(selectedLogin.requesterId);
+      } else {
+        clearSelectedSharedRequesterId();
+      }
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
-        password: senha,
+        password,
       });
 
-      if (signInError) throw new Error("Usuario ou senha");
-      const { profile } = await getCurrentUserProfile();
+      if (signInError) throw new Error("Usuário ou senha inválidos.");
 
-      if (isSharedSectorProfile(profile)) {
-        clearSelectedSharedRequesterId();
-        navigate({ to: "/admin/selecionar-solicitante" });
-      } else if (profile?.is_admin) {
-        navigate({ to: "/admin" });
-      } else {
-        navigate({ to: "/admin" });
+      const { profile } = await getCurrentUserProfile();
+      if (!profile) throw new Error("Não foi possível validar o acesso selecionado.");
+
+      const profileIsShared = isSharedSectorProfile(profile);
+      if (profileIsShared !== selectedLogin.isShared) {
+        throw new Error("O acesso selecionado não corresponde à conta autenticada.");
       }
+
+      if (profileIsShared) {
+        const selectedRequester = await getSelectedSharedRequesterProfile(profile);
+        if (!selectedRequester) {
+          throw new Error("Não foi possível validar a pessoa vinculada a este posto.");
+        }
+      }
+
+      completed = true;
+      navigate({ to: "/admin" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Usuario ou senha");
-      setLoading(false);
+      await supabase.auth.signOut();
+      clearSelectedSharedRequesterId();
+      setError(err instanceof Error ? err.message : "Usuário ou senha inválidos.");
+    } finally {
+      if (!completed) setLoading(false);
     }
   };
 
@@ -90,7 +226,7 @@ function Index() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white px-4 py-8 text-slate-900">
-      <main className="w-full max-w-xs rounded-lg border border-slate-200 bg-white p-5">
+      <main className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 text-center">
           <h1 className="text-xl font-semibold tracking-normal text-slate-950">Almoxarifado</h1>
           <p className="mt-1 text-sm text-slate-500">Acesse o painel de solicitações</p>
@@ -99,35 +235,121 @@ function Index() {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="nome" className="text-slate-700">
-              Usuário
+              Setor ou usuário
             </Label>
-            <Input
-              id="nome"
-              type="text"
-              autoComplete="username"
-              placeholder="Usuário"
-              className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              required
-            />
+            <div className="relative">
+              <Input
+                id="nome"
+                type="text"
+                autoComplete="username"
+                placeholder="Digite o setor, usuário ou nome"
+                className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
+                value={loginQuery}
+                onChange={(event) => handleLoginQueryChange(event.target.value)}
+                onFocus={() => {
+                  if (!selectedLogin && loginQuery.trim().length >= MIN_LOGIN_QUERY_LENGTH) {
+                    setOptionsOpen(true);
+                  }
+                }}
+                onBlur={() => window.setTimeout(() => setOptionsOpen(false), 120)}
+                onKeyDown={handleLoginKeyDown}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={optionsOpen && !selectedLogin}
+                aria-controls="login-options"
+                aria-activedescendant={
+                  activeOptionIndex >= 0 ? `login-option-${activeOptionIndex}` : undefined
+                }
+                required
+                disabled={loading}
+              />
+
+              {optionsOpen &&
+                !selectedLogin &&
+                loginQuery.trim().length >= MIN_LOGIN_QUERY_LENGTH && (
+                  <div
+                    id="login-options"
+                    role="listbox"
+                    className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+                  >
+                    {searching && (
+                      <div className="flex items-center gap-2 px-3 py-2 text-sm text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Buscando acessos...
+                      </div>
+                    )}
+                    {!searching && lookupError && (
+                      <p className="px-3 py-2 text-sm text-rose-700">{lookupError}</p>
+                    )}
+                    {!searching && !lookupError && loginOptions.length === 0 && (
+                      <p className="px-3 py-2 text-sm text-slate-500">Nenhum acesso encontrado.</p>
+                    )}
+                    {!searching &&
+                      !lookupError &&
+                      loginOptions.map((option, index) => (
+                        <button
+                          id={`login-option-${index}`}
+                          key={`${option.login}-${option.requesterId ?? "account"}`}
+                          type="button"
+                          role="option"
+                          aria-selected={index === activeOptionIndex}
+                          className={`block w-full px-3 py-2 text-left text-sm transition-colors ${
+                            index === activeOptionIndex
+                              ? "bg-emerald-50 text-emerald-900"
+                              : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onMouseEnter={() => setActiveOptionIndex(index)}
+                          onClick={() => handleChooseLogin(option)}
+                        >
+                          <span className="block font-medium">{option.displayName}</span>
+                          {option.isShared && (
+                            <span className="mt-0.5 block text-xs text-slate-500">
+                              Acesso compartilhado do posto
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                  </div>
+                )}
+            </div>
+            <p className="text-xs text-slate-500">Digite o setor e selecione a pessoa vinculada.</p>
+            {selectedLogin && (
+              <div className="rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
+                  Acesso selecionado
+                </p>
+                <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                  {selectedLogin.displayName}
+                </p>
+                {selectedLogin.isShared && (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Use a senha da conta compartilhada do posto.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="senha" className="text-slate-700">
-              Senha
-            </Label>
-            <Input
-              id="senha"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Senha"
-              className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              required
-            />
-          </div>
+          {selectedLogin && (
+            <div className="space-y-2">
+              <Label htmlFor="senha" className="text-slate-700">
+                Digite a senha
+              </Label>
+              <Input
+                ref={passwordInputRef}
+                id="senha"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Digite a senha"
+                className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+          )}
 
           {error && (
             <p className="rounded border border-destructive/20 bg-destructive/5 px-2 py-1 text-center text-xs text-destructive">
@@ -137,9 +359,14 @@ function Index() {
 
           <Button
             type="submit"
-            className="h-10 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800"
+            disabled={loading || !selectedLogin || !password}
+            className="h-10 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <LockKeyhole className="h-4 w-4" />
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LockKeyhole className="h-4 w-4" />
+            )}
             Entrar
           </Button>
         </form>

@@ -149,7 +149,9 @@ function AdminLayout() {
         if (isSharedSession && pathname !== "/admin/selecionar-solicitante" && !userAppMode) {
           const selectedRequester = await getSelectedSharedRequesterProfile(profile);
           if (!selectedRequester) {
-            navigate({ to: "/admin/selecionar-solicitante" });
+            clearSelectedSharedRequesterId();
+            await supabase.auth.signOut();
+            navigate({ to: "/" });
             return;
           }
           setProfile(selectedRequester);

@@ -476,6 +476,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      resolve_login_email: {
+        Args: { p_usuario: string }
+        Returns: string | null
+      }
+      search_login_options: {
+        Args: { p_query: string }
+        Returns: {
+          login_usuario: string
+          display_name: string
+          requester_id: string | null
+          is_shared: boolean
+        }[]
+      }
       get_pending_signature_control: {
         Args: { p_localidade?: string | null; p_nome?: string | null }
         Returns: {
