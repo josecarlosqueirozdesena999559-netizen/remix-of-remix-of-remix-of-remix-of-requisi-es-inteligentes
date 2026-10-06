@@ -184,6 +184,16 @@ function normalizeSectorName(value: string | null | undefined) {
     .toLowerCase();
 }
 
+function isHospitalSectorProfile(
+  profile: { usuario?: string | null; setor?: string | null; unidade_nome?: string | null } | null,
+) {
+  if (normalizeProductSearchValue(profile?.usuario) === "hospital") return true;
+
+  return [profile?.setor, profile?.unidade_nome].some((location) =>
+    normalizeProductSearchValue(location).split(" ").includes("hospital"),
+  );
+}
+
 function isRamonRequester(
   requester: Pick<SectorUserOption, "nome" | "usuario" | "email"> | CurrentUserProfile | null,
 ) {
@@ -1011,6 +1021,8 @@ function CriarRequisicaoPage() {
     () => sectorUsers.find((user) => user.id === selectedSolicitanteId) || profile,
     [sectorUsers, selectedSolicitanteId, profile],
   );
+  const canAddCustomItems =
+    isHospitalSectorProfile(selectedRequester) || isHospitalSectorProfile(profile);
   const isRamonRequest = isRamonRequester(selectedRequester);
   const mustChooseSharedRequester = isSharedSector && !selectedSolicitanteId;
 
@@ -1061,6 +1073,16 @@ function CriarRequisicaoPage() {
       rawChosenSolicitante && fallbackCpf
         ? { ...rawChosenSolicitante, cpf: fallbackCpf }
         : rawChosenSolicitante;
+    const canAddCustomItemsForRequest =
+      isHospitalSectorProfile(chosenSolicitante) || isHospitalSectorProfile(profile);
+    if (
+      !canAddCustomItemsForRequest &&
+      customItems.some((item) => !item.id.startsWith("custom-edit-"))
+    ) {
+      setError("Itens fora da lista só podem ser adicionados pelo setor Hospital.");
+      setSaving(false);
+      return;
+    }
     const isSharedSector = isSharedSectorProfile(profile);
 
     if (isSharedSector && !sectorUsers.some((u) => u.id === selectedSolicitanteId)) {
@@ -1382,7 +1404,10 @@ function CriarRequisicaoPage() {
                 </div>
               </Card>
 
-              <Card className="rounded-2xl border-amber-200 bg-amber-50/70 p-4 shadow-xs">
+              <Card
+                hidden={!canAddCustomItems}
+                className="rounded-2xl border-amber-200 bg-amber-50/70 p-4 shadow-xs"
+              >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-amber-950">Faltou algum item?</p>
@@ -1445,6 +1470,10 @@ function CriarRequisicaoPage() {
                       type="button"
                       className="gap-2"
                       onClick={() => {
+                        if (!canAddCustomItems) {
+                          setError("Itens fora da lista só podem ser adicionados pelo setor Hospital.");
+                          return;
+                        }
                         const name = customItemName.trim();
                         const stock = customItemStock.trim();
                         const quantity = customItemQuantity.trim();

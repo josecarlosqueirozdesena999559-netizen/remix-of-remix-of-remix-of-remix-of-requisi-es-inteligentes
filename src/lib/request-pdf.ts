@@ -5,8 +5,9 @@ import { formatPdfPhone, toPdfText as toPdfAscii } from "@/lib/pdf-document";
 import { formatProgramName } from "@/lib/program-options";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
+const PDF_SYSTEM_NAME = "SoliciteJá";
 const PDF_MARGIN = 14;
-const PDF_TABLE_START_Y = 86;
+const PDF_TABLE_START_Y = 89;
 const PDF_PAGE_BOTTOM_MARGIN = 22;
 const PDF_SIGNATURE_SECTION_HEIGHT = 58;
 const PDF_SIGNATURE_SECTION_GAP = 6;
@@ -161,7 +162,7 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
   const contentWidth = pageWidth - PDF_MARGIN * 2;
   const leftColX = PDF_MARGIN + 2;
   const rightColX = pageWidth - PDF_MARGIN;
-  const lineY = 32;
+  const lineY = 35;
   const requestDate = formatDate(request.data);
   const programa = formatProgramName(request.programa || request.setor) || "-";
 
@@ -190,15 +191,21 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
   );
 
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.2);
+  doc.setTextColor(80, 80, 80);
+  doc.text(toPdfAscii(`Sistema gerador: ${PDF_SYSTEM_NAME}`), rightColX, 38, { align: "right" });
+
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.text(toPdfAscii(`Data: ${requestDate}`), rightColX, 26, { align: "right" });
   doc.line(PDF_MARGIN, lineY + 6, pageWidth - PDF_MARGIN, lineY + 6);
 
+  doc.setTextColor(25, 25, 25);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.text(toPdfAscii("Almoxarifado:"), PDF_MARGIN, 45);
+  doc.text(toPdfAscii("Almoxarifado:"), PDF_MARGIN, 48);
   doc.setFont("helvetica", "normal");
-  doc.text(toPdfAscii("ALMOXARIFADO DA SAÚDE"), PDF_MARGIN + 22, 45);
+  doc.text(toPdfAscii("ALMOXARIFADO DA SAÚDE"), PDF_MARGIN + 22, 48);
 
   const headers = [
     { label: "Número", value: toPdfAscii(getRequestCode(request)) },
@@ -218,7 +225,7 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
     const width = widths[index];
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.4);
-    doc.text(toPdfAscii(header.label), currentX + width / 2, 54, { align: "center" });
+    doc.text(toPdfAscii(header.label), currentX + width / 2, 57, { align: "center" });
     doc.setFont("helvetica", "normal");
     const value = toPdfAscii(header.value);
     const maxWidth = width - 4;
@@ -226,23 +233,23 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
     const valueFontSize =
       naturalWidth > maxWidth ? Math.max(6.8, (8.5 * maxWidth) / naturalWidth) : 8.5;
     doc.setFontSize(valueFontSize);
-    doc.text(value, currentX + width / 2, 61, {
+    doc.text(value, currentX + width / 2, 64, {
       align: "center",
     });
     currentX += width;
   });
 
-  doc.line(PDF_MARGIN, 56.5, pageWidth - PDF_MARGIN, 56.5);
-  doc.line(PDF_MARGIN, 64.5, pageWidth - PDF_MARGIN, 64.5);
+  doc.line(PDF_MARGIN, 59.5, pageWidth - PDF_MARGIN, 59.5);
+  doc.line(PDF_MARGIN, 67.5, pageWidth - PDF_MARGIN, 67.5);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
-  doc.text(toPdfAscii(`Categorias: ${String(request.categoria || "-")}`), PDF_MARGIN, 72);
-  doc.text(toPdfAscii(`Programa: ${programa}`), PDF_MARGIN, 79);
+  doc.text(toPdfAscii(`Categorias: ${String(request.categoria || "-")}`), PDF_MARGIN, 75);
+  doc.text(toPdfAscii(`Programa: ${programa}`), PDF_MARGIN, 82);
 
   const cpf = toPdfAscii(request.requesterDisplayCpf || request.solicitante_cpf || "-");
   if (cpf && cpf !== "-") {
-    doc.text(toPdfAscii(`CPF: ${cpf}`), pageWidth - PDF_MARGIN, 72, { align: "right" });
+    doc.text(toPdfAscii(`CPF: ${cpf}`), pageWidth - PDF_MARGIN, 75, { align: "right" });
   }
 }
 
@@ -250,7 +257,7 @@ function drawRequestPdfFooter(doc: jsPDF, pageNumber: number, totalPages: number
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const lineY = pageHeight - 17.5;
-  const footerText = `Almoxarifado da Saúde · Contato: ${formatPdfPhone(ALMOXARIFADO_WHATSAPP_NUMBER)}`;
+  const footerText = `${PDF_SYSTEM_NAME} · Almoxarifado da Saúde · Contato: ${formatPdfPhone(ALMOXARIFADO_WHATSAPP_NUMBER)}`;
 
   doc.setDrawColor(175, 179, 184);
   doc.setLineWidth(0.2);
@@ -331,8 +338,8 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
 
   doc.setProperties({
     title: getRequestPdfName(getRequestCode(request)),
-    subject: "Solicitação de material",
-    creator: "Sistema Almoxarifado",
+    subject: `Solicitação de material gerada pelo ${PDF_SYSTEM_NAME}`,
+    creator: `${PDF_SYSTEM_NAME} · Módulo Almoxarifado`,
   });
 
   autoTable(doc, {
