@@ -8,7 +8,7 @@ const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 86;
 const PDF_PAGE_BOTTOM_MARGIN = 22;
-const PDF_SIGNATURE_SECTION_HEIGHT = 72;
+const PDF_SIGNATURE_SECTION_HEIGHT = 58;
 const PDF_SIGNATURE_SECTION_GAP = 6;
 const PDF_SIGNATURE_PAGE_START_Y = PDF_TABLE_START_Y + PDF_SIGNATURE_SECTION_GAP;
 
@@ -183,7 +183,11 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
   doc.setFontSize(10.5);
   doc.text(toPdfAscii("FUNDO MUNICIPAL DE SAÚDE"), leftColX + 18, 25);
   doc.setFontSize(11);
-  doc.text(toPdfAscii("Solicitação de Material"), leftColX + 18, 32);
+  doc.text(
+    toPdfAscii(`Solicitação de Material - No. ${getRequestCode(request)}`),
+    leftColX + 18,
+    32,
+  );
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -430,13 +434,6 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
     false,
     false,
   );
-
-  doc.setTextColor(45, 45, 45);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.3);
-  doc.text("Data do recebimento: ____ / ____ / ______", pageWidth / 2, footerTopY + 63, {
-    align: "center",
-  });
 
   return doc.output("blob");
 }

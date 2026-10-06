@@ -196,6 +196,7 @@ export type Database = {
           id: string
           items: Json
           printed_at: string | null
+          programa: string | null
           return_reason: string | null
           return_target: string | null
           returned_at: string | null
@@ -220,6 +221,7 @@ export type Database = {
           id?: string
           items?: Json
           printed_at?: string | null
+          programa?: string | null
           return_reason?: string | null
           return_target?: string | null
           returned_at?: string | null
@@ -244,6 +246,7 @@ export type Database = {
           id?: string
           items?: Json
           printed_at?: string | null
+          programa?: string | null
           return_reason?: string | null
           return_target?: string | null
           returned_at?: string | null

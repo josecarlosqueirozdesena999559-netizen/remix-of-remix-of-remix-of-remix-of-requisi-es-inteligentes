@@ -66,6 +66,7 @@ function MinhaAssinaturaPdfPage() {
         }
 
         const request = requestResult.data as Requisicao;
+        const requestNumber = request.saida_codigo || request.id;
 
         if (request.status === "aguardando_assinatura_saida") {
           const outputUrl = await resolveAttachmentUrl(
@@ -74,8 +75,8 @@ function MinhaAssinaturaPdfPage() {
 
           if (outputUrl) {
             setPdf({
-              title: "Documento de saída do SIG",
-              fileName: `Saída-${request.saida_codigo || request.id}.pdf`,
+              title: `Documento de saída - Solicitação No. ${requestNumber}`,
+              fileName: `Saída-${requestNumber}.pdf`,
               url: outputUrl,
             });
             setLoading(false);
@@ -88,8 +89,8 @@ function MinhaAssinaturaPdfPage() {
 
           if (requestSignedUrl) {
             setPdf({
-              title: `Requisição ${request.saida_codigo || request.id}`,
-              fileName: getRequestFileName(request.saida_codigo || request.id),
+              title: `Requisição No. ${requestNumber}`,
+              fileName: getRequestFileName(requestNumber),
               url: requestSignedUrl,
             });
             setLoading(false);
@@ -152,8 +153,8 @@ function MinhaAssinaturaPdfPage() {
   }, [requisicaoId]);
   return (
     <PdfDocumentViewer
-      title="Visualizador de documento"
-      subtitle={pdf?.title || "Documento para assinatura"}
+      title={pdf?.title || "Documento para assinatura"}
+      subtitle="Assinaturas pendentes"
       url={pdf?.url}
       fileName={pdf?.fileName}
       loading={loading}

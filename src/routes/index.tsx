@@ -209,7 +209,9 @@ function Index() {
       } else if (selectedLogin) {
         passwordInputRef.current?.focus();
       } else {
-        setError("Digite o setor, o nome do usuário ou “admin” e selecione uma opção da lista.");
+        setError(
+          "Digite o setor, o nome do usuário, “admin” ou “Alamo” e selecione uma opção da lista.",
+        );
       }
     }
   };
@@ -218,12 +220,12 @@ function Index() {
     event.preventDefault();
     setError(null);
 
-    if (!selectedSector) {
-      setError("Selecione o setor antes de continuar.");
+    if (!selectedLogin) {
+      setError("Selecione um usuário antes de continuar.");
       return;
     }
-    if (!selectedLogin) {
-      setError("Selecione um usuário deste setor antes de continuar.");
+    if (!selectedSector && !selectedLogin.isAdmin) {
+      setError("Selecione o setor antes de continuar.");
       return;
     }
     if (!password) {
@@ -353,7 +355,9 @@ function Index() {
                     {searching && (
                       <div className="flex items-center gap-2 px-3 py-2 text-sm text-slate-500">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Buscando setores...
+                        {isAdminGroupSearch(loginQuery)
+                          ? "Buscando administradores..."
+                          : "Buscando setores..."}
                       </div>
                     )}
                     {!searching && lookupError && (
@@ -384,7 +388,9 @@ function Index() {
                           onMouseEnter={() => setActiveOptionIndex(index)}
                           onClick={() => handleChooseSector(sector)}
                         >
-                          <span className="block font-medium">{sector.name}</span>
+                          <span className="block font-medium">
+                            {sector.displayName || sector.name}
+                          </span>
                         </button>
                       ))}
                   </div>
@@ -392,7 +398,7 @@ function Index() {
             </div>
             {!selectedSector && (
               <p className="text-xs text-slate-500">
-                Digite o setor, o nome do usuário ou “admin” para listar os administradores.
+                Digite o setor, o nome do usuário, “admin” ou “Alamo” para acessar o administrador.
               </p>
             )}
           </div>
@@ -469,7 +475,7 @@ function Index() {
             disabled={
               loading ||
               loadingSectorUsers ||
-              !selectedSector ||
+              (!selectedSector && !selectedLogin?.isAdmin) ||
               !selectedLogin ||
               (selectedLogin.isShared && !selectedLogin.requesterId) ||
               !password

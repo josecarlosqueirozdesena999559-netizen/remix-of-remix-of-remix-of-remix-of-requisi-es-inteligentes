@@ -6,20 +6,27 @@ export type SectorLoginUser = {
   login: string;
   requesterId: string | null;
   isShared: boolean;
+  isAdmin?: boolean;
 };
 
 export type LoginSector = {
   key: string;
   name: string;
+  displayName?: string;
   adminUser?: SectorLoginUser;
 };
 
-export function isAdminGroupSearch(query: string) {
-  const normalized = query
+function normalizeLoginSearch(query: string) {
+  return query
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  return normalized.startsWith("adm");
+    .toLowerCase()
+    .trim();
+}
+
+export function isAdminGroupSearch(query: string) {
+  const normalized = normalizeLoginSearch(query);
+  return normalized.startsWith("adm") || normalized === "alamo";
 }
 
 export async function searchLoginSectors(query: string): Promise<LoginSector[]> {
@@ -28,10 +35,20 @@ export async function searchLoginSectors(query: string): Promise<LoginSector[]> 
 
   if (isAdminGroupSearch(normalizedQuery)) {
     const administrators = await searchLoginUsersBySector("__system_admins__");
-    return administrators.map((admin) => ({
+    const normalizedSearch = normalizeLoginSearch(normalizedQuery);
+    const matchingAdministrators = normalizedSearch.startsWith("adm")
+      ? administrators
+      : administrators.filter(
+          (admin) =>
+            normalizeLoginSearch(admin.personName).includes(normalizedSearch) ||
+            normalizeLoginSearch(admin.login).includes(normalizedSearch),
+        );
+
+    return matchingAdministrators.map((admin) => ({
       key: `admin:${admin.login.toLowerCase()}`,
-      name: admin.personName,
-      adminUser: admin,
+      name: admin.login,
+      displayName: `Admin — ${admin.login}`,
+      adminUser: { ...admin, isAdmin: true },
     }));
   }
 
@@ -70,6 +87,7 @@ export async function searchLoginUsersBySector(sectorKey: string): Promise<Secto
         login,
         requesterId,
         isShared: Boolean(requesterId),
+        isAdmin: false,
       };
     })
     .filter((user) => user.personName && user.login);
