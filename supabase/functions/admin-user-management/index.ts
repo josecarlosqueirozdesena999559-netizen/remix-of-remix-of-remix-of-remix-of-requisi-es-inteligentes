@@ -36,6 +36,13 @@ type AuthUserMutation = {
   updatePayload?: Record<string, unknown>;
 };
 
+type AuthLookupClient = {
+  rpc: (
+    functionName: string,
+    args: { target_email: string },
+  ) => PromiseLike<{ data: unknown; error: { code?: string } | null }>;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
@@ -172,7 +179,10 @@ async function requireAdmin(admin: any, userId: string) {
   }
 }
 
-async function findAuthUserIdByEmail(admin: any, email: string): Promise<string | null> {
+async function findAuthUserIdByEmail(
+  admin: AuthLookupClient,
+  email: string,
+): Promise<string | null> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) return null;
 
