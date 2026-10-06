@@ -235,14 +235,14 @@ function Index() {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="nome" className="text-slate-700">
-              Setor ou usuário
+              Usuário
             </Label>
             <div className="relative">
               <Input
                 id="nome"
                 type="text"
                 autoComplete="username"
-                placeholder="Digite o setor, usuário ou nome"
+                placeholder="Usuário"
                 className="h-10 border-slate-200 bg-slate-50 text-slate-900 placeholder:text-slate-400 focus-visible:ring-emerald-600"
                 value={loginQuery}
                 onChange={(event) => handleLoginQueryChange(event.target.value)}
