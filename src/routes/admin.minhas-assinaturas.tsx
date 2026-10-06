@@ -58,7 +58,6 @@ const baseSelectWithOutputDate =
 const USER_DELETABLE_REQUEST_STATUSES = [
   "aguardando_assinatura",
   "aguardando_assinatura_requisicao",
-  "aguardando_assinatura_saida",
   "correcao_requisicao",
 ] as const;
 
@@ -84,6 +83,7 @@ function canDeletePendingRequest(
 ) {
   return (
     USER_DELETABLE_REQUEST_STATUSES.some((status) => status === request.status) &&
+    !getRequestSignedAttachment(request.signed_attachment, request.status) &&
     getOutputSignedAttachments(request.signed_attachment, request.status).length === 0
   );
 }
@@ -552,7 +552,7 @@ function MinhasAssinaturasPage() {
 
   const handleDeletePendingRequest = async (request: Requisicao) => {
     const confirmed = window.confirm(
-      "Excluir esta solicitação? A exclusão não será permitida depois que a saída SIG for assinada.",
+      "Excluir esta solicitação? Depois que a solicitação ou a saída SIG for assinada, ela não poderá mais ser excluída.",
     );
     if (!confirmed) return;
 
@@ -570,13 +570,14 @@ function MinhasAssinaturasPage() {
       if (!currentRequest) throw new Error("Solicitação não encontrada.");
 
       if (!canDeletePendingRequest(currentRequest)) {
-        const outputAlreadySigned =
+        const alreadySigned =
           currentRequest.status === "concluido" ||
+          Boolean(getRequestSignedAttachment(currentRequest.signed_attachment, currentRequest.status)) ||
           getOutputSignedAttachments(currentRequest.signed_attachment, currentRequest.status).length > 0;
         throw new Error(
-          outputAlreadySigned
-            ? "A saída SIG já foi assinada. Você não pode excluir este documento."
-            : "Esta solicitação não está em uma etapa que permita exclusão.",
+          alreadySigned
+            ? "Esta solicitação já foi assinada e não pode ser excluída."
+            : "Só é possível excluir solicitações que ainda não foram assinadas.",
         );
       }
 
@@ -628,7 +629,7 @@ function MinhasAssinaturasPage() {
       }
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
-      setMessage("Solicitação excluída antes da assinatura da saída SIG.");
+      setMessage("Solicitação excluída antes da assinatura.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao excluir solicitação.");
     }
