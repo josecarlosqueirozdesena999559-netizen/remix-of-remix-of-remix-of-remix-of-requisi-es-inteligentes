@@ -172,20 +172,20 @@ async function requireAdmin(admin: any, userId: string) {
   }
 }
 
-async function findAuthUserByEmail(admin: any, email: string) {
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw new UserActionError(error.message, 500);
+async function findAuthUserIdByEmail(admin: any, email: string): Promise<string | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return null;
 
-    const user = data?.users?.find(
-      (item: { email?: string | null }) => item.email?.toLowerCase() === email.toLowerCase(),
-    );
+  const { data, error } = await admin.rpc("admin_lookup_auth_user_id_by_email", {
+    target_email: normalizedEmail,
+  });
 
-    if (user) return user as AuthUser;
-    if (!data?.users || data.users.length < 1000) return null;
+  if (error) {
+    console.error("[admin-user-management] Auth ID lookup failed", { code: error.code });
+    throw new UserActionError("Não foi possível localizar o login associado ao usuário.", 500);
   }
 
-  return null;
+  return typeof data === "string" ? data : null;
 }
 
 async function ensureAuthUser(
@@ -193,18 +193,10 @@ async function ensureAuthUser(
   payload: UserPayload,
   currentProfile: Profile | null,
 ): Promise<AuthUserMutation> {
-  let existingAuthUser: AuthUser | null = null;
+  const existingAuthUserId =
+    currentProfile?.auth_user_id ?? (await findAuthUserIdByEmail(admin, payload.email));
 
-  if (currentProfile?.auth_user_id) {
-    const { data, error } = await admin.auth.admin.getUserById(currentProfile.auth_user_id);
-    if (!error && data?.user?.id) existingAuthUser = data.user as AuthUser;
-  }
-
-  if (!existingAuthUser) {
-    existingAuthUser = await findAuthUserByEmail(admin, payload.email);
-  }
-
-  if (existingAuthUser?.id) {
+  if (existingAuthUserId) {
     const updatePayload: Record<string, unknown> = {
       email: payload.email,
       email_confirm: true,
@@ -212,7 +204,7 @@ async function ensureAuthUser(
     };
 
     if (payload.password) updatePayload.password = payload.password;
-    return { id: existingAuthUser.id, created: false, updatePayload };
+    return { id: existingAuthUserId, created: false, updatePayload };
   }
 
   if (!payload.password || payload.password.length < 6) {
@@ -542,7 +534,7 @@ async function deleteUser(admin: any, input: unknown) {
   }
 
   const authUserId =
-    profile.auth_user_id || (await findAuthUserByEmail(admin, profile.email || ""))?.id || null;
+    profile.auth_user_id || (await findAuthUserIdByEmail(admin, profile.email || "")) || null;
 
   if (authUserId) {
     const { error: authError } = await admin.auth.admin.deleteUser(authUserId);
