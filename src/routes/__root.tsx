@@ -95,16 +95,16 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Página não encontrada</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          A página que você procura não existe ou foi movida.
         </p>
         <div className="mt-6">
           <Link
-            to="/"
+            to="/admin"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Ir para o inicio
+            Voltar ao painel
           </Link>
         </div>
       </div>
@@ -127,12 +127,12 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          {staleChunkError ? "Atualizando o sistema" : "This page didn't load"}
+          {staleChunkError ? "Atualizando o sistema" : "Não foi possível abrir a página"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {staleChunkError
             ? "Uma nova versao foi publicada. Estamos limpando os arquivos antigos e recarregando o sistema."
-            : "Something went wrong on our end. You can try refreshing or head back home."}
+            : "Ocorreu um erro ao carregar esta página. Tente atualizar ou voltar ao painel."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -149,12 +149,12 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           >
             Recarregar agora
           </button>
-          <a
-            href="/"
+          <Link
+            to="/admin"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Ir para o inicio
-          </a>
+            Voltar ao painel
+          </Link>
         </div>
       </div>
     </div>

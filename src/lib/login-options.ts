@@ -13,6 +13,14 @@ export type SectorLoginUser = {
   isShared: boolean;
 };
 
+function isAdminGroupSearch(query: string) {
+  const normalized = query
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return normalized.startsWith("adm");
+}
+
 export async function searchLoginSectors(query: string): Promise<LoginSector[]> {
   const normalizedQuery = query.trim();
   if (normalizedQuery.length < 2) return [];
@@ -23,12 +31,18 @@ export async function searchLoginSectors(query: string): Promise<LoginSector[]> 
 
   if (error) throw new Error(error.message || "Não foi possível buscar os setores.");
 
-  return (data ?? [])
+  const sectors = (data ?? [])
     .map((row) => ({
       key: row.sector_key.trim(),
       name: row.sector_name.trim(),
     }))
     .filter((sector) => sector.key && sector.name);
+
+  if (isAdminGroupSearch(normalizedQuery)) {
+    sectors.unshift({ key: "__system_admins__", name: "Administradores do sistema" });
+  }
+
+  return sectors;
 }
 
 export async function searchLoginUsersBySector(sectorKey: string): Promise<SectorLoginUser[]> {

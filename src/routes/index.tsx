@@ -192,7 +192,7 @@ function Index() {
       } else if (selectedLogin) {
         passwordInputRef.current?.focus();
       } else {
-        setError("Digite o setor e selecione uma opção da lista.");
+        setError("Digite o setor, o nome do usuário ou “admin” e selecione uma opção da lista.");
       }
     }
   };
@@ -370,7 +370,9 @@ function Index() {
                 )}
             </div>
             {!selectedSector && (
-              <p className="text-xs text-slate-500">Digite o setor para localizar os usuários.</p>
+              <p className="text-xs text-slate-500">
+                Digite o setor, o nome do usuário ou “admin” para listar os administradores.
+              </p>
             )}
           </div>
 

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PdfDocumentViewer } from "@/components/PdfDocumentViewer";
 import {
@@ -36,6 +36,7 @@ interface Requisicao {
 
 function MeuAssinadoPdfPage() {
   const { requisicaoId } = Route.useParams();
+  const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [fileName, setFileName] = useState("Solicitacao.pdf");
   const [loading, setLoading] = useState(true);
@@ -48,74 +49,76 @@ function MeuAssinadoPdfPage() {
     async function loadPdf() {
       setLoading(true);
       setError(null);
+      setUrl("");
 
-      const requestResult = await supabase
-        .from("requisicoes")
-        .select(
-          "id,saida_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment",
-        )
-        .eq("id", requisicaoId)
-        .maybeSingle();
+      try {
+        const requestResult = await supabase
+          .from("requisicoes")
+          .select(
+            "id,saida_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,signed_attachment,admin_attachment",
+          )
+          .eq("id", requisicaoId)
+          .maybeSingle();
 
-      if (!active) return;
+        if (!active) return;
+        if (requestResult.error) {
+          throw new Error(requestResult.error.message || "Erro ao carregar PDF.");
+        }
+        if (!requestResult.data) {
+          throw new Error("Solicitação não encontrada.");
+        }
 
-      if (requestResult.error) {
-        setError(requestResult.error.message || "Erro ao carregar PDF.");
-        setLoading(false);
-        return;
-      }
-
-      if (!requestResult.data) {
-        setError("Solicitação não encontrada.");
-        setLoading(false);
-        return;
-      }
-
-      const request = requestResult.data as Requisicao;
-      const code = request.saida_codigo || request.id;
-      const requestAttachment = getRequestSignedAttachment(
-        request.signed_attachment,
-        request.status,
-      );
-      const outputAttachments =
-        getOutputSignedAttachments(request.signed_attachment, request.status).length > 0
-          ? getOutputSignedAttachments(request.signed_attachment, request.status)
-          : getAttachmentFiles(request.admin_attachment);
-
-      const [requestUrl, outputUrls] = await Promise.all([
-        resolveAttachmentUrl(requestAttachment),
-        Promise.all(outputAttachments.map((attachment) => resolveAttachmentUrl(attachment))),
-      ]);
-
-      if (requestUrl && outputUrls.some(Boolean)) {
-        const blob = await createCombinedSignedPdfBlob(outputUrls.filter(Boolean), requestUrl);
-        createdUrl = URL.createObjectURL(blob);
-      } else if (requestUrl || outputUrls.some(Boolean)) {
-        createdUrl = requestUrl || outputUrls.find(Boolean) || "";
-      } else {
-        const blob = await createRequestPdfBlob(
-          await resolveRequestForPdf(
-            {
-              ...request,
-              items: request.items as RequestPdfItem[] | null,
-            },
-            code,
-          ),
+        const request = requestResult.data as Requisicao;
+        const code = request.saida_codigo || request.id;
+        const requestAttachment = getRequestSignedAttachment(
+          request.signed_attachment,
+          request.status,
         );
-        createdUrl = URL.createObjectURL(blob);
-      }
+        const outputAttachments =
+          getOutputSignedAttachments(request.signed_attachment, request.status).length > 0
+            ? getOutputSignedAttachments(request.signed_attachment, request.status)
+            : getAttachmentFiles(request.admin_attachment);
 
-      if (!active) {
-        if (createdUrl.startsWith("blob:")) URL.revokeObjectURL(createdUrl);
-        return;
-      }
+        const [requestUrl, outputUrls] = await Promise.all([
+          resolveAttachmentUrl(requestAttachment),
+          Promise.all(outputAttachments.map((attachment) => resolveAttachmentUrl(attachment))),
+        ]);
 
-      setUrl(createdUrl);
-      setFileName(`Requisicao-${code}.pdf`);
-      setLoading(false);
+        if (requestUrl && outputUrls.some(Boolean)) {
+          const blob = await createCombinedSignedPdfBlob(outputUrls.filter(Boolean), requestUrl);
+          createdUrl = URL.createObjectURL(blob);
+        } else if (requestUrl || outputUrls.some(Boolean)) {
+          createdUrl = requestUrl || outputUrls.find(Boolean) || "";
+        } else {
+          const blob = await createRequestPdfBlob(
+            await resolveRequestForPdf(
+              {
+                ...request,
+                items: request.items as RequestPdfItem[] | null,
+              },
+              code,
+            ),
+          );
+          createdUrl = URL.createObjectURL(blob);
+        }
+
+        if (!active) {
+          if (createdUrl.startsWith("blob:")) URL.revokeObjectURL(createdUrl);
+          return;
+        }
+
+        setUrl(createdUrl);
+        setFileName(`Requisicao-${code}.pdf`);
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Erro ao carregar PDF.");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     }
 
-    loadPdf();
+    void loadPdf();
 
     return () => {
       active = false;
@@ -126,13 +129,13 @@ function MeuAssinadoPdfPage() {
   return (
     <PdfDocumentViewer
       title="Visualizador de documento"
-      subtitle={"Documento assinado"}
+      subtitle="Documento assinado"
       url={url}
       fileName={fileName}
       loading={loading}
-      loadingLabel={"Carregando PDF..."}
+      loadingLabel="Carregando PDF..."
       error={error}
-      onBack={() => window.history.back()}
+      onBack={() => void navigate({ to: "/admin/meus-assinados" })}
     />
   );
 }
