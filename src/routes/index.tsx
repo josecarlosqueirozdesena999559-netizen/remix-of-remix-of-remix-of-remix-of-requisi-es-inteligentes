@@ -15,6 +15,60 @@ import { resolveLoginEmail, searchLoginOptions, type LoginOption } from "@/lib/l
 
 const MIN_LOGIN_QUERY_LENGTH = 2;
 
+function getLoginOptionLabel(option: LoginOption) {
+  return option.isShared ? option.login : option.displayName;
+}
+
+type SharedRequesterOption = {
+  id: string;
+  name: string;
+};
+
+type LoginOptionGroup = {
+  option: LoginOption;
+  requesters: SharedRequesterOption[];
+};
+
+function getSharedRequesterName(displayName: string) {
+  return displayName.split(" — ").slice(1).join(" — ").trim() || displayName;
+}
+
+function groupLoginOptions(options: LoginOption[]): LoginOptionGroup[] {
+  const groupedOptions: LoginOptionGroup[] = [];
+  const sharedOptionsByLogin = new Map<string, LoginOptionGroup>();
+
+  for (const option of options) {
+    if (!option.isShared) {
+      groupedOptions.push({ option, requesters: [] });
+      continue;
+    }
+
+    const key = option.login.trim().toLowerCase();
+    let group = sharedOptionsByLogin.get(key);
+
+    if (!group) {
+      group = {
+        option: { ...option, displayName: option.login, requesterId: null },
+        requesters: [],
+      };
+      sharedOptionsByLogin.set(key, group);
+      groupedOptions.push(group);
+    }
+
+    if (
+      option.requesterId &&
+      !group.requesters.some((requester) => requester.id === option.requesterId)
+    ) {
+      group.requesters.push({
+        id: option.requesterId,
+        name: getSharedRequesterName(option.displayName),
+      });
+    }
+  }
+
+  return groupedOptions;
+}
+
 export const Route = createFileRoute("/")({
   component: Index,
 });
@@ -26,12 +80,15 @@ function Index() {
   const [password, setPassword] = useState("");
   const [loginOptions, setLoginOptions] = useState<LoginOption[]>([]);
   const [selectedLogin, setSelectedLogin] = useState<LoginOption | null>(null);
+  const [sharedRequesterOptions, setSharedRequesterOptions] = useState<SharedRequesterOption[]>([]);
+  const [selectedRequesterId, setSelectedRequesterId] = useState("");
   const [activeOptionIndex, setActiveOptionIndex] = useState(-1);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visibleLoginOptions = groupLoginOptions(loginOptions);
 
   useEffect(() => {
     const query = loginQuery.trim();
@@ -59,7 +116,7 @@ function Index() {
         .then((options) => {
           if (!active) return;
           setLoginOptions(options);
-          setActiveOptionIndex(options.length > 0 ? 0 : -1);
+          setActiveOptionIndex(groupLoginOptions(options).length > 0 ? 0 : -1);
           setOptionsOpen(true);
         })
         .catch(() => {
@@ -84,6 +141,8 @@ function Index() {
     setSelectedLogin(null);
     setPassword("");
     setLoginOptions([]);
+    setSharedRequesterOptions([]);
+    setSelectedRequesterId("");
     setSearching(value.trim().length >= MIN_LOGIN_QUERY_LENGTH);
     setError(null);
     setLookupError(null);
@@ -92,35 +151,62 @@ function Index() {
     clearSelectedSharedRequesterId();
   };
 
-  const handleChooseLogin = (option: LoginOption) => {
-    setSelectedLogin(option);
-    setLoginQuery(option.displayName);
+  const handleChooseLogin = (option: LoginOption, requesters: SharedRequesterOption[] = []) => {
+    const selectedOption = option.isShared
+      ? { ...option, displayName: option.login, requesterId: null }
+      : option;
+    const initialRequesterId = option.isShared && requesters.length === 1 ? requesters[0].id : "";
+
+    setSelectedLogin(selectedOption);
+    setSharedRequesterOptions(option.isShared ? requesters : []);
+    setSelectedRequesterId(initialRequesterId);
+    setLoginQuery(getLoginOptionLabel(option));
     setPassword("");
     setError(null);
     setLookupError(null);
     setOptionsOpen(false);
     setActiveOptionIndex(-1);
-    clearSelectedSharedRequesterId();
-
-    if (option.isShared && option.requesterId) {
-      setSelectedSharedRequesterId(option.requesterId);
+    if (initialRequesterId) {
+      setSelectedSharedRequesterId(initialRequesterId);
+    } else {
+      clearSelectedSharedRequesterId();
     }
 
-    window.setTimeout(() => passwordInputRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      if (option.isShared && !initialRequesterId) {
+        document.getElementById("pessoa-vinculada")?.focus();
+      } else {
+        passwordInputRef.current?.focus();
+      }
+    }, 0);
+  };
+
+  const handleSharedRequesterChange = (requesterId: string) => {
+    setSelectedRequesterId(requesterId);
+    setError(null);
+
+    if (requesterId) {
+      setSelectedSharedRequesterId(requesterId);
+      window.setTimeout(() => passwordInputRef.current?.focus(), 0);
+    } else {
+      clearSelectedSharedRequesterId();
+    }
   };
 
   const handleLoginKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown" && loginOptions.length > 0) {
+    if (event.key === "ArrowDown" && visibleLoginOptions.length > 0) {
       event.preventDefault();
       setOptionsOpen(true);
-      setActiveOptionIndex((current) => (current + 1) % loginOptions.length);
+      setActiveOptionIndex((current) => (current + 1) % visibleLoginOptions.length);
       return;
     }
 
-    if (event.key === "ArrowUp" && loginOptions.length > 0) {
+    if (event.key === "ArrowUp" && visibleLoginOptions.length > 0) {
       event.preventDefault();
       setOptionsOpen(true);
-      setActiveOptionIndex((current) => (current <= 0 ? loginOptions.length - 1 : current - 1));
+      setActiveOptionIndex((current) =>
+        current <= 0 ? visibleLoginOptions.length - 1 : current - 1,
+      );
       return;
     }
 
@@ -131,13 +217,15 @@ function Index() {
 
     if (event.key === "Enter") {
       event.preventDefault();
-      const activeOption = loginOptions[activeOptionIndex];
+      const activeOption = visibleLoginOptions[activeOptionIndex];
       if (!selectedLogin && activeOption) {
-        handleChooseLogin(activeOption);
+        handleChooseLogin(activeOption.option, activeOption.requesters);
+      } else if (selectedLogin?.isShared && !selectedRequesterId) {
+        document.getElementById("pessoa-vinculada")?.focus();
       } else if (selectedLogin) {
         passwordInputRef.current?.focus();
       } else {
-        setError("Digite seu usuário ou nome e selecione uma opção da lista.");
+        setError("Digite seu usuário e selecione uma opção da lista.");
       }
     }
   };
@@ -154,7 +242,7 @@ function Index() {
       setError("Digite sua senha.");
       return;
     }
-    if (selectedLogin.isShared && !selectedLogin.requesterId) {
+    if (selectedLogin.isShared && !selectedRequesterId) {
       setError("Selecione a pessoa vinculada ao posto antes de entrar.");
       return;
     }
@@ -174,8 +262,8 @@ function Index() {
 
       if (!email) throw new Error("Usuário ou senha inválidos.");
 
-      if (selectedLogin.isShared && selectedLogin.requesterId) {
-        setSelectedSharedRequesterId(selectedLogin.requesterId);
+      if (selectedLogin.isShared && selectedRequesterId) {
+        setSelectedSharedRequesterId(selectedRequesterId);
       } else {
         clearSelectedSharedRequesterId();
       }
@@ -286,10 +374,10 @@ function Index() {
                     )}
                     {!searching &&
                       !lookupError &&
-                      loginOptions.map((option, index) => (
+                      visibleLoginOptions.map(({ option, requesters }, index) => (
                         <button
                           id={`login-option-${index}`}
-                          key={`${option.login}-${option.requesterId ?? "account"}`}
+                          key={`${option.login}-${option.isShared ? "shared" : (option.requesterId ?? "account")}`}
                           type="button"
                           role="option"
                           aria-selected={index === activeOptionIndex}
@@ -300,14 +388,9 @@ function Index() {
                           }`}
                           onMouseDown={(event) => event.preventDefault()}
                           onMouseEnter={() => setActiveOptionIndex(index)}
-                          onClick={() => handleChooseLogin(option)}
+                          onClick={() => handleChooseLogin(option, requesters)}
                         >
-                          <span className="block font-medium">{option.displayName}</span>
-                          {option.isShared && (
-                            <span className="mt-0.5 block text-xs text-slate-500">
-                              Acesso compartilhado do posto
-                            </span>
-                          )}
+                          <span className="block font-medium">{getLoginOptionLabel(option)}</span>
                         </button>
                       ))}
                   </div>
@@ -315,12 +398,39 @@ function Index() {
             </div>
             {!selectedLogin && (
               <p className="text-xs text-slate-500">
-                Digite o setor para localizar a pessoa vinculada.
+                Digite o usuário ou setor para localizar o acesso.
               </p>
             )}
           </div>
 
-          {selectedLogin && (
+          {selectedLogin?.isShared && sharedRequesterOptions.length > 1 && (
+            <div className="space-y-2">
+              <Label htmlFor="pessoa-vinculada" className="text-slate-700">
+                Pessoa vinculada
+              </Label>
+              <select
+                id="pessoa-vinculada"
+                value={selectedRequesterId}
+                onChange={(event) => handleSharedRequesterChange(event.target.value)}
+                className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                required
+                disabled={loading}
+              >
+                <option value="">Selecione a pessoa vinculada</option>
+                {sharedRequesterOptions.map((requester) => (
+                  <option key={requester.id} value={requester.id}>
+                    {requester.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {selectedLogin?.isShared && sharedRequesterOptions.length === 0 && (
+            <p className="text-xs text-rose-700">Nenhuma pessoa vinculada a esse acesso.</p>
+          )}
+
+          {selectedLogin && (!selectedLogin.isShared || selectedRequesterId) && (
             <div className="space-y-2">
               <Label htmlFor="senha" className="text-slate-700">
                 Digite a senha
@@ -348,7 +458,12 @@ function Index() {
 
           <Button
             type="submit"
-            disabled={loading || !selectedLogin || !password}
+            disabled={
+              loading ||
+              !selectedLogin ||
+              (selectedLogin.isShared && !selectedRequesterId) ||
+              !password
+            }
             className="h-10 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-100"
           >
             {loading ? (
