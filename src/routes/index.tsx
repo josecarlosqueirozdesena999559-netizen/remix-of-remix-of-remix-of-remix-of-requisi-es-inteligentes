@@ -4,9 +4,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { supabase } from "@/integrations/supabase/client";
 import { clearSelectedSharedRequesterId } from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
+
+// Set to false to bring back the login page after maintenance is complete.
+const MAINTENANCE_MODE = true;
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -18,6 +22,10 @@ function Index() {
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (MAINTENANCE_MODE) {
+    return <MaintenanceScreen />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
