@@ -360,7 +360,7 @@ function Index() {
           <Button
             type="submit"
             disabled={loading || !selectedLogin || !password}
-            className="h-10 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-10 w-full gap-2 bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-100"
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
