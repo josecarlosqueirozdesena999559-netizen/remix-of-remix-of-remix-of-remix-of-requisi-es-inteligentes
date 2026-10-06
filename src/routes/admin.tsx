@@ -437,62 +437,6 @@ function AdminLayout() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <p className={sectionTitleClass}>Solicitações</p>
-                <div className="space-y-1">
-                  {hasAdminSectionAccess(profile, "requisicao") ? (
-                    <Link
-                      to="/admin/requisicao"
-                      className={navItemClass(requisicaoActive)}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void handleCreateRequestClick();
-                      }}
-                    >
-                      <FilePlus className={navIconClass(requisicaoActive)} />
-                      <span className="truncate">Criar Solicitação</span>
-                      {checkingCreateRequest ? (
-                        <Loader2 className="ml-auto h-4 w-4 animate-spin text-emerald-600" />
-                      ) : null}
-                    </Link>
-                  ) : null}
-                  <Link
-                    to="/admin/minhas-assinaturas"
-                    className={navItemClass(isActivePath("/admin/minhas-assinaturas"))}
-                  >
-                    <FileClock
-                      className={navIconClass(isActivePath("/admin/minhas-assinaturas"))}
-                    />
-                    <span className="truncate">Minhas Assinaturas</span>
-                  </Link>
-                  <Link
-                    to="/admin/assinaturas-avulsas"
-                    className={navItemClass(isActivePath("/admin/assinaturas-avulsas"))}
-                  >
-                    <FileSignature
-                      className={navIconClass(isActivePath("/admin/assinaturas-avulsas"))}
-                    />
-                    <span className="truncate">Assinaturas Avulsas</span>
-                  </Link>
-                  <Link
-                    to="/admin/minhas-requisicoes"
-                    className={navItemClass(isActivePath("/admin/minhas-requisicoes"))}
-                  >
-                    <ClipboardList
-                      className={navIconClass(isActivePath("/admin/minhas-requisicoes"))}
-                    />
-                    <span className="truncate">Minhas Solicitações</span>
-                  </Link>
-                  <Link
-                    to="/admin/meus-assinados"
-                    className={navItemClass(isActivePath("/admin/meus-assinados"))}
-                  >
-                    <FileCheck2 className={navIconClass(isActivePath("/admin/meus-assinados"))} />
-                    <span className="truncate">Documentos Assinados</span>
-                  </Link>
-                </div>
-              </div>
-
               {hasAdminSectionAccess(profile, "cadastros") ? (
                 <div className="space-y-2">
                   <button
