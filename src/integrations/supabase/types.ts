@@ -489,6 +489,21 @@ export type Database = {
           is_shared: boolean
         }[]
       }
+      search_login_sectors: {
+        Args: { p_query: string }
+        Returns: {
+          sector_key: string
+          sector_name: string
+        }[]
+      }
+      search_login_people_by_sector: {
+        Args: { p_sector_key: string }
+        Returns: {
+          person_name: string
+          login_usuario: string
+          requester_id: string | null
+        }[]
+      }
       get_pending_signature_control: {
         Args: { p_localidade?: string | null; p_nome?: string | null }
         Returns: {
