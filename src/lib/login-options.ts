@@ -1,10 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type LoginSector = {
-  key: string;
-  name: string;
-};
-
 export type SectorLoginUser = {
   id: string;
   personName: string;
@@ -13,7 +8,13 @@ export type SectorLoginUser = {
   isShared: boolean;
 };
 
-function isAdminGroupSearch(query: string) {
+export type LoginSector = {
+  key: string;
+  name: string;
+  adminUser?: SectorLoginUser;
+};
+
+export function isAdminGroupSearch(query: string) {
   const normalized = query
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -25,24 +26,27 @@ export async function searchLoginSectors(query: string): Promise<LoginSector[]> 
   const normalizedQuery = query.trim();
   if (normalizedQuery.length < 2) return [];
 
+  if (isAdminGroupSearch(normalizedQuery)) {
+    const administrators = await searchLoginUsersBySector("__system_admins__");
+    return administrators.map((admin) => ({
+      key: `admin:${admin.login.toLowerCase()}`,
+      name: admin.personName,
+      adminUser: admin,
+    }));
+  }
+
   const { data, error } = await supabase.rpc("search_login_sectors", {
     p_query: normalizedQuery,
   });
 
   if (error) throw new Error(error.message || "Não foi possível buscar os setores.");
 
-  const sectors = (data ?? [])
+  return (data ?? [])
     .map((row) => ({
       key: row.sector_key.trim(),
       name: row.sector_name.trim(),
     }))
     .filter((sector) => sector.key && sector.name);
-
-  if (isAdminGroupSearch(normalizedQuery)) {
-    sectors.unshift({ key: "__system_admins__", name: "Administradores do sistema" });
-  }
-
-  return sectors;
 }
 
 export async function searchLoginUsersBySector(sectorKey: string): Promise<SectorLoginUser[]> {

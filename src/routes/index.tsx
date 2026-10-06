@@ -13,6 +13,7 @@ import {
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 import {
   resolveLoginEmail,
+  isAdminGroupSearch,
   searchLoginSectors,
   searchLoginUsersBySector,
   type LoginSector,
@@ -45,7 +46,7 @@ function Index() {
 
   useEffect(() => {
     const query = loginQuery.trim();
-    if (selectedSector) {
+    if (selectedSector || selectedLogin) {
       setSectorOptions([]);
       setOptionsOpen(false);
       setSearching(false);
@@ -75,7 +76,7 @@ function Index() {
         .catch(() => {
           if (!active) return;
           setSectorOptions([]);
-          setLookupError("Não foi possível carregar a lista de setores. Tente novamente.");
+          setLookupError("Não foi possível carregar as opções de login. Tente novamente.");
           setOptionsOpen(true);
         })
         .finally(() => {
@@ -87,7 +88,7 @@ function Index() {
       active = false;
       window.clearTimeout(timeout);
     };
-  }, [loginQuery, selectedSector]);
+  }, [loginQuery, selectedLogin, selectedSector]);
 
   useEffect(() => {
     if (!selectedSector) {
@@ -136,6 +137,22 @@ function Index() {
   };
 
   const handleChooseSector = (sector: LoginSector) => {
+    if (sector.adminUser) {
+      setLoginQuery(sector.name);
+      setSelectedSector(null);
+      setSectorOptions([]);
+      setSectorUsers([]);
+      setLoadingSectorUsers(false);
+      setSectorUsersError(null);
+      setLookupError(null);
+      setOptionsOpen(false);
+      setActiveOptionIndex(-1);
+      setSearching(false);
+      clearSelectedSharedRequesterId();
+      handleChooseUser(sector.adminUser);
+      return;
+    }
+
     setSelectedSector(sector);
     setLoginQuery(sector.name);
     setSelectedLogin(null);
@@ -343,7 +360,11 @@ function Index() {
                       <p className="px-3 py-2 text-sm text-rose-700">{lookupError}</p>
                     )}
                     {!searching && !lookupError && sectorOptions.length === 0 && (
-                      <p className="px-3 py-2 text-sm text-slate-500">Nenhum setor encontrado.</p>
+                      <p className="px-3 py-2 text-sm text-slate-500">
+                        {isAdminGroupSearch(loginQuery)
+                          ? "Nenhum administrador encontrado."
+                          : "Nenhum setor encontrado."}
+                      </p>
                     )}
                     {!searching &&
                       !lookupError &&
