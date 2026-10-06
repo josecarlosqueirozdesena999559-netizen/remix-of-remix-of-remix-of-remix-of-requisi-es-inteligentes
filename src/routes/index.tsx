@@ -313,21 +313,10 @@ function Index() {
                   </div>
                 )}
             </div>
-            <p className="text-xs text-slate-500">Digite o setor e selecione a pessoa vinculada.</p>
-            {selectedLogin && (
-              <div className="rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                  Acesso selecionado
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                  {selectedLogin.displayName}
-                </p>
-                {selectedLogin.isShared && (
-                  <p className="mt-1 text-xs text-slate-600">
-                    Use a senha da conta compartilhada do posto.
-                  </p>
-                )}
-              </div>
+            {!selectedLogin && (
+              <p className="text-xs text-slate-500">
+                Digite o setor para localizar a pessoa vinculada.
+              </p>
             )}
           </div>
 
