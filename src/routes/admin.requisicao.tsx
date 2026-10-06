@@ -159,8 +159,8 @@ const requestSelectFallback = "id,categoria,setor,programa,status,solicitante,so
 const ramonEnteralSector = "RAMON - DIETAS ENTERAIS";
 const ramonAllowedCategories = [
   "Insumos para Dietas Enterais",
-  "Frutas, Verduras e Prote�nas",
-  "G�neros aliment�cios/limpeza",
+  "Frutas, Verduras e Proteínas",
+  "Gêneros alimentícios/limpeza",
 ];
 const productCategorySet = new Set<string>(PRODUCT_CATEGORIES);
 const ramonRequestDestinationOptions = ["ATENÇÃO BÁSICA", "HOSPITAL", "CASA DE APOIO"];
@@ -1318,7 +1318,7 @@ function CriarRequisicaoPage() {
               <div className="text-xs font-semibold text-slate-800">Programa do pedido</div>
               <div className="max-w-md space-y-1">
                 <Label htmlFor="select-ramon-program" className="text-xs text-slate-500 font-normal">
-                  Escolha o programa que ser� impresso no PDF:
+                  Escolha o programa que será impresso no PDF:
                 </Label>
                 <select id="select-ramon-program" value={selectedRamonProgram}
                   onChange={(event) => setSelectedRamonProgram(event.target.value)} required
