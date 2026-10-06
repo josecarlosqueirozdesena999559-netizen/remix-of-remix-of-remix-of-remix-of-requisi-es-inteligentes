@@ -655,6 +655,7 @@ function CriarRequisicaoPage() {
   const [sectorUsers, setSectorUsers] = useState<SectorUserOption[]>([]);
   const [selectedSolicitanteId, setSelectedSolicitanteId] = useState<string>("");
   const [selectedRamonProgram, setSelectedRamonProgram] = useState("");
+  const [selectedRamonRequestDestination, setSelectedRamonRequestDestination] = useState("");
   const [programs, setPrograms] = useState<ProgramOption[]>([]);
 
   const [selectedSectionId, setSelectedSectionId] = useState("");
