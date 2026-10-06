@@ -1,444 +1,59 @@
-import { createServerFn } from "@tanstack/react-start";
-
-import { ADMIN_SECTIONS } from "@/lib/admin-sections";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { normalizeProductCategory } from "@/lib/product-options";
+import { supabase } from "@/integrations/supabase/client";
 
 type AdminUserPayload = {
   id?: string | null;
   nome: string;
-  usuario?: string;
+  usuario: string;
   email: string;
   cpf?: string | null;
-  funcao?: string | null;
-  setor?: string | null;
-  unidade_nome?: string | null;
-  categorias_permitidas?: string[];
   password?: string | null;
 };
 
-type ServerFnAuthPayload = {
-  accessToken?: string | null;
+type UserActionResponse = {
+  id?: string;
+  ok?: boolean;
+  error?: string;
 };
 
-function cleanString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
+async function invokeAdminUserManagement(body: Record<string, unknown>) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw new Error(sessionError.message);
 
-function isAdminSection(value: string) {
-  return (ADMIN_SECTIONS as readonly string[]).includes(value);
-}
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
 
-function getAccessToken(input: unknown) {
-  if (!input || typeof input !== "object") return "";
-  return cleanString((input as ServerFnAuthPayload).accessToken);
-}
+  const { data, error } = await supabase.functions.invoke<UserActionResponse>(
+    "admin-user-management",
+    {
+      body,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
 
-function hasOwnKey(input: unknown, key: string) {
-  return Boolean(input && typeof input === "object" && Object.prototype.hasOwnProperty.call(input, key));
-}
-
-function normalizeInternalLoginSlug(usuario: string) {
-  return usuario
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "");
-}
-
-function createCompactLoginKey(usuario: string) {
-  return usuario.toLowerCase().replace(/\s+/g, "");
-}
-
-function createInternalEmail(usuario: string) {
-  const slug = normalizeInternalLoginSlug(usuario);
-
-  return `${slug || "usuario"}@usuarios.solicite.local`;
-}
-
-function createLoginFromEmail(email: string) {
-  return email.split("@")[0]?.trim() || email.trim();
-}
-
-function normalizeCpf(value: unknown) {
-  const cpf = cleanString(value);
-  if (!cpf) return null;
-
-  const digits = cpf.replace(/\D/g, "");
-  if (digits.length !== 11) {
-    throw new Error("Informe um CPF com 11 dígitos.");
+  if (error) {
+    const context = (error as { context?: unknown }).context;
+    if (typeof Response !== "undefined" && context instanceof Response) {
+      const payload = (await context
+        .clone()
+        .json()
+        .catch(() => null)) as UserActionResponse | null;
+      if (payload?.error) throw new Error(payload.error);
+    }
+    throw new Error(error.message || "Não foi possível comunicar com o Supabase.");
   }
 
-  return digits;
+  if (data?.error) throw new Error(data.error);
+  return data;
 }
 
-function readableSupabaseError(error: unknown, fallback: string) {
-  const candidate = error as { code?: string; message?: string } | null;
-  const message = candidate?.message || fallback;
-
-  if (candidate?.code === "23505" || /duplicate key|already registered/i.test(message)) {
-    if (/cpf/i.test(message)) return "Este CPF já está cadastrado para outro usuário.";
-    if (/email/i.test(message)) return "Este email já está cadastrado para outro usuário.";
-    return "Já existe um usuário com esses dados.";
-  }
-
-  return message;
+export async function saveMyCpf({ data }: { data: { cpf: string } }) {
+  return invokeAdminUserManagement({ action: "update_my_cpf", cpf: data.cpf });
 }
 
-function validateUserPayload(input: unknown): AdminUserPayload {
-  if (!input || typeof input !== "object") {
-    throw new Error("Dados do usuário inválidos.");
-  }
-
-  const data = input as Partial<AdminUserPayload>;
-  const nome = cleanString(data.nome);
-  const rawEmail = cleanString(data.email).toLowerCase();
-  const usuario = cleanString(data.usuario) || createLoginFromEmail(rawEmail);
-  const email = rawEmail || createInternalEmail(usuario);
-
-  if (!nome) throw new Error("Informe o nome do usuário.");
-  if (!email) throw new Error("Informe o email do usuário.");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Informe um email valido.");
-  if (!usuario) throw new Error("Informe o usuário de acesso.");
-
-  const categorias = Array.isArray(data.categorias_permitidas)
-    ? data.categorias_permitidas
-        .map(String)
-        .map(normalizeProductCategory)
-        .filter((categoria, index, categoriasNormalizadas) => {
-          return Boolean(categoria) && categoriasNormalizadas.indexOf(categoria) === index;
-        })
-    : [];
-
-  return {
-    id: cleanString(data.id) || null,
-    nome,
-    usuario,
-    email,
-    cpf: normalizeCpf(data.cpf),
-    funcao: cleanString(data.funcao) || null,
-    setor: cleanString(data.setor) || null,
-    unidade_nome: cleanString(data.unidade_nome) || null,
-    categorias_permitidas: categorias,
-    password: cleanString(data.password) || null,
-  };
+export async function saveAdminUser({ data }: { data: AdminUserPayload }) {
+  return invokeAdminUserManagement({ action: "save", ...data });
 }
 
-async function requireAdmin(userId: string, email?: string | null) {
-  const { data: profile, error } = await (supabaseAdmin as any)
-    .from("usuarios")
-    .select("id,is_admin")
-    .eq("auth_user_id", userId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (profile?.is_admin) return;
-
-  const normalizedEmail = email?.trim().toLowerCase();
-  if (normalizedEmail) {
-    const { data: profileByEmail, error: emailError } = await (supabaseAdmin as any)
-      .from("usuarios")
-      .select("id,is_admin")
-      .ilike("email", normalizedEmail)
-      .maybeSingle();
-
-    if (emailError) throw new Error(emailError.message);
-    if (profileByEmail?.is_admin) return;
-  }
-
-  throw new Error("Apenas administradores podem gerenciar usuários.");
+export async function deleteAdminUser({ data }: { data: { id: string } }) {
+  return invokeAdminUserManagement({ action: "delete", id: data.id });
 }
-
-async function requireAdminFromAccessToken(input: unknown) {
-  const accessToken = getAccessToken(input);
-  if (!accessToken) throw new Error("Sessao expirada. Entre novamente.");
-
-  const { data, error } = await (supabaseAdmin as any).auth.getUser(accessToken);
-  if (error) throw new Error(error.message);
-
-  const user = data.user;
-  if (!user?.id) throw new Error("Sessao expirada. Entre novamente.");
-
-  await requireAdmin(user.id, user.email);
-}
-
-async function findAuthUserByEmail(email: string) {
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await (supabaseAdmin as any).auth.admin.listUsers({
-      page,
-      perPage: 1000,
-    });
-
-    if (error) throw new Error(error.message);
-
-    const user = data?.users?.find(
-      (item: { email?: string | null }) => item.email?.toLowerCase() === email.toLowerCase(),
-    );
-
-    if (user) return user;
-    if (!data?.users || data.users.length < 1000) return null;
-  }
-
-  return null;
-}
-
-async function ensureAuthUser(
-  payload: AdminUserPayload,
-  currentAuthUserId?: string | null,
-  isExistingProfile = false,
-) {
-  const authUserId = currentAuthUserId?.trim();
-  const email = payload.email || createInternalEmail(payload.usuario);
-  let existingAuthUser: { id: string } | null = null;
-
-  if (authUserId) {
-    const { data, error } = await (supabaseAdmin as any).auth.admin.getUserById(authUserId);
-    if (!error && data?.user?.id) existingAuthUser = { id: data.user.id };
-  }
-
-  if (!existingAuthUser) existingAuthUser = await findAuthUserByEmail(email);
-
-  if (existingAuthUser?.id) {
-    const updatePayload: Record<string, unknown> = {
-      email,
-      email_confirm: true,
-      user_metadata: { nome: payload.nome },
-    };
-
-    if (payload.password) updatePayload.password = payload.password;
-
-    const { data, error } = await (supabaseAdmin as any).auth.admin.updateUserById(
-      existingAuthUser.id,
-      updatePayload,
-    );
-
-    if (error) throw new Error(error.message);
-    return data.user?.id || existingAuthUser.id;
-  }
-
-  if (!payload.password || payload.password.length < 6) {
-    // Cadastros antigos podem apontar para um usuário removido do Supabase Auth.
-    // Nome e CPF continuam editáveis; ao definir uma nova senha o login é recriado.
-    if (isExistingProfile) return null;
-    throw new Error("Informe uma senha com pelo menos 6 caracteres para criar o login.");
-  }
-
-  const { data, error } = await (supabaseAdmin as any).auth.admin.createUser({
-    email,
-    password: payload.password,
-    email_confirm: true,
-    user_metadata: { nome: payload.nome },
-  });
-
-  if (error) throw new Error(error.message);
-  if (!data.user?.id) throw new Error("Não foi possível criar o login do usuário.");
-
-  return data.user.id;
-}
-
-export const saveAdminUser = createServerFn({ method: "POST" }).handler(async ({ data }) => {
-    await requireAdminFromAccessToken(data);
-
-    const hasFuncao = hasOwnKey(data, "funcao");
-    const hasSetor = hasOwnKey(data, "setor");
-    const hasUnidadeNome = hasOwnKey(data, "unidade_nome");
-    const hasCategoriasPermitidas = hasOwnKey(data, "categorias_permitidas");
-    const payload = validateUserPayload(data);
-    let currentProfile: {
-      auth_user_id: string | null;
-      email: string | null;
-      is_admin: boolean;
-      role: string | null;
-      funcao: string | null;
-      setor: string | null;
-      unidade_nome: string | null;
-      categorias_permitidas: unknown;
-      cpf: string | null;
-    } | null = null;
-
-    if (payload.id) {
-      const { data: profile, error } = await (supabaseAdmin as any)
-        .from("usuarios")
-        .select("auth_user_id,email,is_admin,role,funcao,setor,unidade_nome,categorias_permitidas,cpf")
-        .eq("id", payload.id)
-        .maybeSingle();
-
-      if (error) throw new Error(error.message);
-      if (!profile) throw new Error("Usuário não encontrado.");
-      currentProfile = profile;
-    }
-
-    if (payload.usuario.toLowerCase() === "admin" && !currentProfile?.is_admin) {
-      throw new Error("O login admin e reservado para o administrador.");
-    }
-
-    const { data: sameUserProfiles, error: sameUserError } = await (supabaseAdmin as any)
-      .from("usuarios")
-      .select("id")
-      .ilike("usuario", payload.usuario)
-      .limit(2);
-
-    if (sameUserError) throw new Error(sameUserError.message);
-
-    const duplicatedUser = (sameUserProfiles ?? []).some(
-      (profile: { id: string }) => profile.id !== payload.id,
-    );
-
-    if (duplicatedUser) {
-      throw new Error("Já existe um usuário com este login. Informe outro usuário de acesso.");
-    }
-
-    const compactLoginKey = createCompactLoginKey(payload.usuario);
-    const { data: compactMatches, error: compactMatchesError } = await (supabaseAdmin as any)
-      .from("usuarios")
-      .select("id,usuario")
-      .limit(200);
-
-    if (compactMatchesError) throw new Error(compactMatchesError.message);
-
-    const ambiguousCompactLogin = (compactMatches ?? []).find(
-      (profile: { id: string; usuario: string | null }) =>
-        profile.id !== payload.id &&
-        createCompactLoginKey(profile.usuario || "") === compactLoginKey,
-    );
-
-    if (ambiguousCompactLogin) {
-      throw new Error(
-        `Já existe um usuário com login equivalente (${ambiguousCompactLogin.usuario}). Use outro usuário sem variar apenas espaços.`,
-      );
-    }
-
-    const { data: sameEmailProfiles, error: sameEmailError } = await (supabaseAdmin as any)
-      .from("usuarios")
-      .select("id,usuario,email")
-      .ilike("email", payload.email)
-      .limit(2);
-
-    if (sameEmailError) throw new Error(sameEmailError.message);
-
-    const duplicatedInternalEmail = (sameEmailProfiles ?? []).find(
-      (profile: { id: string; usuario: string | null; email: string | null }) =>
-        profile.id !== payload.id,
-    );
-
-    if (duplicatedInternalEmail) {
-      throw new Error(
-        `O usuário de acesso informado gera o mesmo login interno de ${duplicatedInternalEmail.usuario}. Escolha outro usuário de acesso.`,
-      );
-    }
-
-    if (payload.cpf) {
-      const { data: cpfProfiles, error: cpfError } = await (supabaseAdmin as any)
-        .from("usuarios")
-        .select("id,cpf")
-        .not("cpf", "is", null);
-
-      if (cpfError) throw new Error(readableSupabaseError(cpfError, "Erro ao validar o CPF."));
-
-      const duplicatedCpf = (cpfProfiles ?? []).some(
-        (profile: { id: string; cpf: string | null }) =>
-          profile.id !== payload.id && profile.cpf?.replace(/\D/g, "") === payload.cpf,
-      );
-
-      if (duplicatedCpf) throw new Error("Este CPF já está cadastrado para outro usuário.");
-    }
-
-    // Preserve the existing auth email for edits. The app authenticates by
-    // `usuario` via `resolve_login_email`, so changing profile fields should
-    // not force an auth email rotation.
-    const authPayload = {
-      ...payload,
-      email: currentProfile?.email || payload.email,
-    };
-
-    const authUserId = await ensureAuthUser(
-      authPayload,
-      currentProfile?.auth_user_id,
-      Boolean(currentProfile),
-    );
-
-    const preservedAdminSections =
-      currentProfile?.is_admin && Array.isArray(currentProfile.categorias_permitidas)
-        ? currentProfile.categorias_permitidas
-            .map(String)
-            .map((value) => value.trim())
-            .filter(isAdminSection)
-        : [];
-
-    const profilePayload = {
-      auth_user_id: authUserId,
-      nome: payload.nome,
-      usuario: payload.usuario,
-      email: authPayload.email,
-      cpf: payload.cpf,
-      funcao: hasFuncao ? payload.funcao : currentProfile?.funcao ?? null,
-      setor: hasSetor ? payload.setor : currentProfile?.setor ?? null,
-      unidade_nome: hasUnidadeNome ? payload.unidade_nome : currentProfile?.unidade_nome ?? null,
-      categorias_permitidas: currentProfile?.is_admin
-        ? [
-            ...preservedAdminSections,
-            ...(hasCategoriasPermitidas
-              ? payload.categorias_permitidas ?? []
-              : Array.isArray(currentProfile.categorias_permitidas)
-                ? currentProfile.categorias_permitidas.map(String).filter((value) => !isAdminSection(value))
-                : []),
-          ]
-        : hasCategoriasPermitidas
-          ? payload.categorias_permitidas
-          : currentProfile?.categorias_permitidas ?? [],
-      is_admin: currentProfile?.is_admin ?? false,
-      role: currentProfile?.role || "usuario",
-    };
-
-    const result = payload.id
-      ? await (supabaseAdmin as any)
-          .from("usuarios")
-          .update(profilePayload)
-          .eq("id", payload.id)
-          .select("id")
-          .single()
-      : await (supabaseAdmin as any).from("usuarios").insert(profilePayload).select("id").single();
-
-    if (result.error) {
-      throw new Error(readableSupabaseError(result.error, "Não foi possível salvar o usuário."));
-    }
-
-    return { id: result.data.id };
-  });
-
-export const deleteAdminUser = createServerFn({ method: "POST" }).handler(async ({ data }) => {
-    await requireAdminFromAccessToken(data);
-
-    const id = cleanString((data as { id?: string } | undefined)?.id);
-    if (!id) throw new Error("Usuário não informado.");
-
-    const { data: profile, error } = await (supabaseAdmin as any)
-      .from("usuarios")
-      .select("id,email,auth_user_id,is_admin")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-    if (!profile) throw new Error("Usuário não encontrado.");
-    if (profile.is_admin) throw new Error("Não é possível excluir um administrador por aqui.");
-
-    const authUserId =
-      profile.auth_user_id || (await findAuthUserByEmail(profile.email))?.id || null;
-
-    if (authUserId) {
-      const { error: authError } = await (supabaseAdmin as any).auth.admin.deleteUser(authUserId);
-      if (authError && !/not found/i.test(authError.message || "")) {
-        throw new Error(authError.message);
-      }
-    }
-
-    const { error: deleteError } = await (supabaseAdmin as any)
-      .from("usuarios")
-      .delete()
-      .eq("id", id);
-
-    if (deleteError) throw new Error(deleteError.message);
-
-    return { ok: true };
-  });

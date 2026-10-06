@@ -21,7 +21,6 @@ export function isUserProfileIncomplete(profile: CurrentUserProfile | null) {
   return !profile?.funcao?.trim();
 }
 
-
 function normalizeSharedProfileValue(value: string | null | undefined) {
   return String(value || "")
     .normalize("NFD")
@@ -38,7 +37,11 @@ export function isSharedSectorProfile(profile: CurrentUserProfile | null) {
 }
 
 export function isHospitalSharedProfile(profile: CurrentUserProfile | null) {
-  return String(profile?.usuario || "").trim().toLowerCase() === "hospital";
+  return (
+    String(profile?.usuario || "")
+      .trim()
+      .toLowerCase() === "hospital"
+  );
 }
 export async function getCurrentUserProfile() {
   const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -81,6 +84,10 @@ export async function getCurrentUserProfile() {
 
   if (emailError) {
     throw new Error(emailError.message);
+  }
+
+  if (byEmail?.auth_user_id && byEmail.auth_user_id !== user.id) {
+    throw new Error("Este email está vinculado a outra conta. Fale com o administrador.");
   }
 
   return { user, profile: (byEmail as CurrentUserProfile | null) ?? null };

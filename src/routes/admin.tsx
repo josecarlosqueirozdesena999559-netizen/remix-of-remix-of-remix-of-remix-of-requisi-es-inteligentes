@@ -31,6 +31,7 @@ import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { CpfCompletionDialog } from "@/components/CpfCompletionDialog";
 import {
   Dialog,
   DialogContent,
@@ -857,6 +858,14 @@ function AdminLayout() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <CpfCompletionDialog
+        profile={profile}
+        isSharedSession={isSharedSector}
+        isCompletingProfile={pathname === "/admin/completar-cadastro"}
+        mustRegisterWhatsApp={mustRegisterWhatsApp}
+        onSaved={(cpf) => setProfile((current) => (current ? { ...current, cpf } : current))}
+      />
     </div>
   );
 }

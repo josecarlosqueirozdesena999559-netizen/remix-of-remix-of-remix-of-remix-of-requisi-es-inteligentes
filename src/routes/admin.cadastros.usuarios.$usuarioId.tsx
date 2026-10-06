@@ -37,7 +37,7 @@ function UsuarioFormPage() {
   const [usuario, setUsuario] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("123456");
+  const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -126,13 +126,7 @@ function UsuarioFormPage() {
     };
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw new Error(sessionError.message);
-
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
-
-      await saveAdminUser({ data: { ...payload, accessToken } });
+      await saveAdminUser({ data: payload });
       setSaving(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
@@ -148,13 +142,7 @@ function UsuarioFormPage() {
     setError(null);
 
     try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw new Error(sessionError.message);
-
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Sessão expirada. Entre novamente.");
-
-      await deleteAdminUser({ data: { id: usuarioId, accessToken } });
+      await deleteAdminUser({ data: { id: usuarioId } });
       setDeleteOpen(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
@@ -227,15 +215,23 @@ function UsuarioFormPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">
+                {isNew ? "Email de acesso" : "Email vinculado ao login"}
+              </Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="email@exemplo.com"
+                readOnly={!isNew}
                 required
               />
+              {!isNew && (
+                <p className="text-xs text-muted-foreground">
+                  O email vinculado ao login é mantido por esta tela.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -249,13 +245,22 @@ function UsuarioFormPage() {
                 required={isNew}
                 minLength={isNew || senha ? 6 : undefined}
               />
+              <p className="text-xs text-muted-foreground">
+                {isNew
+                  ? "A senha inicial precisa ter pelo menos 6 caracteres."
+                  : "Informe uma nova senha para redefinir; deixe em branco para manter a atual."}
+              </p>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
             <div className="flex flex-wrap gap-2">
               <Button type="submit" className="gap-2" disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
                 Salvar
               </Button>
               {!isNew && (
@@ -279,9 +284,7 @@ function UsuarioFormPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Excluir usuário</DialogTitle>
-            <DialogDescription>
-              Esta ação remove o cadastro e o login do usuário.
-            </DialogDescription>
+            <DialogDescription>Esta ação remove o cadastro e o login do usuário.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
