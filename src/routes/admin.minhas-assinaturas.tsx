@@ -55,6 +55,12 @@ const baseSelect =
 
 const baseSelectWithOutputDate =
   "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,setor,solicitante,solicitante_cpf,data,created_at,status,items,signed_attachment,admin_attachment";
+const USER_DELETABLE_REQUEST_STATUSES = [
+  "aguardando_assinatura",
+  "aguardando_assinatura_requisicao",
+  "aguardando_assinatura_saida",
+  "correcao_requisicao",
+] as const;
 
 function getStageLabel(status: string) {
   if (status === "aguardando_assinatura_saida") return "Assinar saída do SIG";
@@ -70,6 +76,15 @@ function canEditUnsignedRequest(request: Requisicao) {
   return (
     (isRequestSignatureStatus(request.status) || request.status === "correcao_requisicao") &&
     !getRequestSignedAttachment(request.signed_attachment, request.status)
+  );
+}
+
+function canDeletePendingRequest(
+  request: Pick<Requisicao, "status" | "signed_attachment">,
+) {
+  return (
+    USER_DELETABLE_REQUEST_STATUSES.some((status) => status === request.status) &&
+    getOutputSignedAttachments(request.signed_attachment, request.status).length === 0
   );
 }
 
@@ -536,13 +551,35 @@ function MinhasAssinaturasPage() {
   };
 
   const handleDeletePendingRequest = async (request: Requisicao) => {
-    const confirmed = window.confirm("Excluir esta solicitação antes da assinatura?");
+    const confirmed = window.confirm(
+      "Excluir esta solicitação? A exclusão não será permitida depois que a saída SIG for assinada.",
+    );
     if (!confirmed) return;
 
     setMessage(null);
     setError(null);
 
     try {
+      const { data: currentRequest, error: currentRequestError } = await supabase
+        .from("requisicoes")
+        .select("status,signed_attachment")
+        .eq("id", request.id)
+        .maybeSingle();
+
+      if (currentRequestError) throw new Error(currentRequestError.message);
+      if (!currentRequest) throw new Error("Solicitação não encontrada.");
+
+      if (!canDeletePendingRequest(currentRequest)) {
+        const outputAlreadySigned =
+          currentRequest.status === "concluido" ||
+          getOutputSignedAttachments(currentRequest.signed_attachment, currentRequest.status).length > 0;
+        throw new Error(
+          outputAlreadySigned
+            ? "A saída SIG já foi assinada. Você não pode excluir este documento."
+            : "Esta solicitação não está em uma etapa que permita exclusão.",
+        );
+      }
+
       let { data: deletedRequest, error: deleteError } = await supabase
         .from("requisicoes")
         .update({
@@ -552,12 +589,7 @@ function MinhasAssinaturasPage() {
           returned_at: null,
         })
         .eq("id", request.id)
-        .in("status", [
-          "aguardando_assinatura",
-          "aguardando_assinatura_requisicao",
-          "aguardando_assinatura_saida",
-          "correcao_requisicao",
-        ])
+        .in("status", [...USER_DELETABLE_REQUEST_STATUSES])
         .select("id,status")
         .maybeSingle();
 
@@ -566,12 +598,7 @@ function MinhasAssinaturasPage() {
           .from("requisicoes")
           .update({ status: "excluida_usuario" })
           .eq("id", request.id)
-          .in("status", [
-            "aguardando_assinatura",
-            "aguardando_assinatura_requisicao",
-            "aguardando_assinatura_saida",
-            "correcao_requisicao",
-          ])
+          .in("status", [...USER_DELETABLE_REQUEST_STATUSES])
           .select("id,status")
           .maybeSingle();
 
@@ -601,7 +628,7 @@ function MinhasAssinaturasPage() {
       }
 
       setRequests((current) => current.filter((item) => item.id !== request.id));
-      setMessage("Solicitação excluída antes da assinatura.");
+      setMessage("Solicitação excluída antes da assinatura da saída SIG.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao excluir solicitação.");
     }
@@ -657,6 +684,8 @@ function MinhasAssinaturasPage() {
                   const hasRequestSigned = Boolean(
                     getRequestSignedAttachment(request.signed_attachment, request.status),
                   );
+                  const canEditRequest = canEditUnsignedRequest(request);
+                  const canDeleteRequest = canDeletePendingRequest(request);
                   const missingItems = !hasRequestItems(request);
                   const requestCode = request.saida_codigo?.trim() || request.id.slice(0, 8);
                   const linkedOutputCode = request.saida_vinculada_codigo?.trim();
@@ -716,42 +745,31 @@ function MinhasAssinaturasPage() {
                       <td className="px-3 py-2 text-right">
                         {(
                           <div className="flex flex-wrap items-center justify-end gap-2">
-                            {canEditUnsignedRequest(request) && (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-2"
-                                  onClick={() => {
-                                    if (typeof window !== "undefined") {
-                                      window.location.assign(
-                                        `/admin/requisicao?requisicaoId=${request.id}`,
-                                      );
-                                    }
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                  Editar
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-2 text-destructive"
-                                  onClick={() => void handleDeletePendingRequest(request)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  Excluir
-                                </Button>
-                              </>
+                            {canEditRequest && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => {
+                                  if (typeof window !== "undefined") {
+                                    window.location.assign(
+                                      `/admin/requisicao?requisicaoId=${request.id}`,
+                                    );
+                                  }
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Editar
+                              </Button>
                             )}
-                            {!canEditUnsignedRequest(request) && (
+                            {canDeleteRequest && (
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 className="gap-2 text-destructive"
+                                disabled={uploadingId === request.id}
                                 onClick={() => void handleDeletePendingRequest(request)}
                               >
                                 <Trash2 className="h-4 w-4" />

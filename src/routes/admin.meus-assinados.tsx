@@ -29,6 +29,11 @@ interface Requisicao {
   admin_attachment: unknown;
 }
 
+function getCurrentMonth() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function getStatusLabel(status: string) {
   if (status === "concluido") return "Concluída";
   if (status === "requisicao_assinada") return "Solicitação assinada";
@@ -270,4 +275,3 @@ function MeusAssinadosPage() {
     </div>
   );
 }
-
