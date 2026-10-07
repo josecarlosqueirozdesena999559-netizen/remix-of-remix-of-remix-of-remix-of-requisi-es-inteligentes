@@ -1,7 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ALMOXARIFADO_WHATSAPP_NUMBER } from "@/lib/almoxarifado-contact";
-import { formatPdfPhone, toPdfText as toPdfAscii } from "@/lib/pdf-document";
+import { toPdfText as toPdfAscii } from "@/lib/pdf-document";
 import { formatProgramName } from "@/lib/program-options";
 
 const PDF_LOGO_PATH = "/pdf/logo-pereiro-pdf.jpeg";
@@ -184,11 +183,7 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
   doc.setFontSize(10.5);
   doc.text(toPdfAscii("FUNDO MUNICIPAL DE SAÚDE"), leftColX + 18, 25);
   doc.setFontSize(11);
-  doc.text(
-    toPdfAscii(`Solicitação de Material - No. ${getRequestCode(request)}`),
-    leftColX + 18,
-    32,
-  );
+  doc.text(toPdfAscii("Solicitação de Material"), leftColX + 18, 32);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.2);
@@ -257,7 +252,7 @@ function drawRequestPdfFooter(doc: jsPDF, pageNumber: number, totalPages: number
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const lineY = pageHeight - 17.5;
-  const footerText = `${PDF_SYSTEM_NAME} · Almoxarifado da Saúde · Contato: ${formatPdfPhone(ALMOXARIFADO_WHATSAPP_NUMBER)}`;
+  const footerText = `${PDF_SYSTEM_NAME} · Almoxarifado da Saúde`;
 
   doc.setDrawColor(175, 179, 184);
   doc.setLineWidth(0.2);
