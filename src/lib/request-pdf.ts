@@ -8,8 +8,8 @@ const PDF_SYSTEM_NAME = "SoliciteJá";
 const PDF_MARGIN = 14;
 const PDF_TABLE_START_Y = 89;
 const PDF_PAGE_BOTTOM_MARGIN = 22;
-const PDF_SIGNATURE_SECTION_HEIGHT = 58;
-const PDF_SIGNATURE_SECTION_GAP = 6;
+const PDF_SIGNATURE_SECTION_HEIGHT = 34;
+const PDF_SIGNATURE_SECTION_GAP = 4;
 const PDF_SIGNATURE_PAGE_START_Y = PDF_TABLE_START_Y + PDF_SIGNATURE_SECTION_GAP;
 
 const WAREHOUSE_RESPONSIBLE_ROLE = "Responsável pela entrega";
@@ -133,6 +133,7 @@ function getRequestItemsForPdf(request: RequestPdfData) {
       toPdfAscii(item.unit || "-"),
       toPdfAscii(item.stock ?? item.qtdDisponivel ?? "-"),
       toPdfAscii(getRequestedQuantity(item) ?? "-"),
+      "",
     ];
   });
 }
@@ -283,7 +284,7 @@ function drawSignatureBlock(
   showIdentity = true,
 ) {
   const boxWidth = 76;
-  const boxHeight = 18;
+  const boxHeight = 12;
   const boxX = centerX - boxWidth / 2;
 
   if (showGovLabel) {
@@ -292,34 +293,34 @@ function drawSignatureBlock(
     doc.roundedRect(boxX, topY, boxWidth, boxHeight, 1.5, 1.5);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.4);
+    doc.setFontSize(7.8);
     doc.setTextColor(71, 85, 105);
-    doc.text(toPdfAscii("ASSINATURA GOV.BR"), centerX, topY + 6, { align: "center" });
+    doc.text(toPdfAscii("ASSINATURA GOV.BR"), centerX, topY + 4.2, { align: "center" });
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.4);
+    doc.setFontSize(6.8);
     doc.setTextColor(107, 114, 128);
-    doc.text(toPdfAscii("Assine neste campo"), centerX, topY + 11.8, { align: "center" });
+    doc.text(toPdfAscii("Assine neste campo"), centerX, topY + 8.5, { align: "center" });
   }
 
   doc.setDrawColor(120, 120, 120);
   doc.setLineWidth(0.35);
-  doc.line(centerX - 40, topY + 30, centerX + 40, topY + 30);
+  doc.line(centerX - 40, topY + 16, centerX + 40, topY + 16);
 
   doc.setTextColor(20, 24, 28);
   if (showIdentity) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text(toPdfAscii(name || "-"), centerX, topY + 37, { align: "center", maxWidth: 80 });
+    doc.setFontSize(9.2);
+    doc.text(toPdfAscii(name || "-"), centerX, topY + 20.5, { align: "center", maxWidth: 80 });
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.9);
-    doc.text(toPdfAscii(`CPF: ${String(cpf || "-")}`), centerX, topY + 43, { align: "center" });
+    doc.setFontSize(8.3);
+    doc.text(toPdfAscii(`CPF: ${String(cpf || "-")}`), centerX, topY + 24.5, { align: "center" });
   }
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.8);
-  doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 49, { align: "center", maxWidth: 84 });
+  doc.setFontSize(8.2);
+  doc.text(toPdfAscii(roleLabel || "-"), centerX, topY + 29, { align: "center", maxWidth: 84 });
 }
 
 export async function createRequestPdfBlob(request: RequestPdfData) {
@@ -344,11 +345,14 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
         toPdfAscii("Item"),
         toPdfAscii("Descrição"),
         toPdfAscii("Unidade"),
-        toPdfAscii("Qtd. disponível no setor"),
+        toPdfAscii("Qtd. disponível"),
         toPdfAscii("Qtd. solicitada"),
+        toPdfAscii("Qtd. atendida"),
       ],
     ],
-    body: bodyRows.length ? bodyRows : [["-", toPdfAscii("Nenhum item solicitado"), "-", "-", "-"]],
+    body: bodyRows.length
+      ? bodyRows
+      : [["-", toPdfAscii("Nenhum item solicitado"), "-", "-", "-", ""]],
     theme: "grid",
     margin: {
       left: PDF_MARGIN,
@@ -365,10 +369,10 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
       halign: "center",
       lineColor: [165, 169, 173],
       lineWidth: 0.2,
-      fontSize: 8.2,
+      fontSize: 7.8,
     },
     bodyStyles: {
-      fontSize: 8.6,
+      fontSize: 8.2,
       textColor: [25, 25, 25],
       lineColor: [190, 194, 198],
       lineWidth: 0.15,
@@ -376,16 +380,18 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 14, halign: "center" },
-      1: { cellWidth: 76, halign: "left" },
+      0: { cellWidth: 12, halign: "center" },
+      1: { cellWidth: 74, halign: "left" },
       2: { cellWidth: 16, halign: "center" },
-      3: { cellWidth: 44, halign: "center" },
-      4: { cellWidth: 32, halign: "center" },
+      3: { cellWidth: 30, halign: "center" },
+      4: { cellWidth: 24, halign: "center" },
+      5: { cellWidth: 26, halign: "center", minCellHeight: 7 },
     },
     styles: {
       overflow: "linebreak",
-      cellPadding: 2,
+      cellPadding: 1.4,
       font: "helvetica",
+      fontSize: 8.2,
     },
   });
 
