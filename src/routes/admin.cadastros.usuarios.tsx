@@ -2,26 +2,56 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
-import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/usuarios")({
   component: UsuariosPage,
 });
 
+interface SetorRelation {
+  nome: string | null;
+}
+
+interface SetorResponsavelRelation {
+  setores: SetorRelation | SetorRelation[] | null;
+}
+
 interface Usuario {
   id: string;
   nome: string;
   cpf: string | null;
-  usuario: string | null;
   setor: string | null;
   unidade_nome: string | null;
-  programa_id: string | null;
   materiais_permitidos: unknown;
-  programas: { nome: string } | { nome: string }[] | null;
+  setor_responsaveis?: SetorResponsavelRelation[] | null;
 }
 
-function getProgram(value: Usuario["programas"]) {
-  return Array.isArray(value) ? (value[0] ?? null) : value;
+const USER_SELECT =
+  "id,nome,cpf,setor,unidade_nome,materiais_permitidos,setor_responsaveis(setores(nome)),created_at";
+const USER_REALTIME_TABLES = ["usuarios", "setor_responsaveis", "setores"];
+
+function getSectorNames(user: Usuario) {
+  return (user.setor_responsaveis ?? [])
+    .flatMap((link) => (Array.isArray(link.setores) ? link.setores : [link.setores]))
+    .map((sector) => sector?.nome?.trim() || "")
+    .filter(Boolean);
+}
+
+function getSharedSector(user: Usuario) {
+  const linkedSectors = getSectorNames(user);
+  const primaryName = user.unidade_nome?.trim() || user.setor?.trim();
+  if (primaryName) {
+    const match = linkedSectors.find(
+      (name) => name.localeCompare(primaryName, "pt-BR", { sensitivity: "base" }) === 0,
+    );
+    if (match) return match;
+  }
+  return primaryName || linkedSectors[0] || "Sem setor";
+}
+
+function getMaterials(value: unknown) {
+  return Array.isArray(value) && value.length > 0
+    ? value.map(String).join(", ")
+    : "Nenhum material liberado";
 }
 
 function UsuariosPage() {
@@ -30,43 +60,34 @@ function UsuariosPage() {
   const isChildRoute = pathname !== "/admin/cadastros/usuarios";
   const { data, loading, error } = useSupabaseList<Usuario>(
     "usuarios",
-    "id,nome,cpf,usuario,setor,unidade_nome,programa_id,materiais_permitidos,programas(nome),created_at",
+    USER_SELECT,
+    { column: "created_at", ascending: false },
+    USER_REALTIME_TABLES,
   );
 
   const columns: Column<Usuario>[] = [
     { key: "nome", label: "Nome" },
-    { key: "usuario", label: "Usuário", render: (r) => r.usuario || "-" },
-    { key: "cpf", label: "CPF", render: (r) => r.cpf || "-" },
-    { key: "unidade_nome", label: "Setor", render: (r) => r.unidade_nome || r.setor || "-" },
-    {
-      key: "programas",
-      label: "Programa",
-      render: (r) => formatProgramName(getProgram(r.programas)?.nome) || "-",
-    },
+    { key: "cpf", label: "CPF", render: (user) => user.cpf || "-" },
+    { key: "unidade_nome", label: "Setor compartilhado", render: getSharedSector },
     {
       key: "materiais_permitidos",
-      label: "Materiais autorizados",
-      render: (r) =>
-        Array.isArray(r.materiais_permitidos) && r.materiais_permitidos.length > 0
-          ? r.materiais_permitidos.map(String).join(", ")
-          : "-",
+      label: "Materiais que pode pedir",
+      render: (user) => getMaterials(user.materiais_permitidos),
     },
   ];
 
-  if (isChildRoute) {
-    return <Outlet />;
-  }
+  if (isChildRoute) return <Outlet />;
 
   return (
     <ListPage
       breadcrumb="Cadastros / Usuários"
       title="Usuários"
-      description="Cadastre acesso, setor, programa e materiais autorizados para cada usuário."
+      description="Pessoas, setor compartilhado e materiais autorizados. Os vínculos e programas são gerenciados em Setores."
       data={data}
       loading={loading}
       error={error}
       columns={columns}
-      searchKeys={["nome", "usuario", "cpf", "setor", "unidade_nome"]}
+      searchKeys={["nome", "cpf"]}
       newLabel="Novo usuário"
       onNew={() =>
         navigate({
@@ -74,14 +95,14 @@ function UsuariosPage() {
           params: { usuarioId: "novo" },
         })
       }
-      actions={(usuario) => (
+      actions={(user) => (
         <Button
           variant="outline"
           size="sm"
           onClick={() =>
             navigate({
               to: "/admin/cadastros/usuarios/$usuarioId",
-              params: { usuarioId: usuario.id },
+              params: { usuarioId: user.id },
             })
           }
         >

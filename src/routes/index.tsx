@@ -325,7 +325,11 @@ function Index() {
                 value={loginQuery}
                 onChange={(event) => handleLoginQueryChange(event.target.value)}
                 onFocus={() => {
-                  if (!selectedSector && loginQuery.trim().length >= MIN_LOGIN_QUERY_LENGTH) {
+                  if (
+                    !selectedSector &&
+                    !selectedLogin &&
+                    loginQuery.trim().length >= MIN_LOGIN_QUERY_LENGTH
+                  ) {
                     setOptionsOpen(true);
                   }
                 }}
@@ -333,10 +337,12 @@ function Index() {
                 onKeyDown={handleLoginKeyDown}
                 role="combobox"
                 aria-autocomplete="list"
-                aria-expanded={optionsOpen && !selectedSector}
-                aria-controls={optionsOpen && !selectedSector ? "sector-options" : undefined}
+                aria-expanded={optionsOpen && !selectedSector && !selectedLogin}
+                aria-controls={
+                  optionsOpen && !selectedSector && !selectedLogin ? "sector-options" : undefined
+                }
                 aria-activedescendant={
-                  optionsOpen && !selectedSector && activeOptionIndex >= 0
+                  optionsOpen && !selectedSector && !selectedLogin && activeOptionIndex >= 0
                     ? `sector-option-${activeOptionIndex}`
                     : undefined
                 }
@@ -346,6 +352,7 @@ function Index() {
 
               {optionsOpen &&
                 !selectedSector &&
+                !selectedLogin &&
                 loginQuery.trim().length >= MIN_LOGIN_QUERY_LENGTH && (
                   <div
                     id="sector-options"

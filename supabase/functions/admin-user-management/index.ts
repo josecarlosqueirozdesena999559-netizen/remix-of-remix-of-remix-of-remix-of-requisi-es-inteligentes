@@ -578,8 +578,6 @@ async function saveUser(admin: any, input: unknown) {
       : legacyMaterials);
 
   if (!currentProfile?.is_admin) {
-    if (!selectedSector) throw new UserActionError("Selecione o setor do usuário.");
-    if (!programaId) throw new UserActionError("Selecione o programa do usuário.");
     if (materiaisPermitidos.length === 0) {
       throw new UserActionError("Selecione ao menos um tipo de material permitido.");
     }
@@ -642,7 +640,7 @@ async function saveUser(admin: any, input: unknown) {
     usuario: payload.usuario,
     email: authPayload.email,
     cpf: payload.cpf,
-    funcao: currentProfile?.funcao ?? null,
+    funcao: currentProfile?.funcao ?? "Solicitante",
     setor: selectedSector?.programa || selectedSector?.nome || currentProfile?.setor || null,
     unidade_nome: selectedSector?.nome || currentProfile?.unidade_nome || null,
     categorias_permitidas: currentProfile?.categorias_permitidas ?? [],

@@ -137,14 +137,29 @@ interface RequestSectionGroup {
   sections: RequestSection[];
 }
 
-interface SetorPermissionRow {
-  categorias_permitidas: unknown;
-  programa?: string | null;
-}
-
 interface ProgramOption {
   id: string;
   nome: string;
+}
+
+interface RequestableSector {
+  id: number;
+  nome: string | null;
+  programa: string | null;
+  categorias_permitidas: unknown;
+}
+
+interface RequestSectorLinkRow {
+  setor_id: number;
+  setores: RequestableSector | RequestableSector[] | null;
+}
+
+interface RequestPermissions {
+  hasSector: boolean;
+  sectorId: number | null;
+  sectorName: string | null;
+  categories: string[];
+  programKeys: string[];
 }
 
 interface ResponsibleSectorProgramRow {
@@ -159,7 +174,8 @@ interface SectorResponsibleUserRow {
 
 const requestSelectWithFeedback =
   "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items,return_reason";
-const requestSelectFallback = "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items";
+const requestSelectFallback =
+  "id,categoria,setor,programa,status,solicitante,solicitante_cpf,items";
 const ramonEnteralSector = "RAMON - DIETAS ENTERAIS";
 const ramonAllowedCategories = [
   "Insumos para Dietas Enterais",
@@ -188,6 +204,8 @@ function getAllowedCategories(
 
 function normalizeSectorName(value: string | null | undefined) {
   return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
 }
@@ -296,116 +314,79 @@ async function getCpfFallbackByRequesterName(name: string | null | undefined) {
 
   return match?.cpf?.trim() || null;
 }
-async function getAllowedCategoriesForRequest(
+function getSingleRequestSector(value: RequestSectorLinkRow["setores"]) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+async function getRequestPermissions(
   profile: RequestAccessProfile | null,
-  fallbackProfile?: RequestAccessProfile | null,
-) {
-  if (!profile) return [];
+  preferredSectorName?: string | null,
+): Promise<RequestPermissions> {
+  const noAccess: RequestPermissions = {
+    hasSector: false,
+    sectorId: null,
+    sectorName: null,
+    categories: [],
+    programKeys: [],
+  };
+  if (!profile?.id) return noAccess;
 
-  const profileCategories = getAllowedCategories(profile);
-  if (profileCategories.length > 0) return profileCategories;
-
-  const sectorCandidates = [profile.unidade_nome, profile.setor]
-    .map((value) => String(value || "").trim())
-    .filter((value, index, values) => value && values.indexOf(value) === index);
-
-  for (const sectorName of sectorCandidates) {
-    const { data, error } = await supabase
-      .from("setores")
-      .select("categorias_permitidas")
-      .eq("nome", sectorName)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-
-    const sectorCategories = normalizeAllowedCategories(
-      (data as SetorPermissionRow | null)?.categorias_permitidas,
-    );
-
-    if (sectorCategories.length > 0) {
-      return sectorCategories;
-    }
-  }
-
-  return getAllowedCategories(fallbackProfile ?? null);
-}
-
-async function getSectorProgramKeysForRequest(profile: RequestAccessProfile | null) {
-  const sectorCandidates = [profile?.unidade_nome, profile?.setor]
-    .map((value) => String(value || "").trim())
-    .filter((value, index, values) => value && values.indexOf(value) === index);
-
-  const programKeys: string[] = [];
-
-  for (const sectorName of sectorCandidates) {
-    const { data, error } = await supabase
-      .from("setores")
-      .select("programa")
-      .eq("nome", sectorName)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-
-    programKeys.push(...getComparableProgramKeys((data as SetorPermissionRow | null)?.programa));
-  }
-
-  return programKeys.filter((key, index, keys) => key && keys.indexOf(key) === index);
-}
-async function getResponsibleSectorProgramKeys(profile: Pick<RequestAccessProfile, "id"> | null) {
-  if (!profile?.id) return [];
-
-  const { data: setorLinks, error: setorLinksError } = await supabase
+  const { data: links, error: linksError } = await supabase
     .from("setor_responsaveis")
-    .select("setor_id")
-    .eq("usuario_id", profile.id);
+    .select("setor_id,setores(id,nome,programa,categorias_permitidas)")
+    .eq("usuario_id", profile.id)
+    .order("created_at", { ascending: true });
 
-  if (setorLinksError) throw new Error(setorLinksError.message);
+  if (linksError) throw new Error(linksError.message);
 
-  const setorIds = (setorLinks ?? [])
-    .map((link) => link.setor_id)
-    .filter((id, index, ids) => id != null && ids.indexOf(id) === index);
+  const linkedSectors = ((links ?? []) as RequestSectorLinkRow[])
+    .map((link) => getSingleRequestSector(link.setores))
+    .filter((sector): sector is RequestableSector => Boolean(sector?.id));
+  const preferredName = normalizeSectorName(
+    preferredSectorName || profile.unidade_nome || profile.setor,
+  );
+  const selectedSector = preferredName
+    ? (linkedSectors.find((sector) => normalizeSectorName(sector.nome) === preferredName) ??
+      (preferredSectorName ? null : (linkedSectors[0] ?? null)))
+    : (linkedSectors[0] ?? null);
 
-  if (setorIds.length === 0) return [];
+  if (!selectedSector) return noAccess;
 
-  const { data, error } = await supabase
+  const { data: programLinks, error: programLinksError } = await supabase
     .from("setor_programas")
     .select("programas(nome)")
-    .in("setor_id", setorIds);
+    .eq("setor_id", selectedSector.id);
 
-  if (error) throw new Error(error.message);
+  if (programLinksError) throw new Error(programLinksError.message);
 
-  const programKeys = ((data ?? []) as ResponsibleSectorProgramRow[]).flatMap((link) =>
-    getComparableProgramKeys(link.programas?.nome),
+  const linkedProgramKeys = ((programLinks ?? []) as ResponsibleSectorProgramRow[]).flatMap(
+    (link) => getComparableProgramKeys(link.programas?.nome),
   );
+  const programKeys = [
+    ...new Set(
+      (linkedProgramKeys.length > 0
+        ? linkedProgramKeys
+        : getComparableProgramKeys(selectedSector.programa)
+      ).filter(Boolean),
+    ),
+  ];
 
-  return programKeys.filter((key, index, keys) => key && keys.indexOf(key) === index);
-}
+  const personCategories = getAllowedCategories(profile);
+  const sectorCategories = normalizeAllowedCategories(selectedSector.categorias_permitidas);
+  const categories =
+    personCategories.length > 0 && sectorCategories.length > 0
+      ? personCategories.filter((category) => sectorCategories.includes(category))
+      : personCategories.length > 0
+        ? personCategories
+        : sectorCategories;
 
-async function getAllowedProgramKeysForRequest(profile: RequestAccessProfile | null) {
-  if (profile?.programa_id) {
-    const { data: selectedProgram, error } = await supabase
-      .from("programas")
-      .select("nome")
-      .eq("id", profile.programa_id)
-      .maybeSingle();
-
-    if (error) throw new Error(error.message);
-
-    const selectedProgramKeys = getComparableProgramKeys(selectedProgram?.nome);
-    if (selectedProgramKeys.length > 0) return selectedProgramKeys;
-  }
-
-  const [responsibleProgramKeys, sectorProgramKeys] = await Promise.all([
-    getResponsibleSectorProgramKeys(profile),
-    getSectorProgramKeysForRequest(profile),
-  ]);
-  const categoryProgramKeys = getAllowedCategories(profile).includes("Odontológico")
-    ? ["odontologico"]
-    : [];
-
-  return [...responsibleProgramKeys, ...sectorProgramKeys, ...categoryProgramKeys].filter(
-    (key, index, keys) => key && keys.indexOf(key) === index,
-  );
+  return {
+    hasSector: true,
+    sectorId: selectedSector.id,
+    sectorName: selectedSector.nome,
+    categories: programKeys.length > 0 ? categories : [],
+    programKeys,
+  };
 }
 function formatToday() {
   return new Intl.DateTimeFormat("pt-BR").format(new Date());
@@ -737,29 +718,30 @@ function CriarRequisicaoPage() {
       setError(null);
 
       try {
-        const [{ profile }, itemsResult, programsResult, requestResult, usuariosResult] = await Promise.all([
-          getCurrentUserProfile(),
-          supabase
-            .from("itens")
-            .select(
-              "id,nome,unidade,categoria,subcategoria,imagem_url,imagem_path,programa_produtos(programas(id,nome))",
-            )
-            .order("nome", { ascending: true }),
-          supabase.from("programas").select("id,nome").order("nome", { ascending: true }),
-          editingRequestId
-            ? supabase
-                .from("requisicoes")
-                .select(requestSelectWithFeedback)
-                .eq("id", editingRequestId)
-                .maybeSingle()
-            : Promise.resolve({ data: null, error: null }),
-          supabase
-            .from("usuarios")
-            .select(
-              "id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas,programa_id,materiais_permitidos",
-            )
-            .order("nome", { ascending: true }),
-        ]);
+        const [{ profile }, itemsResult, programsResult, requestResult, usuariosResult] =
+          await Promise.all([
+            getCurrentUserProfile(),
+            supabase
+              .from("itens")
+              .select(
+                "id,nome,unidade,categoria,subcategoria,imagem_url,imagem_path,programa_produtos(programas(id,nome))",
+              )
+              .order("nome", { ascending: true }),
+            supabase.from("programas").select("id,nome").order("nome", { ascending: true }),
+            editingRequestId
+              ? supabase
+                  .from("requisicoes")
+                  .select(requestSelectWithFeedback)
+                  .eq("id", editingRequestId)
+                  .maybeSingle()
+              : Promise.resolve({ data: null, error: null }),
+            supabase
+              .from("usuarios")
+              .select(
+                "id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas,programa_id,materiais_permitidos",
+              )
+              .order("nome", { ascending: true }),
+          ]);
 
         if (!active) return;
 
@@ -788,7 +770,10 @@ function CriarRequisicaoPage() {
 
         if (itemsResult.error || programsResult.error || requestError) {
           throw new Error(
-            itemsResult.error?.message || programsResult.error?.message || requestError?.message || "Erro ao carregar solicitação.",
+            itemsResult.error?.message ||
+              programsResult.error?.message ||
+              requestError?.message ||
+              "Erro ao carregar solicitação.",
           );
         }
 
@@ -814,20 +799,38 @@ function CriarRequisicaoPage() {
           }
         }
 
-        const [profileCategories, profileProgramKeys] = await Promise.all([
-          getAllowedCategoriesForRequest(profile),
-          getAllowedProgramKeysForRequest(profile),
-        ]);
-        const isRamonProfile = isRamonRequester(profile);
+        if (!profile) throw new Error("Não foi possível identificar o usuário conectado.");
+
+        const permissionProfile = isSharedSector ? selectedSharedRequester : profile;
+        const permissions = await getRequestPermissions(
+          permissionProfile,
+          isSharedSector ? profile.unidade_nome || profile.setor : undefined,
+        );
+        if (!isSharedSector && !profile.is_admin && !permissions.hasSector) {
+          throw new Error(
+            "Sua conta está sem setor vinculado. Peça ao administrador para vinculá-la em Cadastros / Setores.",
+          );
+        }
+        if (!isSharedSector && !profile.is_admin && permissions.programKeys.length === 0) {
+          throw new Error(
+            "Este setor ainda não tem programas liberados. Peça ao administrador para configurar os programas do setor.",
+          );
+        }
+
+        const profileCategories = permissions.categories;
+        const profileProgramKeys = permissions.programKeys;
+        const isRamonProfile = isRamonRequester(permissionProfile || profile);
         const categories = isRamonProfile
           ? profileCategories.length > 0
             ? ramonAllowedCategories.filter((category) =>
                 profileCategories.some((allowed) => allowed === category),
               )
-            : ramonAllowedCategories
-          : profileCategories.length > 0 || profileProgramKeys.length === 0
-            ? profileCategories
-            : [...PRODUCT_CATEGORIES];
+            : permissions.hasSector && profileProgramKeys.length > 0
+              ? ramonAllowedCategories
+              : []
+          : profile.is_admin
+            ? [...PRODUCT_CATEGORIES]
+            : profileCategories;
         const loadedItems = (itemsResult.data ?? []) as ItemRow[];
 
         const allUsers = (usuariosResult.data ?? []) as SectorUserOption[];
@@ -843,12 +846,14 @@ function CriarRequisicaoPage() {
             console.error("Erro ao carregar usuarios do setor:", err);
           }
 
-          if (filteredSectorUsers.length === 0) {
-            try {
-              filteredSectorUsers = await getLinkedUsersForSector(sectorName);
-            } catch (err) {
-              console.error("Erro ao carregar usuarios vinculados ao setor:", err);
-            }
+          try {
+            const linkedUsers = await getLinkedUsersForSector(sectorName);
+            const usersById = new Map(
+              [...filteredSectorUsers, ...linkedUsers].map((user) => [user.id, user]),
+            );
+            filteredSectorUsers = [...usersById.values()];
+          } catch (err) {
+            console.error("Erro ao carregar usuarios vinculados ao setor:", err);
           }
         }
 
@@ -897,7 +902,7 @@ function CriarRequisicaoPage() {
         }
 
         setAllowedCategories(categories);
-        setAllowedProgramKeys(isRamonProfile && !profile?.programa_id ? [] : profileProgramKeys);
+        setAllowedProgramKeys(profileProgramKeys);
         setPrograms((programsResult.data ?? []) as ProgramOption[]);
         setSelectedRamonProgram(editableRequest?.programa || "");
         setItems(loadedItems);
@@ -986,29 +991,41 @@ function CriarRequisicaoPage() {
     async function loadSelectedRequesterAccess() {
       try {
         const isRamonSelectedRequester = isRamonRequester(requester);
-        const requesterCategories = getAllowedCategories(requester);
-        const resolvedCategories =
-          requesterCategories.length > 0
-            ? requesterCategories
-            : await getAllowedCategoriesForRequest(requester, profile);
+        const permissions = await getRequestPermissions(
+          requester,
+          profile?.unidade_nome || profile?.setor,
+        );
 
         if (!active) return;
 
-        const fallbackCategories = getAllowedCategories(profile);
+        if (!permissions.hasSector) {
+          setAllowedCategories([]);
+          setAllowedProgramKeys([]);
+          setError(
+            "Esta pessoa não está vinculada a este setor. Vincule-a em Cadastros / Setores.",
+          );
+          return;
+        }
+        if (permissions.programKeys.length === 0) {
+          setAllowedCategories([]);
+          setAllowedProgramKeys([]);
+          setError("Este setor ainda não tem programas liberados para solicitação.");
+          return;
+        }
+
         const categoriesToUse = isRamonSelectedRequester
-          ? requesterCategories.length > 0
+          ? permissions.categories.length > 0
             ? ramonAllowedCategories.filter((category) =>
-                requesterCategories.some((allowed) => allowed === category),
+                permissions.categories.some((allowed) => allowed === category),
               )
             : ramonAllowedCategories
-          : resolvedCategories.length > 0
-            ? resolvedCategories
-            : fallbackCategories;
+          : permissions.categories;
         const nextSections = buildNormalizedRequestSections(categoriesToUse);
         const firstGroupLabel = nextSections[0] ? getSectionGroupLabel(nextSections[0]) : "";
 
+        setError(null);
         setAllowedCategories(categoriesToUse);
-        setAllowedProgramKeys([]);
+        setAllowedProgramKeys(permissions.programKeys);
         setSelectedGroupLabel((current) =>
           nextSections.some((section) => getSectionGroupLabel(section) === current)
             ? current
@@ -1019,17 +1036,6 @@ function CriarRequisicaoPage() {
             ? current
             : getInitialSectionId(nextSections, null),
         );
-
-        try {
-          const nextProgramKeys = await getAllowedProgramKeysForRequest(requester);
-          if (active) {
-            setAllowedProgramKeys(
-              isRamonSelectedRequester && !requester.programa_id ? [] : nextProgramKeys,
-            );
-          }
-        } catch (err) {
-          console.error("Erro ao carregar programas do solicitante:", err);
-        }
       } catch (err) {
         if (active) {
           setError(
@@ -1382,15 +1388,24 @@ function CriarRequisicaoPage() {
             <Card className="rounded-2xl border-slate-200/80 bg-white p-4 shadow-xs space-y-2">
               <div className="text-xs font-semibold text-slate-800">Programa do pedido</div>
               <div className="max-w-md space-y-1">
-                <Label htmlFor="select-ramon-program" className="text-xs text-slate-500 font-normal">
+                <Label
+                  htmlFor="select-ramon-program"
+                  className="text-xs text-slate-500 font-normal"
+                >
                   Escolha o programa que será impresso no PDF:
                 </Label>
-                <select id="select-ramon-program" value={selectedRamonProgram}
-                  onChange={(event) => setSelectedRamonProgram(event.target.value)} required
-                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                <select
+                  id="select-ramon-program"
+                  value={selectedRamonProgram}
+                  onChange={(event) => setSelectedRamonProgram(event.target.value)}
+                  required
+                  className="w-full h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
                   <option value="">Selecione o programa</option>
                   {programs.map((program) => (
-                    <option key={program.id} value={program.nome}>{program.nome}</option>
+                    <option key={program.id} value={program.nome}>
+                      {program.nome}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -1514,7 +1529,9 @@ function CriarRequisicaoPage() {
                       className="gap-2"
                       onClick={() => {
                         if (!canAddCustomItems) {
-                          setError("Itens fora da lista só podem ser adicionados pelo setor Hospital.");
+                          setError(
+                            "Itens fora da lista só podem ser adicionados pelo setor Hospital.",
+                          );
                           return;
                         }
                         const name = customItemName.trim();

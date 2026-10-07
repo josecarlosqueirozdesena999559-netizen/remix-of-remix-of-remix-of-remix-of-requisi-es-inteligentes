@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Loader2, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,21 +14,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { deleteAdminUser, saveAdminUser } from "@/lib/admin-user-actions";
-import { formatProgramName } from "@/lib/program-options";
-import {
-  normalizeProductCategory,
-  normalizeProductSearchValue,
-  PRODUCT_CATEGORIES,
-} from "@/lib/product-options";
+import { normalizeProductCategory, PRODUCT_CATEGORIES } from "@/lib/product-options";
 
 export const Route = createFileRoute("/admin/cadastros/usuarios/$usuarioId")({
   component: UsuarioFormPage,
@@ -39,37 +27,12 @@ interface UsuarioRow {
   nome: string;
   cpf: string | null;
   usuario: string | null;
-  setor: string | null;
-  unidade_nome: string | null;
   is_admin: boolean;
   categorias_permitidas: unknown;
-  programa_id: string | null;
   materiais_permitidos: unknown;
 }
 
-interface SetorRow {
-  id: number;
-  nome: string;
-  programa: string | null;
-  categorias_permitidas: unknown;
-}
-
-interface ProgramaRow {
-  id: string;
-  nome: string;
-}
-
-interface SetorLinkRow {
-  setor_id: number;
-  setores: { id: number; nome: string } | { id: number; nome: string }[] | null;
-}
-
-const EMPTY_VALUE = "__none__";
 const MATERIAL_CATEGORY_SET = new Set<string>(PRODUCT_CATEGORIES);
-
-function normalizeLocation(value: string | null | undefined) {
-  return normalizeProductSearchValue(value);
-}
 
 function getValidMaterialCategories(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -83,10 +46,6 @@ function getValidMaterialCategories(value: unknown) {
     );
 }
 
-function getSingleSector(value: SetorLinkRow["setores"]) {
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
-
 function UsuarioFormPage() {
   const { usuarioId } = Route.useParams();
   const navigate = useNavigate();
@@ -96,10 +55,6 @@ function UsuarioFormPage() {
   const [usuario, setUsuario] = useState("");
   const [cpf, setCpf] = useState("");
   const [senha, setSenha] = useState("");
-  const [setores, setSetores] = useState<SetorRow[]>([]);
-  const [programas, setProgramas] = useState<ProgramaRow[]>([]);
-  const [setorId, setSetorId] = useState("");
-  const [programaId, setProgramaId] = useState("");
   const [materiaisPermitidos, setMateriaisPermitidos] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -108,7 +63,7 @@ function UsuarioFormPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const title = useMemo(() => (isNew ? "Novo usuário" : "Editar usuário"), [isNew]);
+  const title = isNew ? "Novo usuário" : "Editar usuário";
 
   useEffect(() => {
     let active = true;
@@ -117,100 +72,39 @@ function UsuarioFormPage() {
       setLoading(true);
       setError(null);
 
-      const [sectorResult, programResult] = await Promise.all([
-        supabase
-          .from("setores")
-          .select("id,nome,programa,categorias_permitidas")
-          .order("nome", { ascending: true }),
-        supabase.from("programas").select("id,nome").order("nome", { ascending: true }),
-      ]);
-
-      if (!active) return;
-      if (sectorResult.error || programResult.error) {
-        setError(
-          sectorResult.error?.message || programResult.error?.message || "Erro ao carregar opções.",
-        );
-        setLoading(false);
-        return;
-      }
-
-      const loadedSectors = (sectorResult.data ?? []) as SetorRow[];
-      setSetores(loadedSectors);
-      setProgramas((programResult.data ?? []) as ProgramaRow[]);
-
       if (isNew) {
         setNome("");
         setUsuario("");
         setCpf("");
         setSenha("");
-        setSetorId("");
-        setProgramaId("");
         setMateriaisPermitidos([]);
         setIsAdmin(false);
         setLoading(false);
         return;
       }
 
-      const [userResult, linksResult] = await Promise.all([
-        supabase
-          .from("usuarios")
-          .select(
-            "id,nome,cpf,usuario,setor,unidade_nome,is_admin,categorias_permitidas,programa_id,materiais_permitidos",
-          )
-          .eq("id", usuarioId)
-          .maybeSingle(),
-        supabase
-          .from("setor_responsaveis")
-          .select("setor_id,setores(id,nome)")
-          .eq("usuario_id", usuarioId)
-          .order("created_at", { ascending: true }),
-      ]);
+      const { data, error: loadError } = await supabase
+        .from("usuarios")
+        .select("id,nome,cpf,usuario,is_admin,categorias_permitidas,materiais_permitidos")
+        .eq("id", usuarioId)
+        .maybeSingle();
 
       if (!active) return;
-      if (userResult.error || linksResult.error) {
-        setError(
-          userResult.error?.message || linksResult.error?.message || "Erro ao carregar usuário.",
-        );
-        setLoading(false);
-        return;
-      }
-      if (!userResult.data) {
-        setError("Usuário não encontrado.");
+      if (loadError || !data) {
+        setError(loadError?.message || "Usuário não encontrado.");
         setLoading(false);
         return;
       }
 
-      const profile = userResult.data as UsuarioRow;
-      const linkedSectors = ((linksResult.data ?? []) as SetorLinkRow[])
-        .map((link) => getSingleSector(link.setores))
-        .filter((sector): sector is NonNullable<ReturnType<typeof getSingleSector>> =>
-          Boolean(sector),
-        );
-      const primaryLocation = normalizeLocation(profile.unidade_nome || profile.setor);
-      const selectedSector =
-        loadedSectors.find((sector) => normalizeLocation(sector.nome) === primaryLocation) ??
-        linkedSectors
-          .map((linked) => loadedSectors.find((sector) => sector.id === linked.id))
-          .find((sector): sector is SetorRow => Boolean(sector));
-
+      const profile = data as UsuarioRow;
       setNome(profile.nome);
       setUsuario(profile.usuario ?? "");
       setCpf(profile.cpf ?? "");
       setSenha("");
-      setSetorId(selectedSector ? String(selectedSector.id) : "");
-      setProgramaId(profile.programa_id ?? "");
       setIsAdmin(profile.is_admin);
-
       const explicitMaterials = getValidMaterialCategories(profile.materiais_permitidos);
       const legacyMaterials = getValidMaterialCategories(profile.categorias_permitidas);
-      const sectorMaterials = getValidMaterialCategories(selectedSector?.categorias_permitidas);
-      setMateriaisPermitidos(
-        explicitMaterials.length > 0
-          ? explicitMaterials
-          : legacyMaterials.length > 0
-            ? legacyMaterials
-            : sectorMaterials,
-      );
+      setMateriaisPermitidos(explicitMaterials.length > 0 ? explicitMaterials : legacyMaterials);
       setLoading(false);
     }
 
@@ -243,16 +137,6 @@ function UsuarioFormPage() {
       setSaving(false);
       return;
     }
-    if (!isAdmin && !setorId) {
-      setError("Selecione o setor do usuário.");
-      setSaving(false);
-      return;
-    }
-    if (!isAdmin && !programaId) {
-      setError("Selecione o programa do usuário.");
-      setSaving(false);
-      return;
-    }
     if (!isAdmin && materiaisPermitidos.length === 0) {
       setError("Selecione ao menos um tipo de material permitido.");
       setSaving(false);
@@ -280,17 +164,15 @@ function UsuarioFormPage() {
       usuario: usuarioLimpo,
       cpf: cpfLimpo || null,
       password: senhaLimpa || null,
-      setor_id: setorId ? Number(setorId) : null,
-      programa_id: programaId || null,
       materiais_permitidos: materiaisPermitidos,
     };
 
     try {
       await saveAdminUser({ data: payload });
-      setSaving(false);
       navigate({ to: "/admin/cadastros/usuarios" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao salvar usuário.");
+    } finally {
       setSaving(false);
     }
   };
@@ -339,7 +221,7 @@ function UsuarioFormPage() {
         ) : (
           <form className="max-w-3xl space-y-5" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="nome">Nome</Label>
+              <Label htmlFor="nome">Nome da pessoa</Label>
               <Input
                 id="nome"
                 value={nome}
@@ -360,9 +242,6 @@ function UsuarioFormPage() {
                   inputMode="numeric"
                   maxLength={11}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Opcional para contas de setor compartilhadas.
-                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="usuario">Usuário de acesso</Label>
@@ -370,7 +249,7 @@ function UsuarioFormPage() {
                   id="usuario"
                   value={usuario}
                   onChange={(event) => setUsuario(event.target.value)}
-                  placeholder="Nome usado para entrar"
+                  placeholder="Identificador interno da conta"
                   autoCapitalize="none"
                   required
                 />
@@ -395,81 +274,17 @@ function UsuarioFormPage() {
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="setor">Setor vinculado</Label>
-                <Select
-                  value={setorId || EMPTY_VALUE}
-                  onValueChange={(value) => setSetorId(value === EMPTY_VALUE ? "" : value)}
-                >
-                  <SelectTrigger id="setor">
-                    <SelectValue placeholder="Selecione o setor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_VALUE}>Selecione o setor</SelectItem>
-                    {setores.map((setor) => (
-                      <SelectItem key={setor.id} value={String(setor.id)}>
-                        {setor.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {setores.length === 0 && (
-                  <p className="text-xs text-destructive">
-                    Cadastre um setor antes de criar usuários.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="programa">Programa</Label>
-                <Select
-                  value={programaId || EMPTY_VALUE}
-                  onValueChange={(value) => setProgramaId(value === EMPTY_VALUE ? "" : value)}
-                >
-                  <SelectTrigger id="programa">
-                    <SelectValue placeholder="Selecione o programa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_VALUE}>Selecione o programa</SelectItem>
-                    {programas.map((programa) => (
-                      <SelectItem key={programa.id} value={programa.id}>
-                        {formatProgramName(programa.nome)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {programas.length === 0 && (
-                  <p className="text-xs text-destructive">
-                    Cadastre um programa antes de criar usuários.
-                  </p>
-                )}
-              </div>
+            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              O setor compartilhado e os programas são definidos em Cadastros / Setores. Aqui você
+              configura a pessoa e os tipos de materiais permitidos.
             </div>
 
             <fieldset className="space-y-3 rounded-md border p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <legend className="font-medium">Tipos de materiais que pode solicitar</legend>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Selecione uma ou mais categorias para limitar os itens disponíveis na
-                    solicitação.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setMateriaisPermitidos((current) =>
-                      current.length === PRODUCT_CATEGORIES.length ? [] : [...PRODUCT_CATEGORIES],
-                    )
-                  }
-                >
-                  {materiaisPermitidos.length === PRODUCT_CATEGORIES.length
-                    ? "Limpar seleção"
-                    : "Selecionar todos"}
-                </Button>
+              <div>
+                <legend className="font-medium">Materiais que pode pedir</legend>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Selecione os tipos de materiais permitidos para esta pessoa.
+                </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {PRODUCT_CATEGORIES.map((category, index) => {
@@ -485,9 +300,7 @@ function UsuarioFormPage() {
                               current.includes(category) ? current : [...current, category],
                             );
                           } else {
-                            setMateriaisPermitidos((current) =>
-                              current.filter((item) => item !== category),
-                            );
+                            toggleMaterial(category);
                           }
                         }}
                       />
@@ -499,7 +312,7 @@ function UsuarioFormPage() {
                 })}
               </div>
               <p className="text-xs text-muted-foreground">
-                {materiaisPermitidos.length} categoria(s) selecionada(s)
+                {materiaisPermitidos.length} tipo(s) selecionado(s)
               </p>
             </fieldset>
 

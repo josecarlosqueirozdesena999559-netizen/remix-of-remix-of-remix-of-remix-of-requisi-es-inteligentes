@@ -9,7 +9,6 @@ import {
   FileClock,
   FilePlus,
   FileSignature,
-  FolderTree,
   LayoutDashboard,
   Layers,
   Loader2,
@@ -18,7 +17,6 @@ import {
   Menu,
   MessageCircle,
   MessagesSquare,
-  Package,
   QrCode,
   Search,
   Send,
@@ -417,6 +415,7 @@ function AdminLayout() {
                   {hasAdminSectionAccess(profile, "conversas") ? (
                     <Link
                       to="/admin/conversas"
+                      search={{ phone: "" }}
                       className={navItemClass(isActivePath("/admin/conversas"))}
                     >
                       <MessagesSquare className={navIconClass(isActivePath("/admin/conversas"))} />
@@ -471,15 +470,6 @@ function AdminLayout() {
                           <span className="truncate">Usuários</span>
                         </Link>
                         <Link
-                          to="/admin/cadastros/produtos"
-                          className={navItemClass(isActivePath("/admin/cadastros/produtos"))}
-                        >
-                          <Package
-                            className={navIconClass(isActivePath("/admin/cadastros/produtos"))}
-                          />
-                          <span className="truncate">Produtos</span>
-                        </Link>
-                        <Link
                           to="/admin/cadastros/programas"
                           className={navItemClass(isActivePath("/admin/cadastros/programas"))}
                         >
@@ -496,19 +486,6 @@ function AdminLayout() {
                             className={navIconClass(isActivePath("/admin/cadastros/locais"))}
                           />
                           <span className="truncate">Setores</span>
-                        </Link>
-                        <Link
-                          to="/admin/cadastros/setores-principais"
-                          className={navItemClass(
-                            isActivePath("/admin/cadastros/setores-principais"),
-                          )}
-                        >
-                          <FolderTree
-                            className={navIconClass(
-                              isActivePath("/admin/cadastros/setores-principais"),
-                            )}
-                          />
-                          <span className="truncate">Setores Principais</span>
                         </Link>
                       </div>
                     </div>
