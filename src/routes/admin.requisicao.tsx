@@ -1149,7 +1149,7 @@ function CriarRequisicaoPage() {
     if (
       !editingRequestId &&
       isSharedSector &&
-      (await hasPendingRequestSignatures(chosenSolicitante))
+      (await hasPendingRequestSignatures(chosenSolicitante, profile.unidade_nome || profile.setor))
     ) {
       setError(BLOCK_NEW_REQUEST_MESSAGE);
       setSaving(false);

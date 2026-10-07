@@ -49,14 +49,19 @@ export function requestNeedsSignature(request: PendingSignatureRequest) {
   return !getRequestSignedAttachment(request.signed_attachment, request.status);
 }
 
-export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) {
+export async function hasPendingRequestSignatures(
+  profile: RequestOwnerProfile,
+  activeSectorOverride?: string | null,
+) {
   if (canBypassPendingSignatureBlock(profile)) {
     return false;
   }
 
   const cpfVariants = getRequestOwnerCpfVariants(profile);
-  const location = getRequestOwnerLocation(profile);
+  const location = activeSectorOverride?.trim() || getRequestOwnerLocation(profile);
   const name = profile.nome?.trim() || "";
+
+  if (!location) return false;
 
   let query = supabase
     .from("requisicoes")
@@ -70,7 +75,7 @@ export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) 
     .order("updated_at", { ascending: false });
 
   if (cpfVariants.length > 0) {
-    query = query.in("solicitante_cpf", cpfVariants);
+    query = query.in("solicitante_cpf", cpfVariants).eq("setor", location);
   } else if (name && location) {
     query = query.eq("solicitante", name).eq("setor", location);
   } else {
@@ -94,6 +99,7 @@ export async function hasPendingRequestSignatures(profile: RequestOwnerProfile) 
     .from("assinaturas_avulsas" as any)
     .select("id,status")
     .eq("usuario_id", userId)
+    .eq("setor", location)
     .in("status", ["aguardando_assinatura", "devolvido"]);
 
   if (avulsasError) {

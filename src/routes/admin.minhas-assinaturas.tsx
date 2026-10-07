@@ -21,7 +21,11 @@ import {
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
 import type { RequestPdfItem } from "@/lib/request-pdf";
-import { resolveCanonicalLocationName, type LocationOption } from "@/lib/location-normalizer";
+import {
+  normalizeLocationKey,
+  resolveCanonicalLocationName,
+  type LocationOption,
+} from "@/lib/location-normalizer";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
@@ -78,9 +82,7 @@ function canEditUnsignedRequest(request: Requisicao) {
   );
 }
 
-function canDeletePendingRequest(
-  request: Pick<Requisicao, "status" | "signed_attachment">,
-) {
+function canDeletePendingRequest(request: Pick<Requisicao, "status" | "signed_attachment">) {
   return (
     USER_DELETABLE_REQUEST_STATUSES.some((status) => status === request.status) &&
     !getRequestSignedAttachment(request.signed_attachment, request.status) &&
@@ -94,7 +96,10 @@ function getRequiredOutputSignatureCount(_request: Requisicao) {
 
 function needsCurrentStageSignature(request: Requisicao) {
   if (request.status === "aguardando_assinatura_saida") {
-    return getOutputSignedAttachments(request.signed_attachment, request.status).length < getRequiredOutputSignatureCount(request);
+    return (
+      getOutputSignedAttachments(request.signed_attachment, request.status).length <
+      getRequiredOutputSignatureCount(request)
+    );
   }
 
   if (request.status === "correcao_requisicao") {
@@ -131,29 +136,11 @@ function getUniqueLocations(locations: Array<string | null | undefined>) {
     .map((location) => location?.trim())
     .filter((location): location is string => Boolean(location))
     .filter((location) => {
-      const key = location.toLowerCase();
+      const key = location;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-}
-
-async function getLinkedRequestLocations(profile: { id?: string | null } | null | undefined, fallbackLocation: string) {
-  if (!profile?.id) return getUniqueLocations([fallbackLocation]);
-
-  const { data, error } = await supabase
-    .from("setor_responsaveis")
-    .select("setores(nome)")
-    .eq("usuario_id", profile.id);
-
-  if (error) throw new Error(error.message);
-
-  const linkedLocations = (data ?? []).map((row) => {
-    const setor = Array.isArray(row.setores) ? row.setores[0] : row.setores;
-    return setor?.nome;
-  });
-
-  return getUniqueLocations([fallbackLocation, ...linkedLocations]);
 }
 
 function normalizeRequestedQuantity(item: RequestPdfItem) {
@@ -176,7 +163,11 @@ function getSignedPdfUploadErrorMessage(error: unknown) {
 
   if (!message) return "Não foi possível enviar o PDF assinado. Tente novamente.";
 
-  if (/DOCUMENT_UPLOADS_DISABLED|row-level security|violates row-level security|permission denied|storage/i.test(message)) {
+  if (
+    /DOCUMENT_UPLOADS_DISABLED|row-level security|violates row-level security|permission denied|storage/i.test(
+      message,
+    )
+  ) {
     return "O envio de PDF assinado ainda não está liberado no armazenamento. Atualize a página e tente novamente após a publicação da correção.";
   }
 
@@ -204,6 +195,7 @@ function MinhasAssinaturasPage() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isChildRoute = pathname !== "/admin/minhas-assinaturas";
   const [requests, setRequests] = useState<Requisicao[]>([]);
+  const [activeSectorLocation, setActiveSectorLocation] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -222,28 +214,42 @@ function MinhasAssinaturasPage() {
   async function loadRequests() {
     setLoading(true);
     setError(null);
+    setActiveSectorLocation("");
 
     try {
       const { profile: authProfile } = await getCurrentUserProfile();
-      const profile = isSharedSectorProfile(authProfile)
+      const isSharedSectorSession = isSharedSectorProfile(authProfile);
+      const profile = isSharedSectorSession
         ? await getSelectedSharedRequesterProfile(authProfile)
         : authProfile;
 
-      if (!profile && isSharedSectorProfile(authProfile)) {
+      if (!profile && isSharedSectorSession) {
         navigate({ to: "/admin/selecionar-solicitante" });
         return;
       }
 
       const cpfVariants = getRequestOwnerCpfVariants(profile);
-      const location = getRequestOwnerLocation(profile);
-      const linkedLocations = await getLinkedRequestLocations(profile, location);
+      const location =
+        (isSharedSectorSession ? getRequestOwnerLocation(authProfile) : "") ||
+        getRequestOwnerLocation(profile);
       const name = profile?.nome?.trim() || "";
-      const isSharedSector = false;
 
-      if (!isSharedSector && cpfVariants.length === 0 && !(name && linkedLocations.length > 0)) {
+      if (!location || (cpfVariants.length === 0 && !name)) {
         setRequests([]);
         return;
       }
+
+      const { data: setoresData, error: setoresError } = await supabase
+        .from("setores")
+        .select("nome,programa")
+        .order("nome", { ascending: true });
+
+      if (setoresError) throw new Error(setoresError.message);
+
+      const locationOptions = (setoresData ?? []) as LocationOption[];
+      const activeLocation = resolveCanonicalLocationName(location, locationOptions) || location;
+      const activeLocations = getUniqueLocations([activeLocation, location]);
+      setActiveSectorLocation(activeLocation);
 
       const requestsQuery = supabase
         .from("requisicoes")
@@ -267,31 +273,20 @@ function MinhasAssinaturasPage() {
         ])
         .order("updated_at", { ascending: false });
 
-      const [{ data: setoresData, error: setoresError }, requestsResult] = await Promise.all([
-        supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
-        cpfVariants.length > 0
-          ? requestsQuery.in("solicitante_cpf", cpfVariants)
-          : requestsQuery.eq("solicitante", name).in("setor", linkedLocations),
-      ]);
+      const requestsResult = await (cpfVariants.length > 0
+        ? requestsQuery.in("solicitante_cpf", cpfVariants).in("setor", activeLocations)
+        : requestsQuery.eq("solicitante", name).in("setor", activeLocations));
 
       let { data, error } = requestsResult;
-
-      if (setoresError) {
-        throw new Error(setoresError.message);
-      }
-
-      const locationOptions = (setoresData ?? []) as LocationOption[];
 
       if (
         error &&
         (isMissingReturnFeedbackColumnError(error.message) ||
           error.message.includes("saida_vinculada_data"))
       ) {
-        const fallbackResult = await (
-          cpfVariants.length > 0
-            ? fallbackRequestsQuery.in("solicitante_cpf", cpfVariants)
-            : fallbackRequestsQuery.eq("solicitante", name).in("setor", linkedLocations)
-        );
+        const fallbackResult = await (cpfVariants.length > 0
+          ? fallbackRequestsQuery.in("solicitante_cpf", cpfVariants).in("setor", activeLocations)
+          : fallbackRequestsQuery.eq("solicitante", name).in("setor", activeLocations));
 
         data = (fallbackResult.data ?? []).map((request) => ({
           ...request,
@@ -305,7 +300,7 @@ function MinhasAssinaturasPage() {
 
       if (error) throw new Error(error.message);
 
-      if (cpfVariants.length > 0 && name && linkedLocations.length > 0) {
+      if (cpfVariants.length > 0 && name) {
         let { data: namedRequests, error: namedRequestsError } = await supabase
           .from("requisicoes")
           .select(`${baseSelectWithOutputDate},return_reason,return_target`)
@@ -316,10 +311,13 @@ function MinhasAssinaturasPage() {
             "correcao_requisicao",
           ])
           .eq("solicitante", name)
-          .in("setor", linkedLocations)
+          .in("setor", activeLocations)
           .order("updated_at", { ascending: false });
 
-        if (namedRequestsError && isMissingLinkedOutputDateColumnError(namedRequestsError.message)) {
+        if (
+          namedRequestsError &&
+          isMissingLinkedOutputDateColumnError(namedRequestsError.message)
+        ) {
           const fallbackNamedRequests = await supabase
             .from("requisicoes")
             .select(baseSelect)
@@ -330,7 +328,7 @@ function MinhasAssinaturasPage() {
               "correcao_requisicao",
             ])
             .eq("solicitante", name)
-            .in("setor", linkedLocations)
+            .in("setor", activeLocations)
             .order("updated_at", { ascending: false });
 
           namedRequests = (fallbackNamedRequests.data ?? []).map((request) => ({
@@ -354,6 +352,10 @@ function MinhasAssinaturasPage() {
               ...request,
               setor: resolveCanonicalLocationName(request.setor, locationOptions) || request.setor,
             }))
+            .filter(
+              (request) =>
+                normalizeLocationKey(request.setor) === normalizeLocationKey(activeLocation),
+            )
             .filter(needsCurrentStageSignature),
         ),
       );
@@ -378,6 +380,16 @@ function MinhasAssinaturasPage() {
 
     setMessage(null);
     setError(null);
+
+    if (
+      !activeSectorLocation ||
+      normalizeLocationKey(request.setor) !== normalizeLocationKey(activeSectorLocation)
+    ) {
+      setError(
+        "Esta solicitação pertence a outro setor e não pode ser assinada nesta sessão. Acesse o setor correto para assiná-la.",
+      );
+      return;
+    }
 
     if (shouldBlockSignatureUpload(request)) {
       setError(
@@ -417,8 +429,8 @@ function MinhasAssinaturasPage() {
           storagePath,
           uploadedAt: new Date().toISOString(),
           sourceUploadedAt: isOutputStage
-            ? getAttachmentFiles(request.admin_attachment).at(uploadedAttachments.length)?.uploadedAt ||
-              new Date().toISOString()
+            ? getAttachmentFiles(request.admin_attachment).at(uploadedAttachments.length)
+                ?.uploadedAt || new Date().toISOString()
             : undefined,
           kind: isOutputStage ? "output" : "request",
         };
@@ -463,15 +475,12 @@ function MinhasAssinaturasPage() {
       };
 
       if (/ramon/i.test(String(request.solicitante || ""))) {
-        const signedResult = await (supabase as any).rpc(
-          "register_ramon_signed_requisicao",
-          {
-            p_requisicao_id: request.id,
-            p_signed_attachment: signedAttachment,
-            p_admin_attachment: payload.admin_attachment,
-            p_status: payload.status,
-          },
-        );
+        const signedResult = await (supabase as any).rpc("register_ramon_signed_requisicao", {
+          p_requisicao_id: request.id,
+          p_signed_attachment: signedAttachment,
+          p_admin_attachment: payload.admin_attachment,
+          p_status: payload.status,
+        });
         if (signedResult.error) {
           throw new Error(signedResult.error.message);
         }
@@ -572,8 +581,11 @@ function MinhasAssinaturasPage() {
       if (!canDeletePendingRequest(currentRequest)) {
         const alreadySigned =
           currentRequest.status === "concluido" ||
-          Boolean(getRequestSignedAttachment(currentRequest.signed_attachment, currentRequest.status)) ||
-          getOutputSignedAttachments(currentRequest.signed_attachment, currentRequest.status).length > 0;
+          Boolean(
+            getRequestSignedAttachment(currentRequest.signed_attachment, currentRequest.status),
+          ) ||
+          getOutputSignedAttachments(currentRequest.signed_attachment, currentRequest.status)
+            .length > 0;
         throw new Error(
           alreadySigned
             ? "Esta solicitação já foi assinada e não pode ser excluída."
@@ -610,10 +622,9 @@ function MinhasAssinaturasPage() {
       if (deleteError) throw new Error(deleteError.message);
 
       if (!deletedRequest && /ramon/i.test(String(request.solicitante || ""))) {
-        const cancellationResult = await (supabase as any).rpc(
-          "cancel_ramon_pending_requisicao",
-          { p_requisicao_id: request.id },
-        );
+        const cancellationResult = await (supabase as any).rpc("cancel_ramon_pending_requisicao", {
+          p_requisicao_id: request.id,
+        });
         if (cancellationResult.error) {
           throw new Error(cancellationResult.error.message);
         }
@@ -744,7 +755,7 @@ function MinhasAssinaturasPage() {
                         </Button>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {(
+                        {
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             {canEditRequest && (
                               <Button
@@ -873,7 +884,7 @@ function MinhasAssinaturasPage() {
                               )}
                             </div>
                           </div>
-                        )}
+                        }
                       </td>
                     </tr>
                   );
