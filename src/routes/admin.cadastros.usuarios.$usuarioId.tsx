@@ -274,11 +274,6 @@ function UsuarioFormPage() {
               </p>
             </div>
 
-            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-              O setor compartilhado e os programas são definidos em Cadastros / Setores. Aqui você
-              configura a pessoa e os tipos de materiais permitidos.
-            </div>
-
             <fieldset className="space-y-3 rounded-md border p-4">
               <div>
                 <legend className="font-medium">Materiais que pode pedir</legend>

@@ -7,46 +7,14 @@ export const Route = createFileRoute("/admin/cadastros/usuarios")({
   component: UsuariosPage,
 });
 
-interface SetorRelation {
-  nome: string | null;
-}
-
-interface SetorResponsavelRelation {
-  setores: SetorRelation | SetorRelation[] | null;
-}
-
 interface Usuario {
   id: string;
   nome: string;
   cpf: string | null;
-  setor: string | null;
-  unidade_nome: string | null;
   materiais_permitidos: unknown;
-  setor_responsaveis?: SetorResponsavelRelation[] | null;
 }
 
-const USER_SELECT =
-  "id,nome,cpf,setor,unidade_nome,materiais_permitidos,setor_responsaveis(setores(nome)),created_at";
-const USER_REALTIME_TABLES = ["usuarios", "setor_responsaveis", "setores"];
-
-function getSectorNames(user: Usuario) {
-  return (user.setor_responsaveis ?? [])
-    .flatMap((link) => (Array.isArray(link.setores) ? link.setores : [link.setores]))
-    .map((sector) => sector?.nome?.trim() || "")
-    .filter(Boolean);
-}
-
-function getSharedSector(user: Usuario) {
-  const linkedSectors = getSectorNames(user);
-  const primaryName = user.unidade_nome?.trim() || user.setor?.trim();
-  if (primaryName) {
-    const match = linkedSectors.find(
-      (name) => name.localeCompare(primaryName, "pt-BR", { sensitivity: "base" }) === 0,
-    );
-    if (match) return match;
-  }
-  return primaryName || linkedSectors[0] || "Sem setor";
-}
+const USER_SELECT = "id,nome,cpf,materiais_permitidos,created_at";
 
 function getMaterials(value: unknown) {
   return Array.isArray(value) && value.length > 0
@@ -62,13 +30,12 @@ function UsuariosPage() {
     "usuarios",
     USER_SELECT,
     { column: "created_at", ascending: false },
-    USER_REALTIME_TABLES,
+    ["usuarios"],
   );
 
   const columns: Column<Usuario>[] = [
     { key: "nome", label: "Nome" },
     { key: "cpf", label: "CPF", render: (user) => user.cpf || "-" },
-    { key: "unidade_nome", label: "Setor compartilhado", render: getSharedSector },
     {
       key: "materiais_permitidos",
       label: "Materiais que pode pedir",
@@ -82,7 +49,7 @@ function UsuariosPage() {
     <ListPage
       breadcrumb="Cadastros / Usuários"
       title="Usuários"
-      description="Pessoas, setor compartilhado e materiais autorizados. Os vínculos e programas são gerenciados em Setores."
+      description="Pessoas cadastradas e tipos de materiais autorizados para solicitação."
       data={data}
       loading={loading}
       error={error}
