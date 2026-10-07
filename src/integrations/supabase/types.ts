@@ -430,7 +430,9 @@ export type Database = {
           funcao: string | null
           id: string
           is_admin: boolean
+          materiais_permitidos: Json
           nome: string
+          programa_id: string | null
           role: string
           setor: string | null
           unidade_nome: string | null
@@ -447,7 +449,9 @@ export type Database = {
           funcao?: string | null
           id?: string
           is_admin?: boolean
+          materiais_permitidos?: Json
           nome: string
+          programa_id?: string | null
           role?: string
           setor?: string | null
           unidade_nome?: string | null
@@ -464,7 +468,9 @@ export type Database = {
           funcao?: string | null
           id?: string
           is_admin?: boolean
+          materiais_permitidos?: Json
           nome?: string
+          programa_id?: string | null
           role?: string
           setor?: string | null
           unidade_nome?: string | null
@@ -472,7 +478,15 @@ export type Database = {
           usuario?: string
           whatsapp?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "usuarios_programa_id_fkey"
+            columns: ["programa_id"]
+            isOneToOne: false
+            referencedRelation: "programas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

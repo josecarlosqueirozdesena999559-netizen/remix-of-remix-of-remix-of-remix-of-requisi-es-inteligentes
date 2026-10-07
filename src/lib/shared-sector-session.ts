@@ -3,7 +3,7 @@ import { isSharedSectorProfile, type CurrentUserProfile } from "@/lib/user-profi
 
 const SELECTED_SHARED_REQUESTER_KEY = "soliciteja:selected-shared-requester-id";
 const USER_SELECT =
-  "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
+  "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas,programa_id,materiais_permitidos";
 
 function normalize(value: string | null | undefined) {
   return String(value || "")

@@ -4,9 +4,11 @@ type AdminUserPayload = {
   id?: string | null;
   nome: string;
   usuario: string;
-  email: string;
   cpf?: string | null;
   password?: string | null;
+  setor_id?: number | null;
+  programa_id?: string | null;
+  materiais_permitidos?: string[];
 };
 
 type UserActionResponse = {

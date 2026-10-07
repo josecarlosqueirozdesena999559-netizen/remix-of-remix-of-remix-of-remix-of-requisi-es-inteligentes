@@ -13,6 +13,8 @@ export interface CurrentUserProfile {
   whatsapp: string | null;
   is_admin: boolean;
   categorias_permitidas: unknown;
+  programa_id: string | null;
+  materiais_permitidos: unknown;
 }
 
 export function isUserProfileIncomplete(profile: CurrentUserProfile | null) {
@@ -57,7 +59,7 @@ export async function getCurrentUserProfile() {
   }
 
   const select =
-    "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas";
+    "id,auth_user_id,nome,usuario,email,cpf,funcao,setor,unidade_nome,whatsapp,is_admin,categorias_permitidas,programa_id,materiais_permitidos";
   const { data: byAuthId, error: authIdError } = await supabase
     .from("usuarios")
     .select(select)

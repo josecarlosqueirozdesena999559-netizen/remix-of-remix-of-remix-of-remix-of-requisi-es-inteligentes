@@ -79,6 +79,8 @@ interface SectorUserOption {
   setor: string | null;
   unidade_nome: string | null;
   categorias_permitidas: unknown;
+  programa_id?: string | null;
+  materiais_permitidos?: unknown;
 }
 
 interface RequestAccessProfile {
@@ -86,6 +88,8 @@ interface RequestAccessProfile {
   setor: string | null;
   unidade_nome: string | null;
   categorias_permitidas: unknown;
+  programa_id?: string | null;
+  materiais_permitidos?: unknown;
 }
 
 interface EditableRequestItem {
@@ -169,8 +173,12 @@ function isProductCategory(value: string) {
   return productCategorySet.has(value);
 }
 
-function getAllowedCategories(profile: Pick<RequestAccessProfile, "categorias_permitidas"> | null) {
-  const raw = profile?.categorias_permitidas;
+function getAllowedCategories(
+  profile: Pick<RequestAccessProfile, "categorias_permitidas" | "materiais_permitidos"> | null,
+) {
+  const raw = Array.isArray(profile?.materiais_permitidos)
+    ? profile.materiais_permitidos
+    : profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
   return categories.filter(
     (category, index) =>
@@ -223,7 +231,9 @@ async function getUsersForSector(sectorName: string) {
 
   const { data, error } = await supabase
     .from("usuarios")
-    .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
+    .select(
+      "id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas,programa_id,materiais_permitidos",
+    )
     .order("nome", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -251,7 +261,9 @@ async function getLinkedUsersForSector(sectorName: string) {
 
   const { data, error } = await supabase
     .from("setor_responsaveis")
-    .select("usuarios(id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas)")
+    .select(
+      "usuarios(id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas,programa_id,materiais_permitidos)",
+    )
     .in("setor_id", sectorIds)
     .order("created_at", { ascending: true });
 
@@ -370,6 +382,19 @@ async function getResponsibleSectorProgramKeys(profile: Pick<RequestAccessProfil
 }
 
 async function getAllowedProgramKeysForRequest(profile: RequestAccessProfile | null) {
+  if (profile?.programa_id) {
+    const { data: selectedProgram, error } = await supabase
+      .from("programas")
+      .select("nome")
+      .eq("id", profile.programa_id)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    const selectedProgramKeys = getComparableProgramKeys(selectedProgram?.nome);
+    if (selectedProgramKeys.length > 0) return selectedProgramKeys;
+  }
+
   const [responsibleProgramKeys, sectorProgramKeys] = await Promise.all([
     getResponsibleSectorProgramKeys(profile),
     getSectorProgramKeysForRequest(profile),
@@ -730,7 +755,9 @@ function CriarRequisicaoPage() {
             : Promise.resolve({ data: null, error: null }),
           supabase
             .from("usuarios")
-            .select("id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas")
+            .select(
+              "id,nome,usuario,email,cpf,funcao,setor,unidade_nome,categorias_permitidas,programa_id,materiais_permitidos",
+            )
             .order("nome", { ascending: true }),
         ]);
 
@@ -793,7 +820,11 @@ function CriarRequisicaoPage() {
         ]);
         const isRamonProfile = isRamonRequester(profile);
         const categories = isRamonProfile
-          ? ramonAllowedCategories
+          ? profileCategories.length > 0
+            ? ramonAllowedCategories.filter((category) =>
+                profileCategories.some((allowed) => allowed === category),
+              )
+            : ramonAllowedCategories
           : profileCategories.length > 0 || profileProgramKeys.length === 0
             ? profileCategories
             : [...PRODUCT_CATEGORIES];
@@ -866,7 +897,7 @@ function CriarRequisicaoPage() {
         }
 
         setAllowedCategories(categories);
-        setAllowedProgramKeys(isRamonProfile ? [] : profileProgramKeys);
+        setAllowedProgramKeys(isRamonProfile && !profile?.programa_id ? [] : profileProgramKeys);
         setPrograms((programsResult.data ?? []) as ProgramOption[]);
         setSelectedRamonProgram(editableRequest?.programa || "");
         setItems(loadedItems);
@@ -941,30 +972,35 @@ function CriarRequisicaoPage() {
     return () => {
       active = false;
     };
-  }, [editingRequestId]);
+  }, [editingRequestId, navigate]);
 
   useEffect(() => {
     if (!isSharedSectorProfile(profile)) return;
 
-    const selectedRequester = sectorUsers.find((user) => user.id === selectedSolicitanteId);
-    if (!selectedRequester) return;
+    const selectedRequester = sectorUsers.find((user) => user.id === selectedSolicitanteId) ?? null;
+    if (selectedRequester === null) return;
+    const requester: SectorUserOption = selectedRequester;
 
     let active = true;
 
     async function loadSelectedRequesterAccess() {
       try {
-        const isRamonSelectedRequester = isRamonRequester(selectedRequester);
-        const requesterCategories = getAllowedCategories(selectedRequester);
+        const isRamonSelectedRequester = isRamonRequester(requester);
+        const requesterCategories = getAllowedCategories(requester);
         const resolvedCategories =
           requesterCategories.length > 0
             ? requesterCategories
-            : await getAllowedCategoriesForRequest(selectedRequester, profile);
+            : await getAllowedCategoriesForRequest(requester, profile);
 
         if (!active) return;
 
         const fallbackCategories = getAllowedCategories(profile);
         const categoriesToUse = isRamonSelectedRequester
-          ? ramonAllowedCategories
+          ? requesterCategories.length > 0
+            ? ramonAllowedCategories.filter((category) =>
+                requesterCategories.some((allowed) => allowed === category),
+              )
+            : ramonAllowedCategories
           : resolvedCategories.length > 0
             ? resolvedCategories
             : fallbackCategories;
@@ -985,8 +1021,12 @@ function CriarRequisicaoPage() {
         );
 
         try {
-          const nextProgramKeys = await getAllowedProgramKeysForRequest(selectedRequester);
-          if (active) setAllowedProgramKeys(nextProgramKeys);
+          const nextProgramKeys = await getAllowedProgramKeysForRequest(requester);
+          if (active) {
+            setAllowedProgramKeys(
+              isRamonSelectedRequester && !requester.programa_id ? [] : nextProgramKeys,
+            );
+          }
         } catch (err) {
           console.error("Erro ao carregar programas do solicitante:", err);
         }
@@ -1036,7 +1076,10 @@ function CriarRequisicaoPage() {
         const sectionItems = items.filter((item) => {
           if (!itemMatchesRequestSection(item, section)) return false;
 
-          if (!isRamonRequest && !isItemAllowedForProfileProgram(item, allowedProgramKeys)) {
+          if (
+            (!isRamonRequest || allowedProgramKeys.length > 0) &&
+            !isItemAllowedForProfileProgram(item, allowedProgramKeys)
+          ) {
             return false;
           }
 
@@ -1053,7 +1096,7 @@ function CriarRequisicaoPage() {
         };
       })
       .filter(({ items }) => items.length > 0);
-  }, [selectedGroup, items, searchQuery, allowedProgramKeys]);
+  }, [selectedGroup, items, searchQuery, allowedProgramKeys, isRamonRequest]);
 
   const handleSubmit = async () => {
     setSaving(true);

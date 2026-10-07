@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/
 import { Button } from "@/components/ui/button";
 import { ListPage, type Column } from "@/components/ListPage";
 import { useSupabaseList } from "@/hooks/useSupabaseList";
+import { formatProgramName } from "@/lib/program-options";
 
 export const Route = createFileRoute("/admin/cadastros/usuarios")({
   component: UsuariosPage,
@@ -11,7 +12,16 @@ interface Usuario {
   id: string;
   nome: string;
   cpf: string | null;
-  email: string | null;
+  usuario: string | null;
+  setor: string | null;
+  unidade_nome: string | null;
+  programa_id: string | null;
+  materiais_permitidos: unknown;
+  programas: { nome: string } | { nome: string }[] | null;
+}
+
+function getProgram(value: Usuario["programas"]) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
 function UsuariosPage() {
@@ -20,13 +30,27 @@ function UsuariosPage() {
   const isChildRoute = pathname !== "/admin/cadastros/usuarios";
   const { data, loading, error } = useSupabaseList<Usuario>(
     "usuarios",
-    "id,nome,cpf,email,created_at",
+    "id,nome,cpf,usuario,setor,unidade_nome,programa_id,materiais_permitidos,programas(nome),created_at",
   );
 
   const columns: Column<Usuario>[] = [
     { key: "nome", label: "Nome" },
+    { key: "usuario", label: "Usuário", render: (r) => r.usuario || "-" },
     { key: "cpf", label: "CPF", render: (r) => r.cpf || "-" },
-    { key: "email", label: "Email", render: (r) => r.email || "-" },
+    { key: "unidade_nome", label: "Setor", render: (r) => r.unidade_nome || r.setor || "-" },
+    {
+      key: "programas",
+      label: "Programa",
+      render: (r) => formatProgramName(getProgram(r.programas)?.nome) || "-",
+    },
+    {
+      key: "materiais_permitidos",
+      label: "Materiais autorizados",
+      render: (r) =>
+        Array.isArray(r.materiais_permitidos) && r.materiais_permitidos.length > 0
+          ? r.materiais_permitidos.map(String).join(", ")
+          : "-",
+    },
   ];
 
   if (isChildRoute) {
@@ -37,12 +61,12 @@ function UsuariosPage() {
     <ListPage
       breadcrumb="Cadastros / Usuários"
       title="Usuários"
-      description="Cadastro básico de usuários do sistema."
+      description="Cadastre acesso, setor, programa e materiais autorizados para cada usuário."
       data={data}
       loading={loading}
       error={error}
       columns={columns}
-      searchKeys={["nome", "cpf", "email"]}
+      searchKeys={["nome", "usuario", "cpf", "setor", "unidade_nome"]}
       newLabel="Novo usuário"
       onNew={() =>
         navigate({

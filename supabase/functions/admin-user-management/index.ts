@@ -7,6 +7,9 @@ type UserPayload = {
   email: string;
   cpf?: string | null;
   password?: string | null;
+  setor_id: number | null;
+  programa_id: string | null;
+  materiais_permitidos: string[] | null;
 };
 
 type Profile = {
@@ -22,6 +25,8 @@ type Profile = {
   setor: string | null;
   unidade_nome: string | null;
   categorias_permitidas: unknown;
+  programa_id: string | null;
+  materiais_permitidos: unknown;
 };
 
 type AuthUser = {
@@ -95,6 +100,31 @@ function createLoginFromEmail(email: string) {
   return email.split("@")[0]?.trim() || email.trim();
 }
 
+const ALLOWED_REQUEST_MATERIAL_CATEGORIES = new Set([
+  "Gêneros alimentícios/limpeza",
+  "Frutas, Verduras e Proteínas",
+  "Insumos para Dietas Enterais",
+  "Ambulatorial",
+  "Odontológico",
+  "Laboratório",
+  "SESB",
+  "Expediente",
+]);
+
+function normalizeMaterialCategories(value: unknown) {
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value)) {
+    throw new UserActionError("Selecione tipos de materiais válidos.");
+  }
+
+  const categories = value.map(cleanString).filter(Boolean);
+  if (categories.some((category) => !ALLOWED_REQUEST_MATERIAL_CATEGORIES.has(category))) {
+    throw new UserActionError("Uma ou mais categorias de materiais não são válidas.");
+  }
+
+  return [...new Set(categories)];
+}
+
 function normalizeCpf(value: unknown) {
   const cpf = cleanString(value);
   if (!cpf) return null;
@@ -118,9 +148,19 @@ function validateUserPayload(input: unknown): UserPayload {
   const usuario = cleanString(data.usuario) || createLoginFromEmail(rawEmail);
   const email = rawEmail || createInternalEmail(usuario);
   const password = cleanString(data.password) || null;
+  const rawSectorId = data.setor_id;
+  const setorId =
+    rawSectorId === undefined || rawSectorId === null || rawSectorId === ""
+      ? null
+      : Number(rawSectorId);
+  const programaId = cleanString(data.programa_id) || null;
+  const materiaisPermitidos = normalizeMaterialCategories(data.materiais_permitidos);
 
   if (!nome) throw new UserActionError("Informe o nome do usuário.");
   if (!usuario) throw new UserActionError("Informe o usuário de acesso.");
+  if (setorId !== null && (!Number.isInteger(setorId) || setorId <= 0)) {
+    throw new UserActionError("Selecione um setor válido.");
+  }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new UserActionError("Informe um email válido.");
   }
@@ -135,6 +175,9 @@ function validateUserPayload(input: unknown): UserPayload {
     email,
     cpf: normalizeCpf(data.cpf),
     password,
+    setor_id: setorId,
+    programa_id: programaId,
+    materiais_permitidos: materiaisPermitidos,
   };
 }
 
@@ -144,7 +187,9 @@ function readableSupabaseError(error: unknown, fallback: string) {
 
   if (candidate?.code === "23505" || /duplicate key|already registered/i.test(message)) {
     if (/cpf/i.test(message)) return "Este CPF já está cadastrado para outro usuário.";
-    if (/email/i.test(message)) return "Este email já está cadastrado para outro usuário.";
+    if (/email/i.test(message)) {
+      return "Este usuário gera um identificador de login já utilizado. Informe outro usuário.";
+    }
     return "Já existe um usuário com esses dados.";
   }
 
@@ -208,8 +253,6 @@ async function ensureAuthUser(
 
   if (existingAuthUserId) {
     const updatePayload: Record<string, unknown> = {
-      email: payload.email,
-      email_confirm: true,
       user_metadata: { nome: payload.nome },
     };
 
@@ -241,6 +284,70 @@ async function updateExistingAuthUser(admin: any, authResult: AuthUserMutation) 
   const { error } = await admin.auth.admin.updateUserById(authResult.id, authResult.updatePayload);
   if (error) {
     throw new UserActionError(readableSupabaseError(error, "Erro ao atualizar o login."), 400);
+  }
+}
+
+function normalizeSectorName(value: unknown) {
+  return cleanString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+async function syncUserPrimarySector(
+  admin: any,
+  userId: string,
+  sector: { id: number; nome: string },
+  currentProfile: Profile | null,
+) {
+  const { data, error } = await admin
+    .from("setor_responsaveis")
+    .select("setor_id,setores(nome)")
+    .eq("usuario_id", userId);
+
+  if (error) throw new UserActionError(error.message, 500);
+
+  const linkedRows = (data ?? []) as Array<{
+    setor_id: number;
+    setores: { nome: string | null } | { nome: string | null }[] | null;
+  }>;
+  const oldPrimaryName = normalizeSectorName(currentProfile?.unidade_nome || currentProfile?.setor);
+  const previousPrimaryIds = linkedRows
+    .filter((link) => {
+      const linkedSector = Array.isArray(link.setores) ? link.setores[0] : link.setores;
+      return oldPrimaryName && normalizeSectorName(linkedSector?.nome) === oldPrimaryName;
+    })
+    .map((link) => link.setor_id)
+    .filter((id, index, ids) => ids.indexOf(id) === index && id !== sector.id);
+  const targetAlreadyLinked = linkedRows.some((link) => link.setor_id === sector.id);
+
+  if (!targetAlreadyLinked) {
+    const { error: insertError } = await admin
+      .from("setor_responsaveis")
+      .upsert(
+        { setor_id: sector.id, usuario_id: userId },
+        { onConflict: "setor_id,usuario_id", ignoreDuplicates: true },
+      );
+    if (insertError) throw new UserActionError(insertError.message, 400);
+  }
+
+  if (previousPrimaryIds.length > 0) {
+    const { error: deleteError } = await admin
+      .from("setor_responsaveis")
+      .delete()
+      .eq("usuario_id", userId)
+      .in("setor_id", previousPrimaryIds);
+
+    if (deleteError) {
+      if (!targetAlreadyLinked) {
+        await admin
+          .from("setor_responsaveis")
+          .delete()
+          .eq("usuario_id", userId)
+          .eq("setor_id", sector.id);
+      }
+      throw new UserActionError(deleteError.message, 400);
+    }
   }
 }
 
@@ -394,6 +501,8 @@ async function rollbackUserProfile(
       setor: currentProfile.setor,
       unidade_nome: currentProfile.unidade_nome,
       categorias_permitidas: currentProfile.categorias_permitidas,
+      programa_id: currentProfile.programa_id,
+      materiais_permitidos: currentProfile.materiais_permitidos,
       is_admin: currentProfile.is_admin,
       role: currentProfile.role,
     })
@@ -409,7 +518,7 @@ async function saveUser(admin: any, input: unknown) {
     const { data: profile, error } = await admin
       .from("usuarios")
       .select(
-        "auth_user_id,email,is_admin,role,funcao,setor,unidade_nome,categorias_permitidas,cpf,id,usuario,nome",
+        "auth_user_id,email,is_admin,role,funcao,setor,unidade_nome,categorias_permitidas,programa_id,materiais_permitidos,cpf,id,usuario,nome",
       )
       .eq("id", payload.id)
       .maybeSingle();
@@ -417,6 +526,63 @@ async function saveUser(admin: any, input: unknown) {
     if (error) throw new UserActionError(error.message, 500);
     if (!profile) throw new UserActionError("Usuário não encontrado.", 404);
     currentProfile = profile as Profile;
+  }
+
+  let selectedSector: { id: number; nome: string; programa: string | null } | null = null;
+  if (payload.setor_id !== null) {
+    const { data: sector, error } = await admin
+      .from("setores")
+      .select("id,nome,programa")
+      .eq("id", payload.setor_id)
+      .maybeSingle();
+
+    if (error) throw new UserActionError(error.message, 500);
+    if (!sector) throw new UserActionError("O setor selecionado não existe.");
+    selectedSector = sector as { id: number; nome: string; programa: string | null };
+  } else if (currentProfile && !currentProfile.is_admin) {
+    const currentLocation = normalizeSectorName(
+      currentProfile.unidade_nome || currentProfile.setor,
+    );
+    const { data: sectors, error } = await admin.from("setores").select("id,nome,programa");
+
+    if (error) throw new UserActionError(error.message, 500);
+    selectedSector =
+      ((sectors ?? []) as Array<{ id: number; nome: string; programa: string | null }>).find(
+        (sector) => normalizeSectorName(sector.nome) === currentLocation,
+      ) ?? null;
+  }
+
+  const programaId = payload.programa_id || currentProfile?.programa_id || null;
+  if (programaId) {
+    const { data: program, error } = await admin
+      .from("programas")
+      .select("id")
+      .eq("id", programaId)
+      .maybeSingle();
+
+    if (error) throw new UserActionError(error.message, 500);
+    if (!program) throw new UserActionError("O programa selecionado não existe.");
+  }
+
+  const legacyMaterials = Array.isArray(currentProfile?.categorias_permitidas)
+    ? currentProfile.categorias_permitidas
+        .map(cleanString)
+        .filter((category) => ALLOWED_REQUEST_MATERIAL_CATEGORIES.has(category))
+    : [];
+  const materiaisPermitidos =
+    payload.materiais_permitidos ??
+    (Array.isArray(currentProfile?.materiais_permitidos)
+      ? currentProfile.materiais_permitidos
+          .map(cleanString)
+          .filter((category) => ALLOWED_REQUEST_MATERIAL_CATEGORIES.has(category))
+      : legacyMaterials);
+
+  if (!currentProfile?.is_admin) {
+    if (!selectedSector) throw new UserActionError("Selecione o setor do usuário.");
+    if (!programaId) throw new UserActionError("Selecione o programa do usuário.");
+    if (materiaisPermitidos.length === 0) {
+      throw new UserActionError("Selecione ao menos um tipo de material permitido.");
+    }
   }
 
   if (payload.usuario.toLowerCase() === "admin" && !currentProfile?.is_admin) {
@@ -446,12 +612,13 @@ async function saveUser(admin: any, input: unknown) {
     );
   }
 
+  const authEmail = currentProfile?.email?.trim().toLowerCase() || payload.email;
   const duplicatedEmail = otherProfiles.find(
-    (profile) => profile.email?.trim().toLowerCase() === payload.email.toLowerCase(),
+    (profile) => profile.email?.trim().toLowerCase() === authEmail,
   );
   if (duplicatedEmail) {
     throw new UserActionError(
-      `O email informado já está cadastrado para ${duplicatedEmail.usuario || "outro usuário"}.`,
+      `Este usuário gera um identificador de login já utilizado por ${duplicatedEmail.usuario || "outro usuário"}. Informe outro usuário de acesso.`,
     );
   }
 
@@ -462,10 +629,10 @@ async function saveUser(admin: any, input: unknown) {
     if (duplicatedCpf) throw new UserActionError("Este CPF já está cadastrado para outro usuário.");
   }
 
-  // Preserve the auth email for existing profiles; login resolution is based on `usuario`.
+  // Email is an internal Supabase Auth identifier; admins enter only the username.
   const authPayload = {
     ...payload,
-    email: currentProfile?.email || payload.email,
+    email: authEmail,
   };
   const authResult = await ensureAuthUser(admin, authPayload, currentProfile);
 
@@ -476,9 +643,11 @@ async function saveUser(admin: any, input: unknown) {
     email: authPayload.email,
     cpf: payload.cpf,
     funcao: currentProfile?.funcao ?? null,
-    setor: currentProfile?.setor ?? null,
-    unidade_nome: currentProfile?.unidade_nome ?? null,
+    setor: selectedSector?.programa || selectedSector?.nome || currentProfile?.setor || null,
+    unidade_nome: selectedSector?.nome || currentProfile?.unidade_nome || null,
     categorias_permitidas: currentProfile?.categorias_permitidas ?? [],
+    programa_id: programaId,
+    materiais_permitidos: materiaisPermitidos,
     is_admin: currentProfile?.is_admin ?? false,
     role: currentProfile?.role || "usuario",
   };
@@ -505,6 +674,9 @@ async function saveUser(admin: any, input: unknown) {
 
     try {
       await updateExistingAuthUser(admin, authResult);
+      if (selectedSector) {
+        await syncUserPrimarySector(admin, result.data.id, selectedSector, currentProfile);
+      }
     } catch (authError) {
       const rollbackError = await rollbackUserProfile(admin, result.data.id, currentProfile);
       if (rollbackError) {
