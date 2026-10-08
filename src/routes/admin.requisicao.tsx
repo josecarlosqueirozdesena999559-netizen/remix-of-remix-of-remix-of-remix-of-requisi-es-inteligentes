@@ -384,7 +384,7 @@ async function getRequestPermissions(
     hasSector: true,
     sectorId: selectedSector.id,
     sectorName: selectedSector.nome,
-    categories: programKeys.length > 0 ? categories : [],
+    categories,
     programKeys,
   };
 }
@@ -811,7 +811,12 @@ function CriarRequisicaoPage() {
             "Sua conta está sem setor vinculado. Peça ao administrador para vinculá-la em Cadastros / Setores.",
           );
         }
-        if (!isSharedSector && !profile.is_admin && permissions.programKeys.length === 0) {
+        if (
+          !isSharedSector &&
+          !profile.is_admin &&
+          !isRamonRequester(permissionProfile || profile) &&
+          permissions.programKeys.length === 0
+        ) {
           throw new Error(
             "Este setor ainda não tem programas liberados. Peça ao administrador para configurar os programas do setor.",
           );
@@ -821,13 +826,9 @@ function CriarRequisicaoPage() {
         const profileProgramKeys = permissions.programKeys;
         const isRamonProfile = isRamonRequester(permissionProfile || profile);
         const categories = isRamonProfile
-          ? profileCategories.length > 0
-            ? ramonAllowedCategories.filter((category) =>
-                profileCategories.some((allowed) => allowed === category),
-              )
-            : permissions.hasSector && profileProgramKeys.length > 0
-              ? ramonAllowedCategories
-              : []
+          ? permissions.hasSector
+            ? ramonAllowedCategories
+            : []
           : profile.is_admin
             ? [...PRODUCT_CATEGORIES]
             : profileCategories;
@@ -1006,7 +1007,7 @@ function CriarRequisicaoPage() {
           );
           return;
         }
-        if (permissions.programKeys.length === 0) {
+        if (permissions.programKeys.length === 0 && !isRamonSelectedRequester) {
           setAllowedCategories([]);
           setAllowedProgramKeys([]);
           setError("Este setor ainda não tem programas liberados para solicitação.");
@@ -1014,11 +1015,9 @@ function CriarRequisicaoPage() {
         }
 
         const categoriesToUse = isRamonSelectedRequester
-          ? permissions.categories.length > 0
-            ? ramonAllowedCategories.filter((category) =>
-                permissions.categories.some((allowed) => allowed === category),
-              )
-            : ramonAllowedCategories
+          ? permissions.hasSector
+            ? ramonAllowedCategories
+            : []
           : permissions.categories;
         const nextSections = buildNormalizedRequestSections(categoriesToUse);
         const firstGroupLabel = nextSections[0] ? getSectionGroupLabel(nextSections[0]) : "";
