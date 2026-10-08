@@ -313,8 +313,8 @@ function SetorDetailPage() {
       profileResult.data?.unidade_nome || profileResult.data?.setor,
     );
     const nextSetor =
-      linkedSetores.find((item) => normalizeSectorName(item.nome) === currentPrimary) ??
       linkedSetores.find((item) => item.id === preferredSetorId) ??
+      linkedSetores.find((item) => normalizeSectorName(item.nome) === currentPrimary) ??
       linkedSetores[0] ??
       null;
 
