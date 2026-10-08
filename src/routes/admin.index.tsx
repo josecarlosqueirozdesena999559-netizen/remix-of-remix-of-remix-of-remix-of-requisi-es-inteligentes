@@ -292,6 +292,7 @@ function AdminHome() {
 
             if (cpfVariants.length > 0) {
               query = query.in("solicitante_cpf", cpfVariants);
+              if (location) query = query.eq("setor", location);
             } else if (name && location) {
               query = query.eq("solicitante", name).eq("setor", location);
             }
