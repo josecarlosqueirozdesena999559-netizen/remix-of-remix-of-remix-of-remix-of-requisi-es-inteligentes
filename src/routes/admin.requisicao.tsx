@@ -192,7 +192,7 @@ function isProductCategory(value: string) {
 function getAllowedCategories(
   profile: Pick<RequestAccessProfile, "categorias_permitidas" | "materiais_permitidos"> | null,
 ) {
-  const raw = Array.isArray(profile?.materiais_permitidos)
+  const raw = Array.isArray(profile?.materiais_permitidos) && profile.materiais_permitidos.length > 0
     ? profile.materiais_permitidos
     : profile?.categorias_permitidas;
   const categories = Array.isArray(raw) ? raw.map(String).map(normalizeProductCategory) : [];
