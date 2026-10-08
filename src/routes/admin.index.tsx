@@ -351,8 +351,18 @@ function AdminHome() {
 
     loadDashboardData();
 
+    const refreshOnReturn = () => {
+      if (document.visibilityState === "visible") {
+        void loadDashboardData();
+      }
+    };
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+
     return () => {
       active = false;
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
     };
   }, []);
 
