@@ -38,7 +38,11 @@ import {
 } from "@/lib/linked-output-date";
 import { AVULSA_PENDING_STATUSES, getAvulsaDisplayCode, type AvulsaSignatureRow } from "@/lib/avulsa-signatures";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
-import { getRequestOwnerCpfVariants, getRequestOwnerLocation } from "@/lib/request-owner";
+import {
+  getRequestOwnerCpfVariants,
+  getRequestOwnerLocation,
+  getRequestOwnerLocationVariants,
+} from "@/lib/request-owner";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
 import {
   getCurrentUserProfile,
@@ -278,7 +282,10 @@ function AdminHome() {
             .select(selectColumns)
             .order("created_at", { ascending: true });
 
-          if (!dashboardProfile.is_admin) {
+          const locationVariants = getRequestOwnerLocationVariants(dashboardProfile);
+          if (dashboardProfile.is_admin && locationVariants.length > 0) {
+            query = query.in("setor", locationVariants);
+          } else if (!dashboardProfile.is_admin) {
             const cpfVariants = getRequestOwnerCpfVariants(dashboardProfile);
             const location = getRequestOwnerLocation(dashboardProfile);
             const name = dashboardProfile.nome?.trim() || "";

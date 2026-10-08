@@ -53,6 +53,8 @@ import {
 import { formatProgramName } from "@/lib/program-options";
 import { buildGlobalRequestCodes } from "@/lib/request-code";
 import type { RequestPdfItem } from "@/lib/request-pdf";
+import { getRequestOwnerLocationVariants } from "@/lib/request-owner";
+import { getCurrentUserProfile } from "@/lib/user-profile";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/solicitacoes")({
@@ -156,17 +158,30 @@ function Solicitacoes() {
       setLoading(true);
       setError(null);
       try {
-        const [initialPendingResult, setoresResult] = await Promise.all([
-          supabase
+        const { profile } = await getCurrentUserProfile();
+        if (!profile?.is_admin) {
+          setError("Apenas administradores podem acessar as solicitações.");
+          return;
+        }
+        const adminLocationVariants = getRequestOwnerLocationVariants(profile);
+        const buildPendingQuery = (selectColumns: string) => {
+          let query = supabase
             .from("requisicoes")
-            .select(requestsSelectWithLinkedOutputDate)
+            .select(selectColumns)
             .in("status", [
               "recebido",
               "requisicao_assinada",
               "concluido",
               "aguardando_assinatura_saida",
             ])
-            .order("updated_at", { ascending: false }),
+            .order("updated_at", { ascending: false });
+          if (adminLocationVariants.length > 0) {
+            query = query.in("setor", adminLocationVariants);
+          }
+          return query;
+        };
+        const [initialPendingResult, setoresResult] = await Promise.all([
+          buildPendingQuery(requestsSelectWithLinkedOutputDate),
           supabase.from("setores").select("nome,programa").order("nome", { ascending: true }),
         ]);
 
@@ -176,16 +191,7 @@ function Solicitacoes() {
           pendingResult.error &&
           isMissingLinkedOutputDateColumnError(pendingResult.error.message)
         ) {
-          pendingResult = await supabase
-            .from("requisicoes")
-            .select(requestsSelectWithoutLinkedOutputDate)
-            .in("status", [
-              "recebido",
-              "requisicao_assinada",
-              "concluido",
-              "aguardando_assinatura_saida",
-            ])
-            .order("updated_at", { ascending: false });
+          pendingResult = await buildPendingQuery(requestsSelectWithoutLinkedOutputDate);
         }
 
         if (!active) return;

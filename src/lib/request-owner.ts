@@ -36,6 +36,18 @@ export function getRequestOwnerLocation(profile: RequestOwnerProfile | null | un
   return location;
 }
 
+export function getRequestOwnerLocationVariants(
+  profile: RequestOwnerProfile | null | undefined,
+) {
+  return Array.from(
+    new Set(
+      [profile?.unidade_nome?.trim(), profile?.setor?.trim()].filter(
+        (location): location is string => Boolean(location),
+      ),
+    ),
+  );
+}
+
 export function hasRequestOwnerIdentity(profile: RequestOwnerProfile | null | undefined) {
   return Boolean(
     getRequestOwnerCpf(profile) ||
