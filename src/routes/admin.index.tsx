@@ -271,9 +271,30 @@ function AdminHome() {
           return;
         }
 
+        const requesterProfile = dashboardProfile ?? userProfile;
+        const isSharedSectorSession = isSharedSectorProfile(userProfile);
+
         if (active) {
-          setProfile(dashboardProfile ?? userProfile);
+          setProfile(requesterProfile);
           setIsAdmin(userProfile.is_admin === true);
+        }
+
+        const activeSectorLocation = getRequestOwnerLocation(
+          isSharedSectorSession ? userProfile : requesterProfile,
+        );
+        const cpfVariants = getRequestOwnerCpfVariants(requesterProfile);
+        const requesterName = requesterProfile.nome?.trim() || "";
+
+        if (
+          !requesterProfile.is_admin &&
+          (!activeSectorLocation || (cpfVariants.length === 0 && !requesterName))
+        ) {
+          if (active) {
+            setRequisicoes([]);
+            setAvulsasPendentes([]);
+            setHasOutputPending(false);
+          }
+          return;
         }
 
         const buildDashboardQuery = (selectColumns: string) => {
@@ -282,19 +303,18 @@ function AdminHome() {
             .select(selectColumns)
             .order("created_at", { ascending: true });
 
-          const locationVariants = getRequestOwnerLocationVariants(dashboardProfile);
-          if (dashboardProfile.is_admin && locationVariants.length > 0) {
-            query = query.in("setor", locationVariants);
-          } else if (!dashboardProfile.is_admin) {
-            const cpfVariants = getRequestOwnerCpfVariants(dashboardProfile);
-            const location = getRequestOwnerLocation(dashboardProfile);
-            const name = dashboardProfile.nome?.trim() || "";
+          const locationVariants = getRequestOwnerLocationVariants(requesterProfile);
+          if (requesterProfile.is_admin) {
+            if (locationVariants.length > 0) {
+              query = query.in("setor", locationVariants);
+            }
+          } else {
+            query = query.eq("setor", activeSectorLocation);
 
             if (cpfVariants.length > 0) {
               query = query.in("solicitante_cpf", cpfVariants);
-              if (location) query = query.eq("setor", location);
-            } else if (name && location) {
-              query = query.eq("solicitante", name).eq("setor", location);
+            } else {
+              query = query.eq("solicitante", requesterName);
             }
           }
 
@@ -325,7 +345,8 @@ function AdminHome() {
           const { data: avulsasData, error: avulsasError } = await supabase
             .from("assinaturas_avulsas" as any)
             .select("*")
-            .eq("usuario_id", dashboardProfile.id)
+            .eq("usuario_id", requesterProfile.id)
+            .eq("setor", activeSectorLocation)
             .in("status", [...AVULSA_PENDING_STATUSES])
             .order("updated_at", { ascending: false });
 

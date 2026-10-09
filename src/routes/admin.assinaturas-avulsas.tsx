@@ -15,6 +15,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { removeAttachmentFileSafely, resolveAttachmentUrl } from "@/lib/attachments";
+import { getRequestOwnerLocation } from "@/lib/request-owner";
 import {
   AVULSA_PENDING_STATUSES,
   AVULSA_SIGNED_STATUS,
@@ -67,6 +68,7 @@ function AssinaturasAvulsasPage() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const isChildRoute = pathname !== "/admin/assinaturas-avulsas";
   const [items, setItems] = useState<AvulsaSignatureRow[]>([]);
+  const [activeSectorLocation, setActiveSectorLocation] = useState("");
   const [tab, setTab] = useState<TabKey>("pendentes");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -96,13 +98,24 @@ function AssinaturasAvulsasPage() {
         }
 
         setItems([]);
+        setActiveSectorLocation("");
         return;
       }
 
+      const sectorLocation = getRequestOwnerLocation(isSharedSector ? authProfile : profile);
+      if (!sectorLocation) {
+        setItems([]);
+        setActiveSectorLocation("");
+        setError("Não foi possível identificar o setor ativo para carregar as assinaturas.");
+        return;
+      }
+
+      setActiveSectorLocation(sectorLocation);
       const { data, error: loadError } = await supabase
         .from("assinaturas_avulsas" as any)
         .select("*")
         .eq("usuario_id", profile.id)
+        .eq("setor", sectorLocation)
         .in("status", [...AVULSA_PENDING_STATUSES, AVULSA_SIGNED_STATUS])
         .order("updated_at", { ascending: false });
 
@@ -130,6 +143,11 @@ function AssinaturasAvulsasPage() {
     if (!file) return;
     setMessage(null);
     setError(null);
+
+    if (!activeSectorLocation || item.setor?.trim() !== activeSectorLocation) {
+      setError("Este documento pertence a outro setor e não pode ser assinado nesta sessão.");
+      return;
+    }
 
     if (!isPdfFile(file)) {
       setError("Envie apenas arquivos PDF.");
@@ -171,7 +189,10 @@ function AssinaturasAvulsasPage() {
           returned_at: null,
           signed_at: isComplete ? new Date().toISOString() : null,
         })
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .eq("setor", activeSectorLocation)
+        .select("id")
+        .single();
 
       if (updateError) throw new Error(updateError.message);
 
@@ -208,6 +229,10 @@ function AssinaturasAvulsasPage() {
 
   const submitReturn = async () => {
     if (!returningItem) return;
+    if (!activeSectorLocation || returningItem.setor?.trim() !== activeSectorLocation) {
+      setError("Este documento pertence a outro setor e não pode ser devolvido nesta sessão.");
+      return;
+    }
     const reason = returnReason.trim();
     if (!reason) {
       setError("Informe o motivo da devolucao.");
@@ -229,7 +254,10 @@ function AssinaturasAvulsasPage() {
           returned_at: new Date().toISOString(),
           signed_at: null,
         })
-        .eq("id", returningItem.id);
+        .eq("id", returningItem.id)
+        .eq("setor", activeSectorLocation)
+        .select("id")
+        .single();
 
       if (updateError) throw new Error(updateError.message);
       await Promise.all(

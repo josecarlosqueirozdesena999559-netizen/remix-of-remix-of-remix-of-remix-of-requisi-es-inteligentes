@@ -46,15 +46,18 @@ function getRequestMonth(request: Pick<Requisicao, "data" | "created_at">) {
   return String(request.created_at || "").slice(0, 7);
 }
 
-async function fetchUserRequests(profile: RequestOwnerProfile) {
+async function fetchUserRequests(
+  profile: RequestOwnerProfile,
+  activeSectorOverride?: string | null,
+) {
   const pageSize = 1000;
   let from = 0;
   const requests: Requisicao[] = [];
   const cpfVariants = getRequestOwnerCpfVariants(profile);
-  const location = getRequestOwnerLocation(profile);
+  const location = activeSectorOverride?.trim() || getRequestOwnerLocation(profile);
   const name = profile.nome?.trim() || "";
 
-  if (cpfVariants.length === 0 && !(name && location)) {
+  if (!location || (cpfVariants.length === 0 && !name)) {
     return requests;
   }
 
@@ -66,11 +69,13 @@ async function fetchUserRequests(profile: RequestOwnerProfile) {
       .order("updated_at", { ascending: false })
       .range(from, from + pageSize - 1);
 
+    query = query.eq("setor", location);
+
     if (cpfVariants.length > 0) {
       query = query.in("solicitante_cpf", cpfVariants);
       if (location) query = query.eq("setor", location);
     } else {
-      query = query.eq("solicitante", name).eq("setor", location);
+      query = query.eq("solicitante", name);
     }
 
     const { data, error } = await query;
@@ -103,19 +108,23 @@ function MinhasRequisicoesPage() {
 
       try {
         const { profile: authProfile } = await getCurrentUserProfile();
-        const profile = isSharedSectorProfile(authProfile)
+        const isSharedSectorSession = isSharedSectorProfile(authProfile);
+        const profile = isSharedSectorSession
           ? await getSelectedSharedRequesterProfile(authProfile)
           : authProfile;
 
         if (!profile) {
-          if (isSharedSectorProfile(authProfile)) {
+          if (isSharedSectorSession) {
             navigate({ to: "/admin/selecionar-solicitante" });
           }
           setRequests([]);
           return;
         }
 
-        const data = await fetchUserRequests(profile);
+        const activeSectorLocation = getRequestOwnerLocation(
+          isSharedSectorSession ? authProfile : profile,
+        );
+        const data = await fetchUserRequests(profile, activeSectorLocation);
         if (active) setRequests(data);
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Erro ao carregar solicitações.");

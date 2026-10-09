@@ -1139,6 +1139,13 @@ function CriarRequisicaoPage() {
       return;
     }
 
+    const activeSharedSectorLocation = profile.unidade_nome?.trim() || profile.setor?.trim() || "";
+    if (isSharedSector && !activeSharedSectorLocation) {
+      setError("Não foi possível identificar o setor ativo. Entre novamente pela conta do setor.");
+      setSaving(false);
+      return;
+    }
+
     if (isRamonRequester(chosenSolicitante) && !selectedRamonProgram) {
       setError("Selecione o programa que deve aparecer no PDF.");
       setSaving(false);
@@ -1238,10 +1245,12 @@ function CriarRequisicaoPage() {
       categoria: requestCategory,
       setor: isRamonRequester(chosenSolicitante)
         ? ramonEnteralSector
-        : chosenSolicitante.unidade_nome ||
-          chosenSolicitante.setor ||
-          profile.unidade_nome ||
-          profile.setor,
+        : isSharedSector
+          ? activeSharedSectorLocation
+          : chosenSolicitante.unidade_nome ||
+            chosenSolicitante.setor ||
+            profile.unidade_nome ||
+            profile.setor,
       programa: isRamonRequester(chosenSolicitante) ? selectedRamonProgram : null,
       solicitante: chosenSolicitante.nome,
       solicitante_cpf: chosenSolicitante.cpf?.trim() || profile.cpf?.trim() || null,

@@ -50,48 +50,17 @@ function hasOutputDocument(request: Requisicao) {
   );
 }
 
-function getUniqueLocations(locations: Array<string | null | undefined>) {
-  const seen = new Set<string>();
-
-  return locations
-    .map((location) => location?.trim())
-    .filter((location): location is string => Boolean(location))
-    .filter((location) => {
-      const key = location.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-async function getLinkedRequestLocations(profile: RequestOwnerProfile, fallbackLocation: string) {
-  const profileId = "id" in profile ? String(profile.id || "") : "";
-  if (!profileId) return getUniqueLocations([fallbackLocation]);
-
-  const { data, error } = await supabase
-    .from("setor_responsaveis")
-    .select("setores(nome)")
-    .eq("usuario_id", profileId);
-
-  if (error) throw new Error(error.message);
-
-  const linkedLocations = (data ?? []).map((row) => {
-    const setor = Array.isArray(row.setores) ? row.setores[0] : row.setores;
-    return setor?.nome;
-  });
-
-  return getUniqueLocations([fallbackLocation, ...linkedLocations]);
-}
-
-async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
+async function fetchCompletedUserRequests(
+  profile: RequestOwnerProfile,
+  activeSectorOverride?: string | null,
+) {
   const pageSize = 1000;
   const requests: Requisicao[] = [];
   const cpfVariants = getRequestOwnerCpfVariants(profile);
-  const location = getRequestOwnerLocation(profile);
-  const linkedLocations = await getLinkedRequestLocations(profile, location);
+  const location = activeSectorOverride?.trim() || getRequestOwnerLocation(profile);
   const name = profile.nome?.trim() || "";
 
-  if (cpfVariants.length === 0 && !(name && linkedLocations.length > 0)) {
+  if (!location || (cpfVariants.length === 0 && !name)) {
     return requests;
   }
 
@@ -121,11 +90,11 @@ async function fetchCompletedUserRequests(profile: RequestOwnerProfile) {
   }
 
   if (cpfVariants.length > 0) {
-    await fetchPages((query) => query.in("solicitante_cpf", cpfVariants));
+    await fetchPages((query) => query.in("solicitante_cpf", cpfVariants).eq("setor", location));
   }
 
-  if (name && linkedLocations.length > 0) {
-    await fetchPages((query) => query.eq("solicitante", name).in("setor", linkedLocations));
+  if (name) {
+    await fetchPages((query) => query.eq("solicitante", name).eq("setor", location));
   }
 
   return requests.filter((request, index, list) => {
@@ -151,15 +120,21 @@ function MeusAssinadosPage() {
 
       try {
         const { profile: authProfile } = await getCurrentUserProfile();
-        const profile = isSharedSectorProfile(authProfile) ? await getSelectedSharedRequesterProfile(authProfile) : authProfile;
+        const isSharedSectorSession = isSharedSectorProfile(authProfile);
+        const profile = isSharedSectorSession
+          ? await getSelectedSharedRequesterProfile(authProfile)
+          : authProfile;
 
         if (!profile) {
-          if (isSharedSectorProfile(authProfile)) navigate({ to: "/admin/selecionar-solicitante" });
+          if (isSharedSectorSession) navigate({ to: "/admin/selecionar-solicitante" });
           setRequests([]);
           return;
         }
 
-        const data = await fetchCompletedUserRequests(profile);
+        const activeSectorLocation = getRequestOwnerLocation(
+          isSharedSectorSession ? authProfile : profile,
+        );
+        const data = await fetchCompletedUserRequests(profile, activeSectorLocation);
         if (active) {
           setRequests(data.filter(hasOutputDocument));
         }
