@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2, LogOut, UserRound } from "lucide-react";
+import { Loader2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -56,11 +55,6 @@ function SelecionarSolicitantePage() {
     navigate({ to: "/admin" });
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    navigate({ to: "/" });
-  };
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -73,7 +67,7 @@ function SelecionarSolicitantePage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
       <Card className="w-full max-w-lg border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="mb-6">
           <div>
             <p className="text-sm text-slate-500">Login realizado</p>
             <h1 className="mt-1 text-xl font-semibold text-slate-950">Selecione o usuário do setor</h1>
@@ -81,10 +75,6 @@ function SelecionarSolicitantePage() {
               {profile?.unidade_nome || profile?.setor || "Setor compartilhado"}
             </p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={signOut} className="gap-2">
-            <LogOut className="h-4 w-4" />
-            Sair
-          </Button>
         </div>
 
         {error ? (
