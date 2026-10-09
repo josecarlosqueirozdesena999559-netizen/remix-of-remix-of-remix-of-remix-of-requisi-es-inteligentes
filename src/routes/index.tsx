@@ -68,7 +68,7 @@ function Index() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#eef0f5] px-4">
-        <div className="flex flex-col items-center gap-2 text-[#3474dd]" style={{ fontFamily: "Arial, sans-serif" }}>
+        <div className="flex flex-col items-center gap-2 text-[#8fcea8]" style={{ fontFamily: "Arial, sans-serif" }}>
           <Loader2 className="h-6 w-6 animate-spin" />
           <p className="text-xs text-slate-500">Carregando...</p>
         </div>
@@ -80,10 +80,7 @@ function Index() {
     <div className="flex min-h-screen items-center justify-center bg-[#eef0f5] px-4 py-8 text-slate-900" style={{ fontFamily: "Arial, sans-serif" }}>
       <main className="w-full max-w-[340px] border border-slate-300 bg-white px-3 py-4 shadow-sm">
         <div className="mb-3 text-center">
-          <div className="mb-1 flex items-center justify-center gap-1 text-[#3474dd]">
-            <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-[#3474dd] text-[11px] font-bold text-white">A</span>
-            <span className="text-[15px] font-normal text-slate-600">Almoxarifado</span>
-          </div>
+          <div className="mb-1 text-[15px] font-normal text-slate-600">Almoxarifado</div>
           <p className="text-[10px] text-slate-500">Prefeitura Municipal de Pereiro</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-2">
@@ -94,7 +91,7 @@ function Index() {
               type="text"
               autoComplete="username"
               placeholder="Usuário"
-              className="h-8 rounded-sm border-slate-300 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-[#3474dd]"
+              className="h-8 rounded-sm border-slate-300 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-[#9ad7b3]"
               value={usuario}
               onChange={(event) => setUsuario(event.target.value)}
               required
@@ -108,7 +105,7 @@ function Index() {
               type="password"
               autoComplete="current-password"
               placeholder="Senha"
-              className="h-8 rounded-sm border-slate-300 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-[#3474dd]"
+              className="h-8 rounded-sm border-slate-300 bg-white px-2 text-xs text-slate-900 placeholder:text-slate-400 focus-visible:ring-1 focus-visible:ring-[#9ad7b3]"
               value={senha}
               onChange={(event) => setSenha(event.target.value)}
               required
@@ -123,7 +120,7 @@ function Index() {
           <Button
             type="submit"
             disabled={submitting || !usuario.trim() || !senha}
-            className="ml-auto h-8 w-[92px] rounded-sm bg-[#3474dd] px-3 text-xs font-normal text-white hover:bg-[#2862c7]"
+            className="ml-auto h-8 w-[92px] rounded-sm bg-[#8fcea8] px-3 text-xs font-normal text-slate-800 hover:bg-[#7fc39b]"
           >
             {submitting ? <Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> : null}
             Acessar
