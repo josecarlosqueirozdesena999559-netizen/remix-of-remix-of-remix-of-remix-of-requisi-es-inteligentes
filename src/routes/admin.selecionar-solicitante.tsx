@@ -66,7 +66,7 @@ function SelecionarSolicitantePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
-      <Card className="w-full max-w-lg border-slate-200 bg-white p-6 shadow-sm">
+      <Card className="-translate-y-16 w-full max-w-lg border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-6">
           <div>
             <p className="text-sm text-slate-500">Login realizado</p>
