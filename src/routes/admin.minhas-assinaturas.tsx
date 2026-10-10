@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Check, CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
+import { Check, CheckCircle2, Eye, Loader2, PenLine, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
+import { DemoSignatureDialog } from "@/components/DemoSignatureDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +11,7 @@ import {
   getOutputSignedAttachment,
   getOutputSignedAttachments,
   getRequestSignedAttachment,
+  resolveAttachmentUrl,
   removeAttachmentFile,
   type AttachmentFile,
 } from "@/lib/attachments";
@@ -20,7 +22,9 @@ import {
   isMissingReturnFeedbackColumnError,
   omitReturnFeedbackFields,
 } from "@/lib/request-return-feedback";
-import type { RequestPdfItem } from "@/lib/request-pdf";
+import { createRequestPdfBlob, type RequestPdfItem } from "@/lib/request-pdf";
+import { formatRequestCodeDate } from "@/lib/request-code";
+import { resolveRequestForPdf, type RequisicaoPdfRow } from "@/lib/request-resolver";
 import {
   normalizeLocationKey,
   resolveCanonicalLocationName,
@@ -28,6 +32,7 @@ import {
 } from "@/lib/location-normalizer";
 import { getSelectedSharedRequesterProfile } from "@/lib/shared-sector-session";
 import { getCurrentUserProfile, isSharedSectorProfile } from "@/lib/user-profile";
+import { isDemoSignatureUser } from "@/lib/demo-signature";
 import { notifyRequestByWhatsApp } from "@/lib/whatsapp-edge";
 
 export const Route = createFileRoute("/admin/minhas-assinaturas")({
@@ -202,6 +207,13 @@ function MinhasAssinaturasPage() {
   const [error, setError] = useState<string | null>(null);
   const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [demoSignatureEnabled, setDemoSignatureEnabled] = useState(false);
+  const [demoSignatureDocument, setDemoSignatureDocument] = useState<{
+    requestId: string;
+    documentCode: string;
+    documentStage: "request" | "output";
+    sourcePdf: Blob;
+  } | null>(null);
 
   useEffect(() => {
     const flash = sessionStorage.getItem(REQUEST_FLASH_KEY);
@@ -217,7 +229,8 @@ function MinhasAssinaturasPage() {
     setActiveSectorLocation("");
 
     try {
-      const { profile: authProfile } = await getCurrentUserProfile();
+      const { user, profile: authProfile } = await getCurrentUserProfile();
+      setDemoSignatureEnabled(isDemoSignatureUser(user, authProfile));
       const isSharedSectorSession = isSharedSectorProfile(authProfile);
       const profile = isSharedSectorSession
         ? await getSelectedSharedRequesterProfile(authProfile)
@@ -369,6 +382,71 @@ function MinhasAssinaturasPage() {
   useEffect(() => {
     loadRequests();
   }, []);
+
+  const openDemoSignature = async (request: Requisicao) => {
+    setError(null);
+    setMessage(null);
+    setUploadingId(request.id);
+    try {
+      const { data, error: requestError } = await supabase
+        .from("requisicoes")
+        .select(
+          "id,saida_codigo,saida_vinculada_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment,signed_attachment",
+        )
+        .eq("id", request.id)
+        .maybeSingle();
+      if (requestError) throw new Error(requestError.message);
+      if (!data) throw new Error("A solicitação não foi encontrada.");
+
+      const isOutputStage = data.status === "aguardando_assinatura_saida";
+      let documentCode =
+        (isOutputStage ? data.saida_vinculada_codigo : null) ||
+        data.saida_codigo ||
+        request.id.slice(0, 8).toUpperCase();
+      let sourcePdf: Blob;
+      if (isOutputStage) {
+        const sourceAttachment = getAttachmentFiles(data.admin_attachment).at(0);
+        const sourceUrl = await resolveAttachmentUrl(sourceAttachment);
+        if (!sourceUrl)
+          throw new Error("O PDF de saída ainda não está disponível para visualização.");
+        const response = await fetch(sourceUrl);
+        if (!response.ok) throw new Error("Não foi possível carregar o PDF original da saída.");
+        sourcePdf = await response.blob();
+        if (sourcePdf.size > 14 * 1024 * 1024 || sourcePdf.type !== "application/pdf") {
+          throw new Error("O PDF de saída é inválido ou maior que 14 MB.");
+        }
+      } else {
+        const row = data as unknown as RequisicaoPdfRow;
+        const code = row.saida_codigo || `${formatRequestCodeDate(row.data || row.created_at)}001`;
+        documentCode = code;
+        if (!row.saida_codigo) {
+          const { error: codeError } = await supabase
+            .from("requisicoes")
+            .update({ saida_codigo: code })
+            .eq("id", row.id);
+          if (codeError) throw new Error(codeError.message);
+        }
+        sourcePdf = await createRequestPdfBlob(
+          await resolveRequestForPdf({ ...row, items: row.items as RequestPdfItem[] | null }, code),
+        );
+      }
+
+      setDemoSignatureDocument({
+        requestId: request.id,
+        documentCode,
+        documentStage: isOutputStage ? "output" : "request",
+        sourcePdf,
+      });
+    } catch (openError) {
+      setError(
+        openError instanceof Error
+          ? openError.message
+          : "Não foi possível abrir a assinatura eletrônica.",
+      );
+    } finally {
+      setUploadingId(null);
+    }
+  };
 
   if (isChildRoute) {
     return <Outlet />;
@@ -788,7 +866,25 @@ function MinhasAssinaturasPage() {
                                 Excluir
                               </Button>
                             )}
+                            {demoSignatureEnabled ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-2 rounded-xl border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                                disabled={uploadingId === request.id || missingItems}
+                                onClick={() => void openDemoSignature(request)}
+                              >
+                                {uploadingId === request.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <PenLine className="h-4 w-4" />
+                                )}
+                                Assinar com autenticador
+                              </Button>
+                            ) : null}
                             <div
+                              hidden={demoSignatureEnabled}
                               className={`inline-flex flex-wrap items-center justify-end gap-2 rounded-md border px-2 py-2 transition-colors ${
                                 draggingId === request.id
                                   ? "border-emerald-500 bg-emerald-50"
@@ -894,6 +990,33 @@ function MinhasAssinaturasPage() {
           </div>
         </Card>
       )}
+
+      {demoSignatureDocument ? (
+        <DemoSignatureDialog
+          open={Boolean(demoSignatureDocument)}
+          onOpenChange={(open) => {
+            if (!open) setDemoSignatureDocument(null);
+          }}
+          requestId={demoSignatureDocument.requestId}
+          documentCode={demoSignatureDocument.documentCode}
+          documentStage={demoSignatureDocument.documentStage}
+          sourcePdf={demoSignatureDocument.sourcePdf}
+          onCompleted={(result) => {
+            const signedRequestId = demoSignatureDocument.requestId;
+            setDemoSignatureDocument(null);
+            setRequests((current) => current.filter((item) => item.id !== signedRequestId));
+            setMessage(
+              `Assinatura eletrônica de demonstração registrada (${result.signature_id || "ID indisponível"}). O PDF assinado é uma evidência visual/técnica, não uma assinatura ICP-Brasil.`,
+            );
+            void notifyRequestByWhatsApp({
+              requestId: signedRequestId,
+              notificationType: "requestSigned",
+            }).catch((notificationError) =>
+              console.error("Erro ao notificar WhatsApp:", notificationError),
+            );
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -20,3 +20,6 @@ verify_jwt = true
 
 [functions.admin-user-management]
 verify_jwt = true
+
+[functions.demo-signature]
+verify_jwt = true

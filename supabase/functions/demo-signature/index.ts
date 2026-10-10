@@ -1,0 +1,606 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const DEMO_PROFILE_ID = "34708484-8caa-456b-a423-9f91aeba52d8";
+const DEMO_EMAIL = "demo.assinatura@usuarios.solicite.local";
+const SIGNATURE_BUCKET = "demo-signature-private";
+const REQUESTS_BUCKET = "requisicoes";
+const MAX_PDF_BYTES = 14 * 1024 * 1024;
+const MAX_SIGNATURE_BYTES = 700 * 1024;
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+type AuthenticatedDemoUser = {
+  id: string;
+  email: string;
+  profile: {
+    id: string;
+    auth_user_id: string;
+    email: string;
+    nome: string;
+    usuario: string | null;
+    setor: string | null;
+    unidade_nome: string | null;
+    cpf: string | null;
+    is_admin: boolean;
+  };
+  claims: Record<string, unknown>;
+  token: string;
+};
+
+type RequestRecord = {
+  id: string;
+  status: string;
+  solicitante: string | null;
+  solicitante_cpf: string | null;
+  setor: string | null;
+  saida_codigo: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  admin_attachment: unknown;
+  signed_attachment: unknown;
+};
+
+type Attachment = {
+  fileName?: string;
+  storageBucket?: string;
+  storagePath?: string;
+  uploadedAt?: string;
+  kind?: string;
+};
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function errorResponse(error: unknown, status = 400) {
+  const message = error instanceof Error ? error.message : "Não foi possível concluir a operação.";
+  return jsonResponse({ ok: false, error: message }, status);
+}
+
+function safeEqual(left: string, right: string) {
+  const a = new TextEncoder().encode(left);
+  const b = new TextEncoder().encode(right);
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let index = 0; index < a.length; index += 1) result |= a[index] ^ b[index];
+  return result === 0;
+}
+
+function decodeJwtClaims(token: string) {
+  const payload = token.split(".")[1];
+  if (!payload) throw new Error("Sessão inválida.");
+  const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const decoded = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+  return JSON.parse(decoded) as Record<string, unknown>;
+}
+
+async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser> {
+  const authorization = request.headers.get("authorization") || "";
+  if (!authorization.startsWith("Bearer ")) throw new Error("Sessão não autenticada.");
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Edge Function sem configuração do Supabase.");
+  }
+
+  const token = authorization.slice("Bearer ".length).trim();
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: authData, error: authError } = await client.auth.getUser(token);
+  if (authError || !authData.user?.id || !authData.user.email) {
+    throw new Error("Sessão expirada ou inválida.");
+  }
+  if (!safeEqual(authData.user.email.trim().toLowerCase(), DEMO_EMAIL)) {
+    throw new Error("Este fluxo está liberado somente para o usuário de demonstração.");
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from("usuarios")
+    .select("id,auth_user_id,email,nome,usuario,setor,unidade_nome,cpf,is_admin")
+    .eq("id", DEMO_PROFILE_ID)
+    .eq("auth_user_id", authData.user.id)
+    .maybeSingle();
+  if (profileError || !profile || profile.is_admin || profile.email?.trim().toLowerCase() !== DEMO_EMAIL) {
+    throw new Error("O perfil autenticado não corresponde à conta de demonstração autorizada.");
+  }
+
+  return {
+    id: authData.user.id,
+    email: authData.user.email,
+    profile,
+    claims: decodeJwtClaims(token),
+    token,
+  };
+}
+
+function requireFreshTotp(user: AuthenticatedDemoUser, createdAt?: string) {
+  const claims = user.claims;
+  if (claims.aal !== "aal2") throw new Error("Confirme sua identidade com o Google Authenticator.");
+
+  const amr = Array.isArray(claims.amr) ? claims.amr : [];
+  const totpEntries = amr
+    .filter((entry) => entry && typeof entry === "object")
+    .filter((entry) => (entry as Record<string, unknown>).method === "totp") as Array<{
+    method: string;
+    timestamp?: number;
+  }>;
+  const latestTotp = totpEntries
+    .map((entry) => Number(entry.timestamp || 0))
+    .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)
+    .sort((left, right) => right - left)[0];
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!latestTotp || latestTotp > nowSeconds + 30 || nowSeconds - latestTotp > 120) {
+    throw new Error("Faça uma nova confirmação pelo Google Authenticator para assinar este documento.");
+  }
+  if (createdAt && latestTotp * 1000 < new Date(createdAt).getTime() - 5000) {
+    throw new Error("O código foi confirmado antes desta solicitação. Gere um novo código e tente novamente.");
+  }
+  return { verifiedAt: new Date(latestTotp * 1000).toISOString(), step: Math.floor(latestTotp / 30) };
+}
+
+function normalize(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isOwnedByDemo(request: RequestRecord, profile: AuthenticatedDemoUser["profile"]) {
+  const expectedLocation = profile.unidade_nome?.trim() || profile.setor?.trim() || "";
+  return (
+    normalize(request.solicitante) === normalize(profile.nome) &&
+    normalize(request.setor) === normalize(expectedLocation) &&
+    (!profile.cpf || String(request.solicitante_cpf || "").replace(/\D/g, "") === profile.cpf.replace(/\D/g, ""))
+  );
+}
+
+function decodeBase64Pdf(value: unknown) {
+  if (typeof value !== "string" || value.length > Math.ceil(MAX_PDF_BYTES * 4 / 3) + 256) {
+    throw new Error("PDF inválido ou maior que o limite permitido.");
+  }
+  const base64 = value.replace(/^data:application\/pdf;base64,/, "").replace(/\s/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Conteúdo PDF inválido.");
+  const binary = atob(base64);
+  if (binary.length < 8 || binary.length > MAX_PDF_BYTES || !binary.startsWith("%PDF-")) {
+    throw new Error("Envie um PDF válido com até 14 MB.");
+  }
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function decodePng(value: unknown) {
+  if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) {
+    throw new Error("A assinatura deve ser uma imagem PNG.");
+  }
+  const base64 = value.slice("data:image/png;base64,".length).replace(/\s/g, "");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Imagem de assinatura inválida.");
+  const binary = atob(base64);
+  if (binary.length < 32 || binary.length > MAX_SIGNATURE_BYTES) {
+    throw new Error("A imagem de assinatura ultrapassa o limite permitido.");
+  }
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (!pngSignature.every((byte, index) => bytes[index] === byte)) {
+    throw new Error("A imagem de assinatura não é um PNG válido.");
+  }
+  return bytes;
+}
+
+async function sha256(bytes: Uint8Array) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function getAttachment(value: unknown): Attachment | null {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index -= 1) {
+      const found = getAttachment(value[index]);
+      if (found) return found;
+    }
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.output && typeof record.output === "object") {
+    const output = getAttachment(record.output);
+    if (output) return output;
+  }
+  if (record.storageBucket === REQUESTS_BUCKET && typeof record.storagePath === "string") {
+    return record as Attachment;
+  }
+  return null;
+}
+
+async function getRequestForDemo(requestId: string, user: AuthenticatedDemoUser) {
+  if (!/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error("Solicitação inválida.");
+  const { data, error } = await admin
+    .from("requisicoes")
+    .select("*")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (error || !data) throw new Error("Solicitação não encontrada.");
+  const request = data as RequestRecord;
+  if (!isOwnedByDemo(request, user.profile)) throw new Error("Você não está autorizado a assinar esta solicitação.");
+  return request;
+}
+
+function isPendingStage(status: string) {
+  if (status === "aguardando_assinatura_saida") return "output" as const;
+  if (["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"].includes(status)) {
+    return "request" as const;
+  }
+  return null;
+}
+
+function getRequestCode(request: RequestRecord) {
+  return request.saida_codigo?.trim() || request.id.slice(0, 8).toUpperCase();
+}
+
+function getClientIp(request: Request) {
+  return request.headers.get("cf-connecting-ip") ||
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    null;
+}
+
+async function recordAudit(
+  user: AuthenticatedDemoUser,
+  eventType: string,
+  request: Request,
+  data: Record<string, unknown> = {},
+  signatureRequestId: string | null = null,
+) {
+  await admin.from("signature_audit_logs").insert({
+    user_id: user.id,
+    event_type: eventType,
+    signature_request_id: signatureRequestId,
+    ip_address: getClientIp(request),
+    user_agent: request.headers.get("user-agent"),
+    metadata: data,
+  });
+}
+
+async function getVerifiedSignature(userId: string) {
+  const { data, error } = await admin
+    .from("demo_user_signatures")
+    .select("user_id,profile_id,storage_key,signature_sha256,last_accepted_step,created_at")
+    .eq("user_id", userId)
+    .eq("profile_id", DEMO_PROFILE_ID)
+    .maybeSingle();
+  if (error) throw new Error("Não foi possível verificar sua assinatura cadastrada.");
+  return data;
+}
+
+async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, value: unknown) {
+  const png = decodePng(value);
+  const signatureHash = await sha256(png);
+  const storageKey = `signatures/${user.id}/signature.png`;
+  const existing = await getVerifiedSignature(user.id);
+  if (existing) requireFreshTotp(user);
+
+  const { error: uploadError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .upload(storageKey, png, { contentType: "image/png", upsert: true });
+  if (uploadError) throw new Error("Não foi possível salvar sua assinatura manuscrita.");
+
+  const { error: saveError } = await admin.from("demo_user_signatures").upsert({
+    user_id: user.id,
+    profile_id: DEMO_PROFILE_ID,
+    storage_key: storageKey,
+    signature_sha256: signatureHash,
+    last_accepted_step: existing?.last_accepted_step ?? 0,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (saveError) throw new Error("Não foi possível vincular a assinatura ao usuário autenticado.");
+
+  await recordAudit(user, "SIGNATURE_SAVED", request, { signature_sha256: signatureHash });
+  return { ok: true, signature_saved: true, signature_sha256: signatureHash };
+}
+
+async function recordTotpEnabled(user: AuthenticatedDemoUser, request: Request) {
+  const totp = requireFreshTotp(user);
+  const { error: stepError } = await admin
+    .from("demo_user_signatures")
+    .update({ last_accepted_step: totp.step, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .eq("profile_id", DEMO_PROFILE_ID)
+    .lt("last_accepted_step", totp.step);
+  if (stepError) throw new Error("Não foi possível registrar a ativação do autenticador.");
+  await recordAudit(user, "TOTP_ENABLED", request, { method: "totp", verified_at: totp.verifiedAt });
+  return { ok: true, totp_enabled: true };
+}
+
+async function beginSignature(
+  user: AuthenticatedDemoUser,
+  request: Request,
+  payload: Record<string, unknown>,
+) {
+  const savedSignature = await getVerifiedSignature(user.id);
+  if (!savedSignature) throw new Error("Cadastre primeiro sua assinatura manuscrita.");
+
+  const requestId = String(payload.requestId || "");
+  const document = await getRequestForDemo(requestId, user);
+  const stage = isPendingStage(document.status);
+  if (!stage) throw new Error("Esta solicitação não está aguardando assinatura.");
+
+  let originalPdf: Uint8Array;
+  if (stage === "output") {
+    const attachment = getAttachment(document.admin_attachment);
+    if (!attachment?.storagePath || (attachment.storageBucket && attachment.storageBucket !== REQUESTS_BUCKET)) {
+      throw new Error("O PDF de saída aguardando assinatura não foi encontrado.");
+    }
+    const { data, error } = await admin.storage.from(REQUESTS_BUCKET).download(attachment.storagePath);
+    if (error || !data) throw new Error("Não foi possível carregar o PDF original da saída.");
+    originalPdf = new Uint8Array(await data.arrayBuffer());
+    if (originalPdf.byteLength > MAX_PDF_BYTES || new TextDecoder().decode(originalPdf.slice(0, 5)) !== "%PDF-") {
+      throw new Error("O PDF original é inválido ou maior que 14 MB.");
+    }
+  } else {
+    originalPdf = decodeBase64Pdf(payload.sourcePdfBase64);
+  }
+
+  const originalHash = await sha256(originalPdf);
+  const intentId = crypto.randomUUID();
+  const storageKey = `originals/${user.id}/${intentId}.pdf`;
+  const { error: uploadError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .upload(storageKey, originalPdf, { contentType: "application/pdf", upsert: false });
+  if (uploadError) throw new Error("Não foi possível preparar a versão exata do PDF para assinatura.");
+
+  const createdAt = new Date().toISOString();
+  const documentVersion = `${document.updated_at || document.created_at}/${originalHash}`;
+  const { error: insertError } = await admin.from("demo_signature_requests").insert({
+    id: intentId,
+    user_id: user.id,
+    requisicao_id: document.id,
+    document_stage: stage,
+    document_version: documentVersion,
+    original_sha256: originalHash,
+    original_storage_key: storageKey,
+    status: "pending",
+    consent_at: createdAt,
+    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+  });
+  if (insertError) {
+    await admin.storage.from(SIGNATURE_BUCKET).remove([storageKey]);
+    throw new Error("Não foi possível criar uma solicitação de assinatura de uso único.");
+  }
+
+  await recordAudit(user, "DOCUMENT_OPENED", request, {
+    document_id: document.id,
+    document_stage: stage,
+    document_version: documentVersion,
+    original_sha256: originalHash,
+  }, intentId);
+  await recordAudit(user, "SIGN_REQUESTED", request, {
+    document_id: document.id,
+    consent_at: createdAt,
+  }, intentId);
+
+  return {
+    ok: true,
+    signature_request_id: intentId,
+    original_sha256: originalHash,
+    document_id: document.id,
+    document_code: getRequestCode(document),
+    document_stage: stage,
+    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+  };
+}
+
+function wrapPdfText(text: string, maxCharacters: number) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (candidate.length > maxCharacters && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+async function createEvidencePdf(
+  original: Uint8Array,
+  signaturePng: Uint8Array,
+  input: { signerName: string; requestId: string; requestCode: string; signedAt: string; originalHash: string; evidenceId: string },
+) {
+  const pdf = await PDFDocument.load(original, { updateMetadata: false });
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const image = await pdf.embedPng(signaturePng);
+  const page = pdf.addPage([595.28, 841.89]);
+  const pageWidth = page.getWidth();
+  const margin = 48;
+  const black = rgb(0.12, 0.16, 0.2);
+  const muted = rgb(0.35, 0.39, 0.44);
+
+  page.drawText("ASSINATURA ELETRÔNICA — EVIDÊNCIA DE AUTORIZAÇÃO", {
+    x: margin, y: 780, size: 14, font: bold, color: rgb(0.05, 0.35, 0.24),
+  });
+  page.drawText("Folha de evidências adicionada pelo sistema após autenticação do titular.", {
+    x: margin, y: 754, size: 9, font, color: muted,
+  });
+  page.drawText(`Documento: ${input.requestCode}`, { x: margin, y: 710, size: 11, font: bold, color: black });
+  page.drawText(`Identificador interno: ${input.requestId}`, { x: margin, y: 690, size: 9, font, color: black });
+  page.drawText("Assinante", { x: margin, y: 650, size: 9, font, color: muted });
+  page.drawText(input.signerName, { x: margin, y: 630, size: 13, font: bold, color: black });
+
+  const imageBox = { x: margin, y: 506, width: 300, height: 96 };
+  const imageSize = image.scaleToFit(imageBox.width, imageBox.height);
+  page.drawImage(image, {
+    x: imageBox.x + (imageBox.width - imageSize.width) / 2,
+    y: imageBox.y + (imageBox.height - imageSize.height) / 2,
+    width: imageSize.width,
+    height: imageSize.height,
+  });
+  page.drawLine({ start: { x: margin, y: 500 }, end: { x: margin + 300, y: 500 }, thickness: 0.7, color: muted });
+  page.drawText(input.signerName, { x: margin, y: 484, size: 10, font: bold, color: black });
+  page.drawText("Assinatura visual cadastrada pelo titular da conta", { x: margin, y: 466, size: 8, font, color: muted });
+  page.drawText(`Autorização: ${new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short", timeStyle: "medium", timeZone: "America/Fortaleza", timeZoneName: "short",
+  }).format(new Date(input.signedAt))}`, { x: margin, y: 430, size: 10, font, color: black });
+  page.drawText(`Identificador da evidência: ${input.evidenceId}`, { x: margin, y: 409, size: 8, font, color: black });
+  page.drawText("SHA-256 do PDF original apresentado:", { x: margin, y: 374, size: 8, font: bold, color: black });
+  const hashLines = wrapPdfText(input.originalHash, 70);
+  hashLines.forEach((line, index) => page.drawText(line, {
+    x: margin, y: 358 - index * 12, size: 8, font, color: muted,
+  }));
+
+  const note = "A autorização foi confirmada pelo titular autenticado com um fator TOTP. Esta folha e a rubrica são evidências visuais e técnicas; não representam, por si só, assinatura digital ICP-Brasil, PAdES ou certificado qualificado.";
+  const noteLines = wrapPdfText(note, 92);
+  const noteTop = 306 - Math.max(0, hashLines.length - 1) * 12;
+  noteLines.forEach((line, index) => page.drawText(line, {
+    x: margin, y: noteTop - index * 13, size: 8, font, color: muted,
+  }));
+  page.drawLine({ start: { x: margin, y: 62 }, end: { x: pageWidth - margin, y: 62 }, thickness: 0.5, color: rgb(0.8, 0.82, 0.84) });
+  page.drawText("SoliciteJá · Registro demonstrativo de assinatura eletrônica", {
+    x: margin, y: 44, size: 7.5, font, color: muted,
+  });
+  return new Uint8Array(await pdf.save({ useObjectStreams: false }));
+}
+
+async function completeSignature(
+  user: AuthenticatedDemoUser,
+  request: Request,
+  payload: Record<string, unknown>,
+) {
+  const signatureRequestId = String(payload.signatureRequestId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId)) throw new Error("Solicitação de assinatura inválida.");
+
+  const { data: intent, error: intentError } = await admin
+    .from("demo_signature_requests")
+    .select("*")
+    .eq("id", signatureRequestId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (intentError || !intent || intent.status !== "pending" || new Date(intent.expires_at).getTime() <= Date.now()) {
+    throw new Error("A solicitação de assinatura expirou ou já foi utilizada. Inicie novamente.");
+  }
+
+  const totp = requireFreshTotp(user, intent.created_at);
+  const signature = await getVerifiedSignature(user.id);
+  if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
+
+  const { data: originalBlob, error: originalError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(intent.original_storage_key);
+  if (originalError || !originalBlob) throw new Error("A versão original do PDF não está disponível.");
+  const originalBytes = new Uint8Array(await originalBlob.arrayBuffer());
+  const originalHash = await sha256(originalBytes);
+  if (originalHash !== intent.original_sha256) throw new Error("A integridade do PDF original não confere.");
+
+  const { data: signatureBlob, error: signatureError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(signature.storage_key);
+  if (signatureError || !signatureBlob) throw new Error("A imagem da assinatura cadastrada não está disponível.");
+  const signatureBytes = new Uint8Array(await signatureBlob.arrayBuffer());
+  if (await sha256(signatureBytes) !== signature.signature_sha256) {
+    throw new Error("A integridade da assinatura manuscrita não confere.");
+  }
+
+  const document = await getRequestForDemo(intent.requisicao_id, user);
+  const expectedStage = isPendingStage(document.status);
+  if (!expectedStage || expectedStage !== intent.document_stage) {
+    throw new Error("A etapa do documento mudou. Reabra a solicitação e confirme novamente.");
+  }
+  const signedAt = new Date().toISOString();
+  const signedBytes = await createEvidencePdf(originalBytes, signatureBytes, {
+    signerName: user.profile.nome,
+    requestId: document.id,
+    requestCode: getRequestCode(document),
+    signedAt,
+    originalHash,
+    evidenceId: signatureRequestId,
+  });
+  const finalHash = await sha256(signedBytes);
+  const safeDate = Date.now();
+  const signedStorageKey = `requisicoes-assinadas/${document.id}/${safeDate}-${signatureRequestId}-assinado.pdf`;
+  const { error: uploadError } = await admin.storage
+    .from(REQUESTS_BUCKET)
+    .upload(signedStorageKey, signedBytes, { contentType: "application/pdf", upsert: false });
+  if (uploadError) throw new Error("Não foi possível salvar o PDF com a folha de evidências.");
+
+  const { data: completion, error: rpcError } = await admin.rpc("complete_demo_signature", {
+    p_signature_request_id: signatureRequestId,
+    p_user_id: user.id,
+    p_totp_step: totp.step,
+    p_totp_verified_at: totp.verifiedAt,
+    p_signed_storage_key: signedStorageKey,
+    p_final_sha256: finalHash,
+    p_signed_at: signedAt,
+    p_ip_address: getClientIp(request),
+    p_session_id: typeof user.claims.session_id === "string" ? user.claims.session_id : null,
+    p_user_agent: request.headers.get("user-agent"),
+  });
+  if (rpcError) {
+    await admin.storage.from(REQUESTS_BUCKET).remove([signedStorageKey]);
+    if (rpcError.message.includes("TOTP_STEP_ALREADY_USED")) {
+      throw new Error("Este código já foi utilizado. Aguarde o próximo código do aplicativo autenticador.");
+    }
+    throw new Error(rpcError.message || "Não foi possível concluir a assinatura.");
+  }
+
+  return completion;
+}
+
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return errorResponse(new Error("Método não permitido."), 405);
+
+  try {
+    const user = await requireDemoUser(request);
+    const payload = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const action = String(payload.action || "");
+
+    if (action === "status") {
+      const signature = await getVerifiedSignature(user.id);
+      return jsonResponse({
+        ok: true,
+        signature_saved: Boolean(signature),
+        signature_created_at: signature?.created_at ?? null,
+      });
+    }
+
+    if (action === "save_signature") {
+      return jsonResponse(await saveUserSignature(user, request, payload.signaturePng));
+    }
+
+    if (action === "totp_enabled") {
+      return jsonResponse(await recordTotpEnabled(user, request));
+    }
+
+    if (action === "begin_signature") {
+      return jsonResponse(await beginSignature(user, request, payload));
+    }
+
+    if (action === "complete_signature") {
+      return jsonResponse(await completeSignature(user, request, payload));
+    }
+
+    return errorResponse(new Error("Ação de assinatura não reconhecida."), 400);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno ao processar a assinatura.";
+    const status = /Sessão|autenticad|liberado somente|autorizado|corresponde/i.test(message) ? 403 : 400;
+    return errorResponse(error, status);
+  }
+});
