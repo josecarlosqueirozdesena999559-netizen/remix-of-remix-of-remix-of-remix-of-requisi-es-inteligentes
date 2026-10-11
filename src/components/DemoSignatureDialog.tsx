@@ -382,12 +382,34 @@ export function DemoSignatureDialog({
     setBusy(true);
     setError(null);
     try {
-      const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
-      if (verifyError) throw new Error(verifyError.message);
-      const result = await invokeDemoSignature({
-        action: "complete_signature",
-        signatureRequestId,
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId,
       });
+      if (challengeError) {
+        throw new Error(
+          `Não foi possível iniciar a validação do Google Authenticator: ${challengeError.message}`,
+        );
+      }
+      if (!challenge?.id) throw new Error("Não foi possível iniciar a validação do código.");
+
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId,
+        challengeId: challenge.id,
+        code,
+      });
+      if (verifyError) {
+        throw new Error(`O Google Authenticator não aceitou o código: ${verifyError.message}`);
+      }
+
+      let result;
+      try {
+        result = await invokeDemoSignature({
+          action: "complete_signature",
+          signatureRequestId,
+        });
+      } catch (completionError) {
+        throw new Error(`Falha ao registrar a assinatura: ${getFunctionError(completionError)}`);
+      }
       setSignatureRequestId("");
       setSignedPreviewUrl("");
       onCompleted({ status: result.status, signature_id: result.signature_id });
@@ -509,7 +531,13 @@ export function DemoSignatureDialog({
           if (!next) closeSigningFlow();
         }}
       >
-        <DialogContent className="max-h-[94vh] w-[96vw] max-w-md overflow-y-auto">
+        <DialogContent
+          className={
+            step === "code"
+              ? "h-dvh max-h-dvh w-screen max-w-none content-center justify-items-center rounded-none border-0 p-6"
+              : "max-h-[94vh] w-[96vw] max-w-md overflow-y-auto"
+          }
+        >
           <DialogHeader>
             <DialogTitle>{dialogTitle}</DialogTitle>
           </DialogHeader>
@@ -631,7 +659,7 @@ export function DemoSignatureDialog({
           ) : null}
 
           {step === "code" ? (
-            <form className="space-y-4" onSubmit={confirmSignature}>
+            <form className="mx-auto w-full max-w-md space-y-4" onSubmit={confirmSignature}>
               <p className="text-sm text-muted-foreground">
                 Etapa 3 de 3 · Digite o código atual do Google Authenticator para concluir.
               </p>
