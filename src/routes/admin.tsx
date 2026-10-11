@@ -178,13 +178,12 @@ function AdminLayout() {
               await supabase.functions.invoke("demo-signature", { body: { action: "status" } });
             if (!active) return;
             demoSignaturePromptCheckedUserIdRef.current = user.id;
-            if (signatureStatusError || !signatureStatus?.signature_saved) {
+            if (!signatureStatusError && signatureStatus && !signatureStatus.signature_saved) {
               setDemoSignatureSetupPending(true);
             }
           } catch {
             if (active) {
               demoSignaturePromptCheckedUserIdRef.current = user.id;
-              setDemoSignatureSetupPending(true);
             }
           }
         }
