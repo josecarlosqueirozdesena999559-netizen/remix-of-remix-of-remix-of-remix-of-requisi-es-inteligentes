@@ -449,33 +449,13 @@ async function beginSignature(
   };
 }
 
-function wrapPdfText(text: string, maxCharacters: number) {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (candidate.length > maxCharacters && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 async function createEvidencePdf(
   original: Uint8Array,
   signaturePng: Uint8Array,
   input: {
     signerName: string;
-    requestId: string;
     requestCode: string;
     signedAt: string;
-    originalHash: string;
-    evidenceId: string;
     preview?: boolean;
   },
 ) {
@@ -485,138 +465,66 @@ async function createEvidencePdf(
   const image = await pdf.embedPng(signaturePng);
   const page = pdf.addPage([595.28, 841.89]);
   const pageWidth = page.getWidth();
-  const margin = 48;
-  const black = rgb(0.12, 0.16, 0.2);
-  const muted = rgb(0.35, 0.39, 0.44);
-
-  page.drawText(
-    input.preview
-      ? "PRÉVIA DA ASSINATURA — NÃO CONFIRMADA"
-      : "ASSINATURA ELETRÔNICA — EVIDÊNCIA DE AUTORIZAÇÃO",
-    {
-      x: margin,
-      y: 780,
-      size: 14,
-      font: bold,
-      color: rgb(0.05, 0.35, 0.24),
-    },
-  );
-  page.drawText(
-    input.preview
-      ? "Esta prévia não finaliza a assinatura; confirme com TOTP para registrar o PDF."
-      : "Folha de evidências adicionada pelo sistema após autenticação do titular.",
-    {
-      x: margin,
-      y: 754,
-      size: 9,
+  const ink = rgb(0.12, 0.16, 0.2);
+  const muted = rgb(0.4, 0.43, 0.47);
+  const title = input.preview ? "Prévia de assinatura" : "Assinatura";
+  page.drawText(title, {
+    x: 72,
+    y: 748,
+    size: 18,
+    font: bold,
+    color: ink,
+  });
+  page.drawText(`Documento ${input.requestCode}`, {
+    x: 72,
+    y: 718,
+    size: 11,
+    font,
+    color: muted,
+  });
+  if (input.preview) {
+    page.drawText("Aguardando confirmação", {
+      x: 72,
+      y: 692,
+      size: 10,
       font,
       color: muted,
-    },
-  );
-  page.drawText(`Documento: ${input.requestCode}`, {
-    x: margin,
-    y: 710,
-    size: 11,
-    font: bold,
-    color: black,
-  });
-  page.drawText(`Identificador interno: ${input.requestId}`, {
-    x: margin,
-    y: 690,
-    size: 9,
-    font,
-    color: black,
-  });
-  page.drawText("Assinante", { x: margin, y: 650, size: 9, font, color: muted });
-  page.drawText(input.signerName, { x: margin, y: 630, size: 13, font: bold, color: black });
+    });
+  }
 
-  const imageBox = { x: margin, y: 506, width: 300, height: 96 };
+  const imageBox = { x: (pageWidth - 360) / 2, y: 570, width: 360, height: 110 };
   const imageSize = image.scaleToFit(imageBox.width, imageBox.height);
   page.drawImage(image, {
     x: imageBox.x + (imageBox.width - imageSize.width) / 2,
-    y: imageBox.y + (imageBox.height - imageSize.height) / 2,
+    y: 626 - imageSize.height / 2,
     width: imageSize.width,
     height: imageSize.height,
   });
   page.drawLine({
-    start: { x: margin, y: 500 },
-    end: { x: margin + 300, y: 500 },
-    thickness: 0.7,
-    color: muted,
+    start: { x: imageBox.x, y: 626 },
+    end: { x: imageBox.x + imageBox.width, y: 626 },
+    thickness: 0.8,
+    color: ink,
   });
-  page.drawText(input.signerName, { x: margin, y: 484, size: 10, font: bold, color: black });
-  page.drawText("Assinatura visual cadastrada pelo titular da conta", {
-    x: margin,
-    y: 466,
-    size: 8,
-    font,
-    color: muted,
-  });
-  page.drawText(
-    input.preview
-      ? "Prévia para conferência — aguardando confirmação do Google Authenticator"
-      : `Autorização: ${new Intl.DateTimeFormat("pt-BR", {
-          dateStyle: "short",
-          timeStyle: "medium",
-          timeZone: "America/Fortaleza",
-          timeZoneName: "short",
-        }).format(new Date(input.signedAt))}`,
-    { x: margin, y: 430, size: input.preview ? 8 : 10, font, color: black },
-  );
-  page.drawText(
-    input.preview
-      ? "Prévia — ainda não assinada"
-      : `Identificador da evidência: ${input.evidenceId}`,
-    {
-      x: margin,
-      y: 409,
-      size: 8,
-      font,
-      color: black,
-    },
-  );
-  page.drawText("SHA-256 do PDF original apresentado:", {
-    x: margin,
-    y: 374,
-    size: 8,
+  page.drawText(input.signerName, {
+    x: imageBox.x,
+    y: 601,
+    size: 11,
     font: bold,
-    color: black,
+    color: ink,
   });
-  const hashLines = wrapPdfText(input.originalHash, 70);
-  hashLines.forEach((line, index) =>
-    page.drawText(line, {
-      x: margin,
-      y: 358 - index * 12,
-      size: 8,
-      font,
-      color: muted,
-    }),
-  );
-
-  const note = input.preview
-    ? "Prévia para revisão do titular. Nenhuma assinatura foi concluída; o registro só será finalizado após a confirmação com o Google Authenticator."
-    : "A autorização foi confirmada pelo titular autenticado com um fator TOTP. Esta folha e a rubrica são evidências visuais e técnicas; não representam, por si só, assinatura digital ICP-Brasil, PAdES ou certificado qualificado.";
-  const noteLines = wrapPdfText(note, 92);
-  const noteTop = 306 - Math.max(0, hashLines.length - 1) * 12;
-  noteLines.forEach((line, index) =>
-    page.drawText(line, {
-      x: margin,
-      y: noteTop - index * 13,
-      size: 8,
-      font,
-      color: muted,
-    }),
-  );
-  page.drawLine({
-    start: { x: margin, y: 62 },
-    end: { x: pageWidth - margin, y: 62 },
-    thickness: 0.5,
-    color: rgb(0.8, 0.82, 0.84),
-  });
-  page.drawText("SoliciteJá · Registro de assinatura eletrônica", {
-    x: margin,
-    y: 44,
-    size: 7.5,
+  const dateTime = input.preview
+    ? "Data e hora após a confirmação"
+    : new Intl.DateTimeFormat("pt-BR", {
+        dateStyle: "long",
+        timeStyle: "medium",
+        timeZone: "America/Fortaleza",
+        timeZoneName: "short",
+      }).format(new Date(input.signedAt));
+  page.drawText(dateTime, {
+    x: imageBox.x,
+    y: 578,
+    size: 10,
     font,
     color: muted,
   });
@@ -681,11 +589,8 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
 
   const previewBytes = await createEvidencePdf(originalBytes, signatureBytes, {
     signerName: user.profile.nome,
-    requestId: document.id,
     requestCode: getRequestCode(document),
     signedAt: new Date().toISOString(),
-    originalHash,
-    evidenceId: signatureRequestId,
     preview: true,
   });
   const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
@@ -838,11 +743,8 @@ async function completeSignature(
   const signedAt = new Date().toISOString();
   const signedBytes = await createEvidencePdf(originalBytes, signatureBytes, {
     signerName: user.profile.nome,
-    requestId: document.id,
     requestCode: getRequestCode(document),
     signedAt,
-    originalHash,
-    evidenceId: signatureRequestId,
   });
   const finalHash = await sha256(signedBytes);
   const safeDate = Date.now();
