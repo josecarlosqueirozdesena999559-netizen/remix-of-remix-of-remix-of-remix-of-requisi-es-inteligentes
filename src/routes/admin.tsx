@@ -26,10 +26,11 @@ import {
   X,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CpfCompletionDialog } from "@/components/CpfCompletionDialog";
+import { DemoSignatureDialog } from "@/components/DemoSignatureDialog";
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,7 @@ import {
   type CurrentUserProfile,
 } from "@/lib/user-profile";
 import { ALMOXARIFADO_WHATSAPP_NUMBER } from "@/lib/almoxarifado-contact";
+import { isDemoSignatureUser } from "@/lib/demo-signature";
 
 const ALMOXARIFADO_WHATSAPP_MESSAGE =
   "Olá, gostaria de receber notificações sobre o acompanhamento das minhas solicitações e entregas do almoxarifado.";
@@ -114,6 +116,9 @@ function AdminLayout() {
   const [whatsappQrCode, setWhatsappQrCode] = useState<string | null>(null);
   const [createRequestError, setCreateRequestError] = useState<string | null>(null);
   const [checkingCreateRequest, setCheckingCreateRequest] = useState(false);
+  const [demoSignatureSetupPending, setDemoSignatureSetupPending] = useState(false);
+  const [demoSignatureSetupOpen, setDemoSignatureSetupOpen] = useState(false);
+  const demoSignaturePromptCheckedUserIdRef = useRef<string | null>(null);
   const userAppMode = isUserAppModeEnabled();
 
   useEffect(() => {
@@ -164,6 +169,32 @@ function AdminLayout() {
           return;
         }
 
+        if (
+          isDemoSignatureUser(user, profile) &&
+          demoSignaturePromptCheckedUserIdRef.current !== user.id
+        ) {
+          try {
+            const [{ data: signatureStatus, error: signatureStatusError }, factorsResult] =
+              await Promise.all([
+                supabase.functions.invoke("demo-signature", { body: { action: "status" } }),
+                supabase.auth.mfa.listFactors(),
+              ]);
+            if (!active) return;
+            demoSignaturePromptCheckedUserIdRef.current = user.id;
+            const hasVerifiedTotp = (factorsResult.data?.totp ?? []).some(
+              (factor) => factor.status === "verified",
+            );
+            if (signatureStatusError || !signatureStatus?.signature_saved || !hasVerifiedTotp) {
+              setDemoSignatureSetupPending(true);
+            }
+          } catch {
+            if (active) {
+              demoSignaturePromptCheckedUserIdRef.current = user.id;
+              setDemoSignatureSetupPending(true);
+            }
+          }
+        }
+
         if (userAppMode && pathname === "/admin") {
           navigate({ to: "/admin/requisicao", search: { app: "usuario" } });
         }
@@ -211,6 +242,12 @@ function AdminLayout() {
     !profile?.whatsapp?.trim() &&
     pathname !== "/admin/completar-cadastro" &&
     !isSharedSector;
+
+  useEffect(() => {
+    if (!demoSignatureSetupPending || mustRegisterWhatsApp) return;
+    setDemoSignatureSetupPending(false);
+    setDemoSignatureSetupOpen(true);
+  }, [demoSignatureSetupPending, mustRegisterWhatsApp]);
 
   const openWhatsAppActivationReminder = async () => {
     try {
@@ -781,6 +818,14 @@ function AdminLayout() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {demoSignatureSetupOpen ? (
+        <DemoSignatureDialog
+          open={demoSignatureSetupOpen}
+          onOpenChange={setDemoSignatureSetupOpen}
+          setupOnly
+        />
+      ) : null}
 
       <CpfCompletionDialog
         profile={profile}
