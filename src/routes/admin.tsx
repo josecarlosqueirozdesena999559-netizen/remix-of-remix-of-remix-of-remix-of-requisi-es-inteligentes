@@ -174,17 +174,11 @@ function AdminLayout() {
           demoSignaturePromptCheckedUserIdRef.current !== user.id
         ) {
           try {
-            const [{ data: signatureStatus, error: signatureStatusError }, factorsResult] =
-              await Promise.all([
-                supabase.functions.invoke("demo-signature", { body: { action: "status" } }),
-                supabase.auth.mfa.listFactors(),
-              ]);
+            const { data: signatureStatus, error: signatureStatusError } =
+              await supabase.functions.invoke("demo-signature", { body: { action: "status" } });
             if (!active) return;
             demoSignaturePromptCheckedUserIdRef.current = user.id;
-            const hasVerifiedTotp = (factorsResult.data?.totp ?? []).some(
-              (factor) => factor.status === "verified",
-            );
-            if (signatureStatusError || !signatureStatus?.signature_saved || !hasVerifiedTotp) {
+            if (signatureStatusError || !signatureStatus?.signature_saved) {
               setDemoSignatureSetupPending(true);
             }
           } catch {
