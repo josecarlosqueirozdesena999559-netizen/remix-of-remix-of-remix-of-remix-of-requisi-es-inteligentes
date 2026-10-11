@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -80,11 +79,9 @@ export function DemoSignatureDialog({
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [factorId, setFactorId] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
-  const [manualSecret, setManualSecret] = useState("");
   const [code, setCode] = useState("");
   const [consent, setConsent] = useState(false);
   const [signatureRequestId, setSignatureRequestId] = useState("");
-  const [originalHash, setOriginalHash] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
 
@@ -106,9 +103,7 @@ export function DemoSignatureDialog({
     setConsent(false);
     setCode("");
     setSignatureRequestId("");
-    setOriginalHash("");
     setQrDataUrl("");
-    setManualSecret("");
     setStep("loading");
 
     async function loadStatus() {
@@ -246,7 +241,7 @@ export function DemoSignatureDialog({
       friendlyName: "Assinatura eletrônica",
     });
     if (enrollError) throw new Error(enrollError.message);
-    if (!data?.id || !data.totp?.uri || !data.totp?.secret) {
+    if (!data?.id || !data.totp?.uri) {
       throw new Error("O Supabase não retornou os dados de ativação do autenticador.");
     }
     const qr = await QRCode.toDataURL(data.totp.uri, {
@@ -256,7 +251,6 @@ export function DemoSignatureDialog({
     });
     setFactorId(data.id);
     setQrDataUrl(qr);
-    setManualSecret(data.totp.secret);
     setStep("enroll");
   };
 
@@ -275,7 +269,7 @@ export function DemoSignatureDialog({
   const verifyEnrollment = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!factorId || !/^\d{6}$/.test(code)) {
-      setError("Informe o código de seis dígitos mostrado no aplicativo autenticador.");
+      setError("Digite o código do Google Authenticator.");
       return;
     }
     setBusy(true);
@@ -290,7 +284,6 @@ export function DemoSignatureDialog({
       setTotpEnabled(true);
       setCode("");
       setQrDataUrl("");
-      setManualSecret("");
       setStep(setupOnly ? "complete" : "review");
     } catch (verifyError) {
       setError(getFunctionError(verifyError));
@@ -326,7 +319,6 @@ export function DemoSignatureDialog({
         sourcePdfBase64: base64,
       });
       setSignatureRequestId(intent.signature_request_id);
-      setOriginalHash(intent.original_sha256);
       setCode("");
       setStep("code");
     } catch (beginError) {
@@ -379,7 +371,7 @@ export function DemoSignatureDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {step === "draw" ? (
@@ -389,10 +381,6 @@ export function DemoSignatureDialog({
             )}
             {dialogTitle}
           </DialogTitle>
-          <DialogDescription>
-            Cadastre sua assinatura eletrônica. A assinatura visual não substitui um certificado
-            ICP-Brasil.
-          </DialogDescription>
         </DialogHeader>
 
         {error ? (
@@ -404,7 +392,7 @@ export function DemoSignatureDialog({
 
         {step === "loading" ? (
           <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Verificando cadastro e segundo fator...
+            <Loader2 className="h-4 w-4 animate-spin" /> Verificando...
           </div>
         ) : null}
 
@@ -412,10 +400,7 @@ export function DemoSignatureDialog({
           <div className="space-y-4">
             <Alert>
               <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                Sua assinatura manuscrita está cadastrada e o autenticador TOTP está ativado para
-                sua conta. O cadastro não assina nenhum documento.
-              </AlertDescription>
+              <AlertDescription>Assinatura e Google Authenticator ativados.</AlertDescription>
             </Alert>
             <DialogFooter>
               <Button type="button" onClick={() => onOpenChange(false)}>
@@ -428,8 +413,7 @@ export function DemoSignatureDialog({
         {step === "draw" ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Desenhe no quadro com o dedo, caneta ou mouse. A imagem será salva em armazenamento
-              privado e vinculada somente à sua conta.
+              Desenhe sua assinatura no quadro abaixo.
             </p>
             <canvas
               ref={canvasRef}
@@ -479,21 +463,12 @@ export function DemoSignatureDialog({
         {step === "enroll" ? (
           <form className="space-y-4" onSubmit={verifyEnrollment}>
             <p className="text-sm text-muted-foreground">
-              Escaneie o QR Code no Google Authenticator, Microsoft Authenticator ou outro app
-              compatível com TOTP. Depois, digite o código de seis dígitos para confirmar a
-              ativação.
+              No Google Authenticator, toque em + e escaneie o QR Code. Depois, informe o código de
+              seis dígitos.
             </p>
             {qrDataUrl ? (
               <div className="flex flex-col items-center gap-3 rounded-lg border bg-white p-4">
-                <img
-                  src={qrDataUrl}
-                  alt="QR Code de configuração do autenticador"
-                  className="h-60 w-60"
-                />
-                <p className="max-w-md break-all text-center text-xs text-muted-foreground">
-                  Configuração manual (mantenha em sigilo):{" "}
-                  <strong className="font-mono">{manualSecret}</strong>
-                </p>
+                <img src={qrDataUrl} alt="QR Code do Google Authenticator" className="h-60 w-60" />
               </div>
             ) : (
               <Alert>
@@ -503,7 +478,7 @@ export function DemoSignatureDialog({
               </Alert>
             )}
             <div className="space-y-2">
-              <Label htmlFor="demo-enroll-code">Código do aplicativo</Label>
+              <Label htmlFor="demo-enroll-code">Código do Google Authenticator</Label>
               <Input
                 id="demo-enroll-code"
                 inputMode="numeric"
@@ -553,10 +528,8 @@ export function DemoSignatureDialog({
               )}
             </div>
             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-              Documento {documentCode} · etapa{" "}
-              {documentStage === "output" ? "saída" : "solicitação"}. A confirmação será registrada
-              para a versão exata deste PDF, por meio de código TOTP. Uma folha de evidências
-              visuais será anexada sem sobrepor o documento original.
+              Documento {documentCode} · {documentStage === "output" ? "saída" : "solicitação"}. Uma
+              folha de evidências será anexada ao PDF.
             </div>
             <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm">
               <input
@@ -565,10 +538,7 @@ export function DemoSignatureDialog({
                 onChange={(event) => setConsent(event.target.checked)}
                 className="mt-1 h-4 w-4 accent-emerald-600"
               />
-              <span>
-                Confirmo que revisei o PDF e autorizo, conscientemente, a assinatura desta versão da
-                solicitação.
-              </span>
+              <span>Revisei o PDF e autorizo a assinatura desta versão.</span>
             </label>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -595,13 +565,11 @@ export function DemoSignatureDialog({
             <Alert>
               <ShieldCheck className="h-4 w-4" />
               <AlertDescription>
-                A solicitação de uso único está vinculada ao hash SHA-256{" "}
-                <span className="break-all font-mono">{originalHash}</span>. Abra o Google
-                Authenticator e informe um código atual para confirmar a assinatura.
+                Digite o código do Google Authenticator para confirmar a assinatura.
               </AlertDescription>
             </Alert>
             <div className="space-y-2">
-              <Label htmlFor="demo-signature-code">Código de seis dígitos</Label>
+              <Label htmlFor="demo-signature-code">Código do Google Authenticator</Label>
               <Input
                 id="demo-signature-code"
                 inputMode="numeric"
@@ -615,10 +583,7 @@ export function DemoSignatureDialog({
                 autoFocus
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              O código não é armazenado. O servidor registra apenas o resultado da validação e o
-              passo temporal para impedir reutilização.
-            </p>
+            <p className="text-xs text-muted-foreground">O código não é armazenado.</p>
             <DialogFooter>
               <Button
                 type="button"
