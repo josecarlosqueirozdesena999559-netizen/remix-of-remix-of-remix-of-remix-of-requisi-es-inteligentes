@@ -14,9 +14,10 @@ const MAX_PDF_BYTES = 14 * 1024 * 1024;
 const MAX_SIGNATURE_BYTES = 700 * 1024;
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://www.solicitejapereiro.online",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  Vary: "Origin",
 };
 
 const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {

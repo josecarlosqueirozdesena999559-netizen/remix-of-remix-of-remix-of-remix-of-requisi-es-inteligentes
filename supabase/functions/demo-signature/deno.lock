@@ -127,6 +127,13 @@
       ]
     }
   },
+  "redirects": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.117.3"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/supabase-js@2.117.3": "614f9e550b12b4be7054f947cc4949ebcc0eceeb8e83f7e226cc875356e9b126",
+    "https://esm.sh/pdf-lib@1.17.1": "cf7c5527829cb9bbb3aa20d339c530067441c10eb98880360aea9e77c3c87ff8"
+  },
   "workspace": {
     "dependencies": [
       "npm:jspdf-autotable@5.0.7",
