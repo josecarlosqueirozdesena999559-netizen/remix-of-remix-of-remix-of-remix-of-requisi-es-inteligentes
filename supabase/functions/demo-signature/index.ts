@@ -514,8 +514,12 @@ async function createEvidencePdf(
 
   if (!input.preview) {
     const dateTime = `Assinado em ${new Intl.DateTimeFormat("pt-BR", {
-      dateStyle: "long",
-      timeStyle: "medium",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
       timeZone: "America/Fortaleza",
       timeZoneName: "short",
     }).format(new Date(input.signedAt))}`;
