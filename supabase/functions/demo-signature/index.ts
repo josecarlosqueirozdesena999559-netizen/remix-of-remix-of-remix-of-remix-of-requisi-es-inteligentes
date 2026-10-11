@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
+import { createRequestPdfBlob, type RequestPdfItem } from "./request-pdf.ts";
+import { PDF_LOGO_DATA_URL } from "./pdf-assets.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -45,6 +47,10 @@ type RequestRecord = {
   solicitante: string | null;
   solicitante_cpf: string | null;
   setor: string | null;
+  categoria: string | null;
+  programa: string | null;
+  data: string | null;
+  items: RequestPdfItem[] | null;
   saida_codigo: string | null;
   created_at: string;
   updated_at?: string | null;
@@ -182,19 +188,6 @@ function isOwnedByDemo(request: RequestRecord, profile: AuthenticatedDemoUser["p
   );
 }
 
-function decodeBase64Pdf(value: unknown) {
-  if (typeof value !== "string" || value.length > Math.ceil((MAX_PDF_BYTES * 4) / 3) + 256) {
-    throw new Error("PDF inválido ou maior que o limite permitido.");
-  }
-  const base64 = value.replace(/^data:application\/pdf;base64,/, "").replace(/\s/g, "");
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Conteúdo PDF inválido.");
-  const binary = atob(base64);
-  if (binary.length < 8 || binary.length > MAX_PDF_BYTES || !binary.startsWith("%PDF-")) {
-    throw new Error("Envie um PDF válido com até 14 MB.");
-  }
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
 function decodePng(value: unknown) {
   if (typeof value !== "string" || !value.startsWith("data:image/png;base64,")) {
     throw new Error("A assinatura deve ser uma imagem PNG.");
@@ -214,7 +207,7 @@ function decodePng(value: unknown) {
 }
 
 async function sha256(bytes: Uint8Array) {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const digest = await crypto.subtle.digest("SHA-256", bytes.slice().buffer as ArrayBuffer);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -252,6 +245,45 @@ async function getRequestForDemo(requestId: string, user: AuthenticatedDemoUser)
   return request;
 }
 
+async function createCanonicalRequestPdf(request: RequestRecord, user: AuthenticatedDemoUser) {
+  let program = request.programa?.trim() || "";
+  if (!program && request.setor) {
+    const { data: sector } = await admin
+      .from("setores")
+      .select("nome,programa")
+      .eq("nome", request.setor)
+      .maybeSingle();
+    program = sector?.programa?.trim() || request.setor;
+  }
+  const pdf = await createRequestPdfBlob(
+    {
+      id: request.id,
+      saida_codigo: request.saida_codigo,
+      categoria: request.categoria,
+      setor: request.setor,
+      programa: program || request.setor || "-",
+      solicitante: request.solicitante,
+      solicitante_cpf: request.solicitante_cpf,
+      solicitante_funcao: null,
+      data: request.data,
+      items: Array.isArray(request.items) ? request.items : [],
+      requesterDisplayName: user.profile.nome || request.solicitante || "-",
+      requesterDisplayCpf: user.profile.cpf || request.solicitante_cpf || "-",
+      requesterDisplayRole: "Responsável pelo setor",
+    },
+    PDF_LOGO_DATA_URL,
+  );
+  const bytes = new Uint8Array(await pdf.arrayBuffer());
+  if (
+    bytes.byteLength < 8 ||
+    bytes.byteLength > MAX_PDF_BYTES ||
+    new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-"
+  ) {
+    throw new Error("Não foi possível gerar a versão oficial do PDF da solicitação.");
+  }
+  return bytes;
+}
+
 function isPendingStage(status: string) {
   if (status === "aguardando_assinatura_saida") return "output" as const;
   if (
@@ -284,7 +316,7 @@ async function recordAudit(
   data: Record<string, unknown> = {},
   signatureRequestId: string | null = null,
 ) {
-  await admin.from("signature_audit_logs").insert({
+  const { error } = await admin.from("signature_audit_logs").insert({
     user_id: user.id,
     event_type: eventType,
     signature_request_id: signatureRequestId,
@@ -292,6 +324,41 @@ async function recordAudit(
     user_agent: request.headers.get("user-agent"),
     metadata: data,
   });
+  if (error) {
+    console.error("signature_audit_log_insert_failed", {
+      eventType,
+      signatureRequestId,
+      code: error.code,
+    });
+  }
+}
+
+const SIGNATURE_ACTION_RATE_LIMITS: Record<string, { limit: number; windowSeconds: number }> = {
+  status: { limit: 30, windowSeconds: 60 },
+  save_signature: { limit: 3, windowSeconds: 300 },
+  totp_enabled: { limit: 5, windowSeconds: 300 },
+  begin_signature: { limit: 5, windowSeconds: 60 },
+  preview_signature: { limit: 10, windowSeconds: 60 },
+  confirm_preview: { limit: 10, windowSeconds: 60 },
+  cancel_signature: { limit: 10, windowSeconds: 60 },
+  complete_signature: { limit: 5, windowSeconds: 300 },
+};
+
+async function enforceSignatureRateLimit(userId: string, action: string) {
+  const limits = SIGNATURE_ACTION_RATE_LIMITS[action];
+  if (!limits) return;
+  const { error } = await admin.rpc("consume_demo_signature_rate_limit", {
+    p_user_id: userId,
+    p_action: action,
+    p_limit: limits.limit,
+    p_window_seconds: limits.windowSeconds,
+  });
+  if (!error) return;
+  if (error.message.includes("SIGNATURE_RATE_LIMITED")) {
+    throw new Error("Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.");
+  }
+  console.error("signature_rate_limit_check_failed", { action, code: error.code });
+  throw new Error("Não foi possível validar a segurança desta etapa. Tente novamente.");
 }
 
 async function getVerifiedSignature(userId: string) {
@@ -384,7 +451,7 @@ async function beginSignature(
       throw new Error("O PDF original é inválido ou maior que 14 MB.");
     }
   } else {
-    originalPdf = decodeBase64Pdf(payload.sourcePdfBase64);
+    originalPdf = await createCanonicalRequestPdf(document, user);
   }
 
   const originalHash = await sha256(originalPdf);
@@ -610,6 +677,20 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
     });
   if (uploadError) throw new Error("Não foi possível gerar a prévia do PDF assinado.");
 
+  const previewHash = await sha256(previewBytes);
+  const { data: previewIntent, error: previewHashError } = await admin
+    .from("demo_signature_requests")
+    .update({ preview_sha256: previewHash, preview_reviewed_at: null })
+    .eq("id", signatureRequestId)
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (previewHashError || !previewIntent) {
+    await admin.storage.from(SIGNATURE_BUCKET).remove([previewStorageKey]);
+    throw new Error("Não foi possível vincular a prévia à solicitação de assinatura.");
+  }
+
   const { data: signedPreview, error: signedUrlError } = await admin.storage
     .from(SIGNATURE_BUCKET)
     .createSignedUrl(previewStorageKey, 600);
@@ -622,6 +703,73 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
     preview_url: signedPreview.signedUrl,
     expires_in: 600,
   };
+}
+
+async function confirmPreview(
+  user: AuthenticatedDemoUser,
+  request: Request,
+  payload: Record<string, unknown>,
+) {
+  const signatureRequestId = String(payload.signatureRequestId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId)) {
+    throw new Error("Solicitação de assinatura inválida.");
+  }
+
+  const { data: intent, error: intentError } = await admin
+    .from("demo_signature_requests")
+    .select(
+      "id,requisicao_id,document_stage,document_version,original_sha256,status,expires_at,preview_sha256,preview_reviewed_at",
+    )
+    .eq("id", signatureRequestId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (
+    intentError ||
+    !intent ||
+    intent.status !== "pending" ||
+    new Date(intent.expires_at).getTime() <= Date.now()
+  ) {
+    throw new Error("A solicitação expirou. Reabra o documento para continuar.");
+  }
+  if (!/^[0-9a-f]{64}$/.test(intent.preview_sha256 || "")) {
+    throw new Error("A prévia da assinatura não está pronta. Gere-a novamente.");
+  }
+
+  const document = await getRequestForDemo(intent.requisicao_id, user);
+  const expectedStage = isPendingStage(document.status);
+  const currentVersion = `${document.updated_at || document.created_at}/${intent.original_sha256}`;
+  if (
+    !expectedStage ||
+    expectedStage !== intent.document_stage ||
+    currentVersion !== intent.document_version
+  ) {
+    throw new Error("O documento mudou. Reabra a solicitação para conferir a versão atual.");
+  }
+
+  const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
+  const { data: previewBlob, error: previewError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(previewStorageKey);
+  if (previewError || !previewBlob) throw new Error("A prévia privada não está disponível.");
+  const previewHash = await sha256(new Uint8Array(await previewBlob.arrayBuffer()));
+  if (previewHash !== intent.preview_sha256) {
+    throw new Error("A integridade da prévia não confere. Gere a prévia novamente.");
+  }
+
+  const { data: confirmation, error: confirmationError } = await admin.rpc(
+    "confirm_demo_signature_preview",
+    {
+      p_signature_request_id: signatureRequestId,
+      p_user_id: user.id,
+      p_preview_sha256: previewHash,
+      p_ip_address: getClientIp(request),
+      p_user_agent: request.headers.get("user-agent"),
+    },
+  );
+  if (confirmationError || !confirmation?.ok) {
+    throw new Error("Não foi possível registrar a revisão da prévia. Tente novamente.");
+  }
+  return { ok: true, preview_confirmed: true };
 }
 
 async function cancelSignature(
@@ -714,6 +862,21 @@ async function completeSignature(
     throw new Error("A solicitação de assinatura expirou ou já foi utilizada. Inicie novamente.");
   }
 
+  if (!intent.preview_reviewed_at || !/^[0-9a-f]{64}$/.test(intent.preview_sha256 || "")) {
+    throw new Error("Confira e confirme a prévia do PDF antes de inserir o código autenticador.");
+  }
+  const confirmedPreviewKey = `previews/${user.id}/${signatureRequestId}.pdf`;
+  const { data: confirmedPreview, error: confirmedPreviewError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(confirmedPreviewKey);
+  if (confirmedPreviewError || !confirmedPreview) {
+    throw new Error("A prévia confirmada não está mais disponível. Gere-a novamente.");
+  }
+  const confirmedPreviewHash = await sha256(new Uint8Array(await confirmedPreview.arrayBuffer()));
+  if (confirmedPreviewHash !== intent.preview_sha256) {
+    throw new Error("A prévia foi alterada. Gere e confirme a versão atual novamente.");
+  }
+
   const totp = requireFreshTotp(user, intent.created_at);
   const signature = await getVerifiedSignature(user.id);
   if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
@@ -758,7 +921,7 @@ async function completeSignature(
   const { error: uploadError } = await admin.storage
     .from(REQUESTS_BUCKET)
     .upload(signedStorageKey, signedBytes, { contentType: "application/pdf", upsert: false });
-  if (uploadError) throw new Error("Não foi possível salvar o PDF com a folha de evidências.");
+  if (uploadError) throw new Error("Não foi possível salvar o PDF assinado.");
 
   const { data: completion, error: rpcError } = await admin.rpc("complete_demo_signature", {
     p_signature_request_id: signatureRequestId,
@@ -796,6 +959,7 @@ Deno.serve(async (request) => {
     const user = await requireDemoUser(request);
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const action = String(payload.action || "");
+    await enforceSignatureRateLimit(user.id, action);
 
     if (action === "status") {
       await cleanupExpiredIntents(user.id);
@@ -821,6 +985,10 @@ Deno.serve(async (request) => {
 
     if (action === "preview_signature") {
       return jsonResponse(await previewSignature(user, payload));
+    }
+
+    if (action === "confirm_preview") {
+      return jsonResponse(await confirmPreview(user, request, payload));
     }
 
     if (action === "cancel_signature") {

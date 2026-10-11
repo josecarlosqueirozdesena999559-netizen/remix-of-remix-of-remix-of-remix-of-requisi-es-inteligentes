@@ -46,20 +46,6 @@ async function invokeDemoSignature(body: Record<string, unknown>) {
   return data;
 }
 
-function blobToBase64(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result || "");
-      const comma = value.indexOf(",");
-      if (comma < 0) reject(new Error("Não foi possível preparar o PDF."));
-      else resolve(value.slice(comma + 1));
-    };
-    reader.onerror = () => reject(new Error("Não foi possível ler o PDF para assinatura."));
-    reader.readAsDataURL(blob);
-  });
-}
-
 export function DemoSignatureDialog({
   open,
   onOpenChange,
@@ -317,11 +303,9 @@ export function DemoSignatureDialog({
     try {
       let intentId = signatureRequestId;
       if (!intentId) {
-        const base64 = await blobToBase64(sourcePdf);
         const intent = await invokeDemoSignature({
           action: "begin_signature",
           requestId,
-          sourcePdfBase64: base64,
         });
         intentId = String(intent.signature_request_id || "");
         if (!intentId) throw new Error("Não foi possível iniciar a assinatura.");
@@ -345,13 +329,28 @@ export function DemoSignatureDialog({
     }
   };
 
-  const continueFromPreview = () => {
+  const continueFromPreview = async () => {
     if (!previewConsent) {
       setError("Confirme que revisou a prévia da assinatura.");
       return;
     }
+    if (!signatureRequestId) {
+      setError("A solicitação expirou. Feche e inicie novamente.");
+      return;
+    }
+    setBusy(true);
     setError(null);
-    setStep(totpEnabled && factorId ? "code" : "enroll");
+    try {
+      await invokeDemoSignature({
+        action: "confirm_preview",
+        signatureRequestId,
+      });
+      setStep(totpEnabled && factorId ? "code" : "enroll");
+    } catch (previewError) {
+      setError(getFunctionError(previewError));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const closeSigningFlow = () => {
@@ -481,7 +480,7 @@ export function DemoSignatureDialog({
       {open && step === "preview" ? (
         <PdfDocumentViewer
           title="Confira a assinatura no PDF"
-          subtitle="Etapa 2 de 3 · A rubrica aparece na folha de evidências ao final."
+          subtitle="Etapa 2 de 3 · A rubrica foi aplicada no campo de assinatura do documento."
           url={signedPreviewUrl}
           fileName={`${documentCode || "documento"}-previa-assinatura.pdf`}
           loading={!signedPreviewUrl}
