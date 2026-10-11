@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Loader2, PenLine, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -369,16 +369,9 @@ export function DemoSignatureDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[94vh] w-[96vw] max-w-6xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {step === "draw" ? (
-              <PenLine className="h-5 w-5 text-primary" />
-            ) : (
-              <ShieldCheck className="h-5 w-5 text-primary" />
-            )}
-            {dialogTitle}
-          </DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
         </DialogHeader>
 
         {error ? (
@@ -503,9 +496,9 @@ export function DemoSignatureDialog({
             <div className="rounded-lg border bg-slate-100 p-2">
               {previewUrl ? (
                 <iframe
-                  src={`${previewUrl}#toolbar=1&navpanes=1&view=FitH`}
+                  src={previewUrl}
                   title={`PDF ${documentCode} para assinatura`}
-                  className="h-[56vh] min-h-72 w-full rounded bg-white"
+                  className="h-[68vh] min-h-[430px] w-full rounded bg-white"
                 />
               ) : (
                 <p className="p-6 text-sm text-muted-foreground">
@@ -543,9 +536,9 @@ export function DemoSignatureDialog({
             <div className="rounded-lg border bg-slate-100 p-2">
               {previewUrl ? (
                 <iframe
-                  src={`${previewUrl}#toolbar=1&navpanes=1&view=FitH`}
+                  src={previewUrl}
                   title={`PDF ${documentCode} para assinatura`}
-                  className="h-[42vh] min-h-56 w-full rounded bg-white"
+                  className="h-[54vh] min-h-[350px] w-full rounded bg-white"
                 />
               ) : (
                 <p className="p-6 text-sm text-muted-foreground">Carregando PDF…</p>
