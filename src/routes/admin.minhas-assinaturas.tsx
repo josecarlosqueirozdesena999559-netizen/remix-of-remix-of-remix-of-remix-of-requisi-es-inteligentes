@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Check, CheckCircle2, Eye, Loader2, PenLine, Pencil, Trash2, Upload } from "lucide-react";
+import { Check, CheckCircle2, Eye, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useEffect, useState, type DragEvent } from "react";
 import { DemoSignatureDialog } from "@/components/DemoSignatureDialog";
 import { Button } from "@/components/ui/button";
@@ -871,15 +871,13 @@ function MinhasAssinaturasPage() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="gap-2 rounded-xl border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                                className="rounded-xl border-emerald-300 text-emerald-800 hover:bg-emerald-50"
                                 disabled={uploadingId === request.id || missingItems}
                                 onClick={() => void openDemoSignature(request)}
                               >
                                 {uploadingId === request.id ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <PenLine className="h-4 w-4" />
-                                )}
+                                ) : null}
                                 Assinar
                               </Button>
                             ) : null}
@@ -999,7 +997,6 @@ function MinhasAssinaturasPage() {
           }}
           requestId={demoSignatureDocument.requestId}
           documentCode={demoSignatureDocument.documentCode}
-          documentStage={demoSignatureDocument.documentStage}
           sourcePdf={demoSignatureDocument.sourcePdf}
           onCompleted={(result) => {
             const signedRequestId = demoSignatureDocument.requestId;

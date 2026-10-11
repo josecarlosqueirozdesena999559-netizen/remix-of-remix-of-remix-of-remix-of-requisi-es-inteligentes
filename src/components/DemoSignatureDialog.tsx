@@ -19,7 +19,6 @@ interface DemoSignatureDialogProps {
   onOpenChange: (open: boolean) => void;
   requestId?: string;
   documentCode?: string;
-  documentStage?: "request" | "output";
   sourcePdf?: Blob | null;
   onCompleted?: (result: { status?: string; signature_id?: string }) => void;
   setupOnly?: boolean;
@@ -65,7 +64,6 @@ export function DemoSignatureDialog({
   onOpenChange,
   requestId,
   documentCode = "",
-  documentStage = "request",
   sourcePdf = null,
   onCompleted = () => undefined,
   setupOnly = false,
@@ -362,7 +360,7 @@ export function DemoSignatureDialog({
       : step === "enroll"
         ? "Ative o Google Authenticator"
         : step === "code"
-          ? "Confirme sua identidade"
+          ? "Confirme a assinatura"
           : step === "review"
             ? "Revise e assine o documento"
             : step === "complete"
@@ -398,10 +396,6 @@ export function DemoSignatureDialog({
 
         {step === "complete" ? (
           <div className="space-y-4">
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>Assinatura e Google Authenticator ativados.</AlertDescription>
-            </Alert>
             <DialogFooter>
               <Button type="button" onClick={() => onOpenChange(false)}>
                 Concluir
@@ -506,30 +500,18 @@ export function DemoSignatureDialog({
 
         {step === "review" ? (
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
-                Assinatura manuscrita cadastrada
-              </span>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
-                Google Authenticator ativado
-              </span>
-            </div>
             <div className="rounded-lg border bg-slate-100 p-2">
               {previewUrl ? (
                 <iframe
                   src={`${previewUrl}#toolbar=1&navpanes=1&view=FitH`}
                   title={`PDF ${documentCode} para assinatura`}
-                  className="h-[52vh] min-h-72 w-full rounded bg-white"
+                  className="h-[56vh] min-h-72 w-full rounded bg-white"
                 />
               ) : (
                 <p className="p-6 text-sm text-muted-foreground">
                   Gerando pré-visualização do PDF…
                 </p>
               )}
-            </div>
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-              Documento {documentCode} · {documentStage === "output" ? "saída" : "solicitação"}. Uma
-              folha de evidências será anexada ao PDF.
             </div>
             <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm">
               <input
@@ -549,11 +531,7 @@ export function DemoSignatureDialog({
                 onClick={() => void requestSignatureCode()}
                 disabled={busy || !sourcePdf || !consent}
               >
-                {busy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                )}
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Assinar
               </Button>
             </DialogFooter>
@@ -562,12 +540,17 @@ export function DemoSignatureDialog({
 
         {step === "code" ? (
           <form className="space-y-4" onSubmit={confirmSignature}>
-            <Alert>
-              <ShieldCheck className="h-4 w-4" />
-              <AlertDescription>
-                Digite o código do Google Authenticator para confirmar a assinatura.
-              </AlertDescription>
-            </Alert>
+            <div className="rounded-lg border bg-slate-100 p-2">
+              {previewUrl ? (
+                <iframe
+                  src={`${previewUrl}#toolbar=1&navpanes=1&view=FitH`}
+                  title={`PDF ${documentCode} para assinatura`}
+                  className="h-[42vh] min-h-56 w-full rounded bg-white"
+                />
+              ) : (
+                <p className="p-6 text-sm text-muted-foreground">Carregando PDF…</p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="demo-signature-code">Código do Google Authenticator</Label>
               <Input
@@ -583,7 +566,6 @@ export function DemoSignatureDialog({
                 autoFocus
               />
             </div>
-            <p className="text-xs text-muted-foreground">O código não é armazenado.</p>
             <DialogFooter>
               <Button
                 type="button"
@@ -594,11 +576,7 @@ export function DemoSignatureDialog({
                 Voltar
               </Button>
               <Button type="submit" disabled={busy || code.length !== 6}>
-                {busy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                )}
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Confirmar assinatura
               </Button>
             </DialogFooter>
