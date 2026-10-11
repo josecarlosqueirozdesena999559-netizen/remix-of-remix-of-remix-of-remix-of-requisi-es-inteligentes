@@ -105,7 +105,7 @@ async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser>
     throw new Error("Sessão expirada ou inválida.");
   }
   if (!safeEqual(authData.user.email.trim().toLowerCase(), DEMO_EMAIL)) {
-    throw new Error("Este fluxo está liberado somente para o usuário de demonstração.");
+    throw new Error("Você não está autorizado a usar a assinatura eletrônica.");
   }
 
   const { data: profile, error: profileError } = await admin
@@ -114,8 +114,13 @@ async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser>
     .eq("id", DEMO_PROFILE_ID)
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
-  if (profileError || !profile || profile.is_admin || profile.email?.trim().toLowerCase() !== DEMO_EMAIL) {
-    throw new Error("O perfil autenticado não corresponde à conta de demonstração autorizada.");
+  if (
+    profileError ||
+    !profile ||
+    profile.is_admin ||
+    profile.email?.trim().toLowerCase() !== DEMO_EMAIL
+  ) {
+    throw new Error("O perfil autenticado não está autorizado a usar a assinatura eletrônica.");
   }
 
   return {
@@ -144,12 +149,19 @@ function requireFreshTotp(user: AuthenticatedDemoUser, createdAt?: string) {
     .sort((left, right) => right - left)[0];
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (!latestTotp || latestTotp > nowSeconds + 30 || nowSeconds - latestTotp > 120) {
-    throw new Error("Faça uma nova confirmação pelo Google Authenticator para assinar este documento.");
+    throw new Error(
+      "Faça uma nova confirmação pelo Google Authenticator para assinar este documento.",
+    );
   }
   if (createdAt && latestTotp * 1000 < new Date(createdAt).getTime() - 5000) {
-    throw new Error("O código foi confirmado antes desta solicitação. Gere um novo código e tente novamente.");
+    throw new Error(
+      "O código foi confirmado antes desta solicitação. Gere um novo código e tente novamente.",
+    );
   }
-  return { verifiedAt: new Date(latestTotp * 1000).toISOString(), step: Math.floor(latestTotp / 30) };
+  return {
+    verifiedAt: new Date(latestTotp * 1000).toISOString(),
+    step: Math.floor(latestTotp / 30),
+  };
 }
 
 function normalize(value: unknown) {
@@ -165,12 +177,13 @@ function isOwnedByDemo(request: RequestRecord, profile: AuthenticatedDemoUser["p
   return (
     normalize(request.solicitante) === normalize(profile.nome) &&
     normalize(request.setor) === normalize(expectedLocation) &&
-    (!profile.cpf || String(request.solicitante_cpf || "").replace(/\D/g, "") === profile.cpf.replace(/\D/g, ""))
+    (!profile.cpf ||
+      String(request.solicitante_cpf || "").replace(/\D/g, "") === profile.cpf.replace(/\D/g, ""))
   );
 }
 
 function decodeBase64Pdf(value: unknown) {
-  if (typeof value !== "string" || value.length > Math.ceil(MAX_PDF_BYTES * 4 / 3) + 256) {
+  if (typeof value !== "string" || value.length > Math.ceil((MAX_PDF_BYTES * 4) / 3) + 256) {
     throw new Error("PDF inválido ou maior que o limite permitido.");
   }
   const base64 = value.replace(/^data:application\/pdf;base64,/, "").replace(/\s/g, "");
@@ -234,13 +247,18 @@ async function getRequestForDemo(requestId: string, user: AuthenticatedDemoUser)
     .maybeSingle();
   if (error || !data) throw new Error("Solicitação não encontrada.");
   const request = data as RequestRecord;
-  if (!isOwnedByDemo(request, user.profile)) throw new Error("Você não está autorizado a assinar esta solicitação.");
+  if (!isOwnedByDemo(request, user.profile))
+    throw new Error("Você não está autorizado a assinar esta solicitação.");
   return request;
 }
 
 function isPendingStage(status: string) {
   if (status === "aguardando_assinatura_saida") return "output" as const;
-  if (["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"].includes(status)) {
+  if (
+    ["aguardando_assinatura", "aguardando_assinatura_requisicao", "correcao_requisicao"].includes(
+      status,
+    )
+  ) {
     return "request" as const;
   }
   return null;
@@ -251,10 +269,12 @@ function getRequestCode(request: RequestRecord) {
 }
 
 function getClientIp(request: Request) {
-  return request.headers.get("cf-connecting-ip") ||
+  return (
+    request.headers.get("cf-connecting-ip") ||
     request.headers.get("x-real-ip") ||
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    null;
+    null
+  );
 }
 
 async function recordAudit(
@@ -297,14 +317,17 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
     .upload(storageKey, png, { contentType: "image/png", upsert: true });
   if (uploadError) throw new Error("Não foi possível salvar sua assinatura manuscrita.");
 
-  const { error: saveError } = await admin.from("demo_user_signatures").upsert({
-    user_id: user.id,
-    profile_id: DEMO_PROFILE_ID,
-    storage_key: storageKey,
-    signature_sha256: signatureHash,
-    last_accepted_step: existing?.last_accepted_step ?? 0,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "user_id" });
+  const { error: saveError } = await admin.from("demo_user_signatures").upsert(
+    {
+      user_id: user.id,
+      profile_id: DEMO_PROFILE_ID,
+      storage_key: storageKey,
+      signature_sha256: signatureHash,
+      last_accepted_step: existing?.last_accepted_step ?? 0,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
   if (saveError) throw new Error("Não foi possível vincular a assinatura ao usuário autenticado.");
 
   await recordAudit(user, "SIGNATURE_SAVED", request, { signature_sha256: signatureHash });
@@ -320,7 +343,10 @@ async function recordTotpEnabled(user: AuthenticatedDemoUser, request: Request) 
     .eq("profile_id", DEMO_PROFILE_ID)
     .lt("last_accepted_step", totp.step);
   if (stepError) throw new Error("Não foi possível registrar a ativação do autenticador.");
-  await recordAudit(user, "TOTP_ENABLED", request, { method: "totp", verified_at: totp.verifiedAt });
+  await recordAudit(user, "TOTP_ENABLED", request, {
+    method: "totp",
+    verified_at: totp.verifiedAt,
+  });
   return { ok: true, totp_enabled: true };
 }
 
@@ -340,13 +366,21 @@ async function beginSignature(
   let originalPdf: Uint8Array;
   if (stage === "output") {
     const attachment = getAttachment(document.admin_attachment);
-    if (!attachment?.storagePath || (attachment.storageBucket && attachment.storageBucket !== REQUESTS_BUCKET)) {
+    if (
+      !attachment?.storagePath ||
+      (attachment.storageBucket && attachment.storageBucket !== REQUESTS_BUCKET)
+    ) {
       throw new Error("O PDF de saída aguardando assinatura não foi encontrado.");
     }
-    const { data, error } = await admin.storage.from(REQUESTS_BUCKET).download(attachment.storagePath);
+    const { data, error } = await admin.storage
+      .from(REQUESTS_BUCKET)
+      .download(attachment.storagePath);
     if (error || !data) throw new Error("Não foi possível carregar o PDF original da saída.");
     originalPdf = new Uint8Array(await data.arrayBuffer());
-    if (originalPdf.byteLength > MAX_PDF_BYTES || new TextDecoder().decode(originalPdf.slice(0, 5)) !== "%PDF-") {
+    if (
+      originalPdf.byteLength > MAX_PDF_BYTES ||
+      new TextDecoder().decode(originalPdf.slice(0, 5)) !== "%PDF-"
+    ) {
       throw new Error("O PDF original é inválido ou maior que 14 MB.");
     }
   } else {
@@ -359,7 +393,8 @@ async function beginSignature(
   const { error: uploadError } = await admin.storage
     .from(SIGNATURE_BUCKET)
     .upload(storageKey, originalPdf, { contentType: "application/pdf", upsert: false });
-  if (uploadError) throw new Error("Não foi possível preparar a versão exata do PDF para assinatura.");
+  if (uploadError)
+    throw new Error("Não foi possível preparar a versão exata do PDF para assinatura.");
 
   const createdAt = new Date().toISOString();
   const documentVersion = `${document.updated_at || document.created_at}/${originalHash}`;
@@ -380,16 +415,28 @@ async function beginSignature(
     throw new Error("Não foi possível criar uma solicitação de assinatura de uso único.");
   }
 
-  await recordAudit(user, "DOCUMENT_OPENED", request, {
-    document_id: document.id,
-    document_stage: stage,
-    document_version: documentVersion,
-    original_sha256: originalHash,
-  }, intentId);
-  await recordAudit(user, "SIGN_REQUESTED", request, {
-    document_id: document.id,
-    consent_at: createdAt,
-  }, intentId);
+  await recordAudit(
+    user,
+    "DOCUMENT_OPENED",
+    request,
+    {
+      document_id: document.id,
+      document_stage: stage,
+      document_version: documentVersion,
+      original_sha256: originalHash,
+    },
+    intentId,
+  );
+  await recordAudit(
+    user,
+    "SIGN_REQUESTED",
+    request,
+    {
+      document_id: document.id,
+      consent_at: createdAt,
+    },
+    intentId,
+  );
 
   return {
     ok: true,
@@ -422,7 +469,14 @@ function wrapPdfText(text: string, maxCharacters: number) {
 async function createEvidencePdf(
   original: Uint8Array,
   signaturePng: Uint8Array,
-  input: { signerName: string; requestId: string; requestCode: string; signedAt: string; originalHash: string; evidenceId: string },
+  input: {
+    signerName: string;
+    requestId: string;
+    requestCode: string;
+    signedAt: string;
+    originalHash: string;
+    evidenceId: string;
+  },
 ) {
   const pdf = await PDFDocument.load(original, { updateMetadata: false });
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -435,13 +489,33 @@ async function createEvidencePdf(
   const muted = rgb(0.35, 0.39, 0.44);
 
   page.drawText("ASSINATURA ELETRÔNICA — EVIDÊNCIA DE AUTORIZAÇÃO", {
-    x: margin, y: 780, size: 14, font: bold, color: rgb(0.05, 0.35, 0.24),
+    x: margin,
+    y: 780,
+    size: 14,
+    font: bold,
+    color: rgb(0.05, 0.35, 0.24),
   });
   page.drawText("Folha de evidências adicionada pelo sistema após autenticação do titular.", {
-    x: margin, y: 754, size: 9, font, color: muted,
+    x: margin,
+    y: 754,
+    size: 9,
+    font,
+    color: muted,
   });
-  page.drawText(`Documento: ${input.requestCode}`, { x: margin, y: 710, size: 11, font: bold, color: black });
-  page.drawText(`Identificador interno: ${input.requestId}`, { x: margin, y: 690, size: 9, font, color: black });
+  page.drawText(`Documento: ${input.requestCode}`, {
+    x: margin,
+    y: 710,
+    size: 11,
+    font: bold,
+    color: black,
+  });
+  page.drawText(`Identificador interno: ${input.requestId}`, {
+    x: margin,
+    y: 690,
+    size: 9,
+    font,
+    color: black,
+  });
   page.drawText("Assinante", { x: margin, y: 650, size: 9, font, color: muted });
   page.drawText(input.signerName, { x: margin, y: 630, size: 13, font: bold, color: black });
 
@@ -453,28 +527,79 @@ async function createEvidencePdf(
     width: imageSize.width,
     height: imageSize.height,
   });
-  page.drawLine({ start: { x: margin, y: 500 }, end: { x: margin + 300, y: 500 }, thickness: 0.7, color: muted });
+  page.drawLine({
+    start: { x: margin, y: 500 },
+    end: { x: margin + 300, y: 500 },
+    thickness: 0.7,
+    color: muted,
+  });
   page.drawText(input.signerName, { x: margin, y: 484, size: 10, font: bold, color: black });
-  page.drawText("Assinatura visual cadastrada pelo titular da conta", { x: margin, y: 466, size: 8, font, color: muted });
-  page.drawText(`Autorização: ${new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short", timeStyle: "medium", timeZone: "America/Fortaleza", timeZoneName: "short",
-  }).format(new Date(input.signedAt))}`, { x: margin, y: 430, size: 10, font, color: black });
-  page.drawText(`Identificador da evidência: ${input.evidenceId}`, { x: margin, y: 409, size: 8, font, color: black });
-  page.drawText("SHA-256 do PDF original apresentado:", { x: margin, y: 374, size: 8, font: bold, color: black });
+  page.drawText("Assinatura visual cadastrada pelo titular da conta", {
+    x: margin,
+    y: 466,
+    size: 8,
+    font,
+    color: muted,
+  });
+  page.drawText(
+    `Autorização: ${new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "medium",
+      timeZone: "America/Fortaleza",
+      timeZoneName: "short",
+    }).format(new Date(input.signedAt))}`,
+    { x: margin, y: 430, size: 10, font, color: black },
+  );
+  page.drawText(`Identificador da evidência: ${input.evidenceId}`, {
+    x: margin,
+    y: 409,
+    size: 8,
+    font,
+    color: black,
+  });
+  page.drawText("SHA-256 do PDF original apresentado:", {
+    x: margin,
+    y: 374,
+    size: 8,
+    font: bold,
+    color: black,
+  });
   const hashLines = wrapPdfText(input.originalHash, 70);
-  hashLines.forEach((line, index) => page.drawText(line, {
-    x: margin, y: 358 - index * 12, size: 8, font, color: muted,
-  }));
+  hashLines.forEach((line, index) =>
+    page.drawText(line, {
+      x: margin,
+      y: 358 - index * 12,
+      size: 8,
+      font,
+      color: muted,
+    }),
+  );
 
-  const note = "A autorização foi confirmada pelo titular autenticado com um fator TOTP. Esta folha e a rubrica são evidências visuais e técnicas; não representam, por si só, assinatura digital ICP-Brasil, PAdES ou certificado qualificado.";
+  const note =
+    "A autorização foi confirmada pelo titular autenticado com um fator TOTP. Esta folha e a rubrica são evidências visuais e técnicas; não representam, por si só, assinatura digital ICP-Brasil, PAdES ou certificado qualificado.";
   const noteLines = wrapPdfText(note, 92);
   const noteTop = 306 - Math.max(0, hashLines.length - 1) * 12;
-  noteLines.forEach((line, index) => page.drawText(line, {
-    x: margin, y: noteTop - index * 13, size: 8, font, color: muted,
-  }));
-  page.drawLine({ start: { x: margin, y: 62 }, end: { x: pageWidth - margin, y: 62 }, thickness: 0.5, color: rgb(0.8, 0.82, 0.84) });
-  page.drawText("SoliciteJá · Registro demonstrativo de assinatura eletrônica", {
-    x: margin, y: 44, size: 7.5, font, color: muted,
+  noteLines.forEach((line, index) =>
+    page.drawText(line, {
+      x: margin,
+      y: noteTop - index * 13,
+      size: 8,
+      font,
+      color: muted,
+    }),
+  );
+  page.drawLine({
+    start: { x: margin, y: 62 },
+    end: { x: pageWidth - margin, y: 62 },
+    thickness: 0.5,
+    color: rgb(0.8, 0.82, 0.84),
+  });
+  page.drawText("SoliciteJá · Registro de assinatura eletrônica", {
+    x: margin,
+    y: 44,
+    size: 7.5,
+    font,
+    color: muted,
   });
   return new Uint8Array(await pdf.save({ useObjectStreams: false }));
 }
@@ -485,7 +610,8 @@ async function completeSignature(
   payload: Record<string, unknown>,
 ) {
   const signatureRequestId = String(payload.signatureRequestId || "");
-  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId)) throw new Error("Solicitação de assinatura inválida.");
+  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId))
+    throw new Error("Solicitação de assinatura inválida.");
 
   const { data: intent, error: intentError } = await admin
     .from("demo_signature_requests")
@@ -493,7 +619,12 @@ async function completeSignature(
     .eq("id", signatureRequestId)
     .eq("user_id", user.id)
     .maybeSingle();
-  if (intentError || !intent || intent.status !== "pending" || new Date(intent.expires_at).getTime() <= Date.now()) {
+  if (
+    intentError ||
+    !intent ||
+    intent.status !== "pending" ||
+    new Date(intent.expires_at).getTime() <= Date.now()
+  ) {
     throw new Error("A solicitação de assinatura expirou ou já foi utilizada. Inicie novamente.");
   }
 
@@ -504,17 +635,20 @@ async function completeSignature(
   const { data: originalBlob, error: originalError } = await admin.storage
     .from(SIGNATURE_BUCKET)
     .download(intent.original_storage_key);
-  if (originalError || !originalBlob) throw new Error("A versão original do PDF não está disponível.");
+  if (originalError || !originalBlob)
+    throw new Error("A versão original do PDF não está disponível.");
   const originalBytes = new Uint8Array(await originalBlob.arrayBuffer());
   const originalHash = await sha256(originalBytes);
-  if (originalHash !== intent.original_sha256) throw new Error("A integridade do PDF original não confere.");
+  if (originalHash !== intent.original_sha256)
+    throw new Error("A integridade do PDF original não confere.");
 
   const { data: signatureBlob, error: signatureError } = await admin.storage
     .from(SIGNATURE_BUCKET)
     .download(signature.storage_key);
-  if (signatureError || !signatureBlob) throw new Error("A imagem da assinatura cadastrada não está disponível.");
+  if (signatureError || !signatureBlob)
+    throw new Error("A imagem da assinatura cadastrada não está disponível.");
   const signatureBytes = new Uint8Array(await signatureBlob.arrayBuffer());
-  if (await sha256(signatureBytes) !== signature.signature_sha256) {
+  if ((await sha256(signatureBytes)) !== signature.signature_sha256) {
     throw new Error("A integridade da assinatura manuscrita não confere.");
   }
 
@@ -555,7 +689,9 @@ async function completeSignature(
   if (rpcError) {
     await admin.storage.from(REQUESTS_BUCKET).remove([signedStorageKey]);
     if (rpcError.message.includes("TOTP_STEP_ALREADY_USED")) {
-      throw new Error("Este código já foi utilizado. Aguarde o próximo código do aplicativo autenticador.");
+      throw new Error(
+        "Este código já foi utilizado. Aguarde o próximo código do aplicativo autenticador.",
+      );
     }
     throw new Error(rpcError.message || "Não foi possível concluir a assinatura.");
   }
@@ -569,7 +705,7 @@ Deno.serve(async (request) => {
 
   try {
     const user = await requireDemoUser(request);
-    const payload = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const action = String(payload.action || "");
 
     if (action === "status") {
@@ -599,8 +735,11 @@ Deno.serve(async (request) => {
 
     return errorResponse(new Error("Ação de assinatura não reconhecida."), 400);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro interno ao processar a assinatura.";
-    const status = /Sessão|autenticad|liberado somente|autorizado|corresponde/i.test(message) ? 403 : 400;
+    const message =
+      error instanceof Error ? error.message : "Erro interno ao processar a assinatura.";
+    const status = /Sessão|autenticad|liberado somente|autorizado|corresponde/i.test(message)
+      ? 403
+      : 400;
     return errorResponse(error, status);
   }
 });

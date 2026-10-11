@@ -243,7 +243,7 @@ export function DemoSignatureDialog({
 
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({
       factorType: "totp",
-      friendlyName: "Assinatura eletrônica — demonstração",
+      friendlyName: "Assinatura eletrônica",
     });
     if (enrollError) throw new Error(enrollError.message);
     if (!data?.id || !data.totp?.uri || !data.totp?.secret) {
@@ -390,8 +390,8 @@ export function DemoSignatureDialog({
             {dialogTitle}
           </DialogTitle>
           <DialogDescription>
-            Demonstração de assinatura eletrônica para o usuário de teste. A assinatura visual não
-            é, por si só, um certificado ICP-Brasil.
+            Cadastre sua assinatura eletrônica. A assinatura visual não substitui um certificado
+            ICP-Brasil.
           </DialogDescription>
         </DialogHeader>
 
@@ -414,7 +414,7 @@ export function DemoSignatureDialog({
               <CheckCircle2 className="h-4 w-4" />
               <AlertDescription>
                 Sua assinatura manuscrita está cadastrada e o autenticador TOTP está ativado para
-                esta conta de demonstração. O cadastro não assina nenhum documento.
+                sua conta. O cadastro não assina nenhum documento.
               </AlertDescription>
             </Alert>
             <DialogFooter>
@@ -584,7 +584,7 @@ export function DemoSignatureDialog({
                 ) : (
                   <ShieldCheck className="mr-2 h-4 w-4" />
                 )}
-                Assinar com autenticador
+                Assinar
               </Button>
             </DialogFooter>
           </div>
