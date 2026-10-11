@@ -1,5 +1,5 @@
 import { Download, Loader2, Printer, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -12,6 +12,8 @@ interface PdfDocumentViewerProps {
   loadingLabel?: string;
   error?: string | null;
   onBack: () => void;
+  footer?: ReactNode;
+  fitHeight?: boolean;
 }
 
 export function PdfDocumentViewer({
@@ -23,6 +25,8 @@ export function PdfDocumentViewer({
   loadingLabel = "Carregando documento...",
   error,
   onBack,
+  footer,
+  fitHeight = false,
 }: PdfDocumentViewerProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -101,12 +105,17 @@ export function PdfDocumentViewer({
             </div>
           ) : url ? (
             <iframe
-              src={`${url}#toolbar=1&navpanes=1&view=FitH`}
+              src={url}
               title={title}
-              className="h-full min-h-[520px] w-full border-0 bg-slate-200"
+              className={`h-full w-full border-0 bg-slate-200 ${fitHeight ? "min-h-0" : "min-h-[520px]"}`}
             />
           ) : null}
         </div>
+        {footer ? (
+          <footer className="shrink-0 border-t border-slate-200 bg-white p-3 sm:p-4">
+            {footer}
+          </footer>
+        ) : null}
       </Card>
     </div>
   );

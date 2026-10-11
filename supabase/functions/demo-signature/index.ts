@@ -476,6 +476,7 @@ async function createEvidencePdf(
     signedAt: string;
     originalHash: string;
     evidenceId: string;
+    preview?: boolean;
   },
 ) {
   const pdf = await PDFDocument.load(original, { updateMetadata: false });
@@ -488,20 +489,30 @@ async function createEvidencePdf(
   const black = rgb(0.12, 0.16, 0.2);
   const muted = rgb(0.35, 0.39, 0.44);
 
-  page.drawText("ASSINATURA ELETRÔNICA — EVIDÊNCIA DE AUTORIZAÇÃO", {
-    x: margin,
-    y: 780,
-    size: 14,
-    font: bold,
-    color: rgb(0.05, 0.35, 0.24),
-  });
-  page.drawText("Folha de evidências adicionada pelo sistema após autenticação do titular.", {
-    x: margin,
-    y: 754,
-    size: 9,
-    font,
-    color: muted,
-  });
+  page.drawText(
+    input.preview
+      ? "PRÉVIA DA ASSINATURA — NÃO CONFIRMADA"
+      : "ASSINATURA ELETRÔNICA — EVIDÊNCIA DE AUTORIZAÇÃO",
+    {
+      x: margin,
+      y: 780,
+      size: 14,
+      font: bold,
+      color: rgb(0.05, 0.35, 0.24),
+    },
+  );
+  page.drawText(
+    input.preview
+      ? "Esta prévia não finaliza a assinatura; confirme com TOTP para registrar o PDF."
+      : "Folha de evidências adicionada pelo sistema após autenticação do titular.",
+    {
+      x: margin,
+      y: 754,
+      size: 9,
+      font,
+      color: muted,
+    },
+  );
   page.drawText(`Documento: ${input.requestCode}`, {
     x: margin,
     y: 710,
@@ -542,21 +553,28 @@ async function createEvidencePdf(
     color: muted,
   });
   page.drawText(
-    `Autorização: ${new Intl.DateTimeFormat("pt-BR", {
-      dateStyle: "short",
-      timeStyle: "medium",
-      timeZone: "America/Fortaleza",
-      timeZoneName: "short",
-    }).format(new Date(input.signedAt))}`,
-    { x: margin, y: 430, size: 10, font, color: black },
+    input.preview
+      ? "Prévia para conferência — aguardando confirmação do Google Authenticator"
+      : `Autorização: ${new Intl.DateTimeFormat("pt-BR", {
+          dateStyle: "short",
+          timeStyle: "medium",
+          timeZone: "America/Fortaleza",
+          timeZoneName: "short",
+        }).format(new Date(input.signedAt))}`,
+    { x: margin, y: 430, size: input.preview ? 8 : 10, font, color: black },
   );
-  page.drawText(`Identificador da evidência: ${input.evidenceId}`, {
-    x: margin,
-    y: 409,
-    size: 8,
-    font,
-    color: black,
-  });
+  page.drawText(
+    input.preview
+      ? "Prévia — ainda não assinada"
+      : `Identificador da evidência: ${input.evidenceId}`,
+    {
+      x: margin,
+      y: 409,
+      size: 8,
+      font,
+      color: black,
+    },
+  );
   page.drawText("SHA-256 do PDF original apresentado:", {
     x: margin,
     y: 374,
@@ -575,8 +593,9 @@ async function createEvidencePdf(
     }),
   );
 
-  const note =
-    "A autorização foi confirmada pelo titular autenticado com um fator TOTP. Esta folha e a rubrica são evidências visuais e técnicas; não representam, por si só, assinatura digital ICP-Brasil, PAdES ou certificado qualificado.";
+  const note = input.preview
+    ? "Prévia para revisão do titular. Nenhuma assinatura foi concluída; o registro só será finalizado após a confirmação com o Google Authenticator."
+    : "A autorização foi confirmada pelo titular autenticado com um fator TOTP. Esta folha e a rubrica são evidências visuais e técnicas; não representam, por si só, assinatura digital ICP-Brasil, PAdES ou certificado qualificado.";
   const noteLines = wrapPdfText(note, 92);
   const noteTop = 306 - Math.max(0, hashLines.length - 1) * 12;
   noteLines.forEach((line, index) =>
@@ -602,6 +621,160 @@ async function createEvidencePdf(
     color: muted,
   });
   return new Uint8Array(await pdf.save({ useObjectStreams: false }));
+}
+
+async function previewSignature(user: AuthenticatedDemoUser, payload: Record<string, unknown>) {
+  const signatureRequestId = String(payload.signatureRequestId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId)) {
+    throw new Error("Solicitação de assinatura inválida.");
+  }
+
+  const { data: intent, error: intentError } = await admin
+    .from("demo_signature_requests")
+    .select("*")
+    .eq("id", signatureRequestId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (
+    intentError ||
+    !intent ||
+    intent.status !== "pending" ||
+    new Date(intent.expires_at).getTime() <= Date.now()
+  ) {
+    throw new Error("A solicitação expirou. Reabra o documento para continuar.");
+  }
+
+  const signature = await getVerifiedSignature(user.id);
+  if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
+
+  const { data: originalBlob, error: originalError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(intent.original_storage_key);
+  if (originalError || !originalBlob) throw new Error("O PDF original não está disponível.");
+  const originalBytes = new Uint8Array(await originalBlob.arrayBuffer());
+  const originalHash = await sha256(originalBytes);
+  if (originalHash !== intent.original_sha256) {
+    throw new Error("A integridade do PDF original não confere.");
+  }
+
+  const { data: signatureBlob, error: signatureError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(signature.storage_key);
+  if (signatureError || !signatureBlob) {
+    throw new Error("A imagem da assinatura cadastrada não está disponível.");
+  }
+  const signatureBytes = new Uint8Array(await signatureBlob.arrayBuffer());
+  if ((await sha256(signatureBytes)) !== signature.signature_sha256) {
+    throw new Error("A integridade da assinatura manuscrita não confere.");
+  }
+
+  const document = await getRequestForDemo(intent.requisicao_id, user);
+  const expectedStage = isPendingStage(document.status);
+  const currentVersion = `${document.updated_at || document.created_at}/${originalHash}`;
+  if (
+    !expectedStage ||
+    expectedStage !== intent.document_stage ||
+    currentVersion !== intent.document_version
+  ) {
+    throw new Error("O documento mudou. Reabra a solicitação para conferir a versão atual.");
+  }
+
+  const previewBytes = await createEvidencePdf(originalBytes, signatureBytes, {
+    signerName: user.profile.nome,
+    requestId: document.id,
+    requestCode: getRequestCode(document),
+    signedAt: new Date().toISOString(),
+    originalHash,
+    evidenceId: signatureRequestId,
+    preview: true,
+  });
+  const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
+  const { error: uploadError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .upload(previewStorageKey, previewBytes, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+  if (uploadError) throw new Error("Não foi possível gerar a prévia do PDF assinado.");
+
+  const { data: signedPreview, error: signedUrlError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .createSignedUrl(previewStorageKey, 600);
+  if (signedUrlError || !signedPreview?.signedUrl) {
+    await admin.storage.from(SIGNATURE_BUCKET).remove([previewStorageKey]);
+    throw new Error("Não foi possível abrir a prévia privada do PDF.");
+  }
+  return {
+    ok: true,
+    preview_url: signedPreview.signedUrl,
+    expires_in: 600,
+  };
+}
+
+async function cancelSignature(
+  user: AuthenticatedDemoUser,
+  request: Request,
+  payload: Record<string, unknown>,
+) {
+  const signatureRequestId = String(payload.signatureRequestId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId)) {
+    throw new Error("Solicitação de assinatura inválida.");
+  }
+
+  const { data: intent, error: intentError } = await admin
+    .from("demo_signature_requests")
+    .select("id,requisicao_id,original_storage_key,status")
+    .eq("id", signatureRequestId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (intentError) throw new Error("Não foi possível cancelar a solicitação pendente.");
+  if (!intent || intent.status !== "pending") return { ok: true, cancelled: false };
+
+  const { error: updateError } = await admin
+    .from("demo_signature_requests")
+    .update({ status: "expired" })
+    .eq("id", signatureRequestId)
+    .eq("user_id", user.id)
+    .eq("status", "pending");
+  if (updateError) throw new Error("Não foi possível cancelar a solicitação pendente.");
+
+  const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
+  await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .remove([intent.original_storage_key, previewStorageKey]);
+  await recordAudit(
+    user,
+    "SIGN_CANCELLED",
+    request,
+    { document_id: intent.requisicao_id, reason: "user_cancelled_before_totp" },
+    signatureRequestId,
+  );
+  return { ok: true, cancelled: true };
+}
+
+async function cleanupExpiredIntents(userId: string) {
+  const { data: expired, error: queryError } = await admin
+    .from("demo_signature_requests")
+    .select("id,original_storage_key")
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .lt("expires_at", new Date().toISOString())
+    .limit(50);
+  if (queryError || !expired?.length) return;
+
+  const ids = expired.map((intent) => intent.id);
+  const { error: updateError } = await admin
+    .from("demo_signature_requests")
+    .update({ status: "expired" })
+    .in("id", ids)
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  const paths = expired.flatMap((intent) => [
+    intent.original_storage_key,
+    `previews/${userId}/${intent.id}.pdf`,
+  ]);
+  const { error: removeError } = await admin.storage.from(SIGNATURE_BUCKET).remove(paths);
+  if (updateError || removeError) console.warn("Falha ao limpar prévias expiradas de assinatura.");
 }
 
 async function completeSignature(
@@ -654,7 +827,12 @@ async function completeSignature(
 
   const document = await getRequestForDemo(intent.requisicao_id, user);
   const expectedStage = isPendingStage(document.status);
-  if (!expectedStage || expectedStage !== intent.document_stage) {
+  const currentVersion = `${document.updated_at || document.created_at}/${originalHash}`;
+  if (
+    !expectedStage ||
+    expectedStage !== intent.document_stage ||
+    currentVersion !== intent.document_version
+  ) {
     throw new Error("A etapa do documento mudou. Reabra a solicitação e confirme novamente.");
   }
   const signedAt = new Date().toISOString();
@@ -696,6 +874,9 @@ async function completeSignature(
     throw new Error(rpcError.message || "Não foi possível concluir a assinatura.");
   }
 
+  await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .remove([`previews/${user.id}/${signatureRequestId}.pdf`]);
   return completion;
 }
 
@@ -709,6 +890,7 @@ Deno.serve(async (request) => {
     const action = String(payload.action || "");
 
     if (action === "status") {
+      await cleanupExpiredIntents(user.id);
       const signature = await getVerifiedSignature(user.id);
       return jsonResponse({
         ok: true,
@@ -727,6 +909,14 @@ Deno.serve(async (request) => {
 
     if (action === "begin_signature") {
       return jsonResponse(await beginSignature(user, request, payload));
+    }
+
+    if (action === "preview_signature") {
+      return jsonResponse(await previewSignature(user, payload));
+    }
+
+    if (action === "cancel_signature") {
+      return jsonResponse(await cancelSignature(user, request, payload));
     }
 
     if (action === "complete_signature") {

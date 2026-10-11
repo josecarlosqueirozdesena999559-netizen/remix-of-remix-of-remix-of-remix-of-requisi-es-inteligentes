@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { PdfDocumentViewer } from "@/components/PdfDocumentViewer";
 
 interface DemoSignatureDialogProps {
   open: boolean;
@@ -24,7 +25,7 @@ interface DemoSignatureDialogProps {
   setupOnly?: boolean;
 }
 
-type Step = "loading" | "draw" | "enroll" | "review" | "code" | "complete";
+type Step = "loading" | "draw" | "enroll" | "review" | "preview" | "code" | "complete";
 
 function getFunctionError(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -79,9 +80,11 @@ export function DemoSignatureDialog({
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [code, setCode] = useState("");
   const [consent, setConsent] = useState(false);
+  const [previewConsent, setPreviewConsent] = useState(false);
   const [signatureRequestId, setSignatureRequestId] = useState("");
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [signedPreviewUrl, setSignedPreviewUrl] = useState("");
 
   useEffect(() => {
     if (!sourcePdf) {
@@ -99,8 +102,13 @@ export function DemoSignatureDialog({
     setError(null);
     setBusy(false);
     setConsent(false);
+    setPreviewConsent(false);
+    setSignatureSaved(false);
+    setTotpEnabled(false);
+    setFactorId("");
     setCode("");
     setSignatureRequestId("");
+    setSignedPreviewUrl("");
     setQrDataUrl("");
     setStep("loading");
 
@@ -119,11 +127,11 @@ export function DemoSignatureDialog({
         setStep(
           !status.signature_saved
             ? "draw"
-            : !hasTotp
-              ? "enroll"
-              : setupOnly
+            : setupOnly
+              ? hasTotp
                 ? "complete"
-                : "review",
+                : "enroll"
+              : "review",
         );
       } catch (loadError) {
         if (active) {
@@ -210,7 +218,8 @@ export function DemoSignatureDialog({
         signaturePng: canvas.toDataURL("image/png"),
       });
       setSignatureSaved(true);
-      await startEnrollment();
+      if (setupOnly) await startEnrollment();
+      else setStep("review");
     } catch (saveError) {
       setError(getFunctionError(saveError));
     } finally {
@@ -225,7 +234,7 @@ export function DemoSignatureDialog({
     if (verifiedFactor) {
       setFactorId(verifiedFactor.id);
       setTotpEnabled(true);
-      setStep(setupOnly ? "complete" : "review");
+      setStep(setupOnly ? "complete" : signatureRequestId ? "code" : "review");
       return;
     }
 
@@ -282,7 +291,7 @@ export function DemoSignatureDialog({
       setTotpEnabled(true);
       setCode("");
       setQrDataUrl("");
-      setStep(setupOnly ? "complete" : "review");
+      setStep(setupOnly ? "complete" : signatureRequestId ? "code" : "review");
     } catch (verifyError) {
       setError(getFunctionError(verifyError));
     } finally {
@@ -290,7 +299,7 @@ export function DemoSignatureDialog({
     }
   };
 
-  const requestSignatureCode = async () => {
+  const prepareSignedPreview = async () => {
     if (!sourcePdf) {
       setError("O PDF não está pronto para visualização e assinatura.");
       return;
@@ -300,29 +309,63 @@ export function DemoSignatureDialog({
       return;
     }
     if (!consent) {
-      setError("Marque a confirmação expressa antes de solicitar a assinatura.");
-      return;
-    }
-    if (!factorId || !totpEnabled) {
-      setError("Ative o Google Authenticator antes de assinar.");
+      setError("Confirme que deseja assinar este documento.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const base64 = await blobToBase64(sourcePdf);
-      const intent = await invokeDemoSignature({
-        action: "begin_signature",
-        requestId,
-        sourcePdfBase64: base64,
+      let intentId = signatureRequestId;
+      if (!intentId) {
+        const base64 = await blobToBase64(sourcePdf);
+        const intent = await invokeDemoSignature({
+          action: "begin_signature",
+          requestId,
+          sourcePdfBase64: base64,
+        });
+        intentId = String(intent.signature_request_id || "");
+        if (!intentId) throw new Error("Não foi possível iniciar a assinatura.");
+        setSignatureRequestId(intentId);
+      }
+      const preview = await invokeDemoSignature({
+        action: "preview_signature",
+        signatureRequestId: intentId,
       });
-      setSignatureRequestId(intent.signature_request_id);
+      if (typeof preview.preview_url !== "string") {
+        throw new Error("Não foi possível preparar a prévia assinada do PDF.");
+      }
+      setSignedPreviewUrl(preview.preview_url);
+      setPreviewConsent(false);
       setCode("");
-      setStep("code");
+      setStep("preview");
     } catch (beginError) {
       setError(getFunctionError(beginError));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const continueFromPreview = () => {
+    if (!previewConsent) {
+      setError("Confirme que revisou a prévia da assinatura.");
+      return;
+    }
+    setError(null);
+    setStep(totpEnabled && factorId ? "code" : "enroll");
+  };
+
+  const closeSigningFlow = () => {
+    if (busy) return;
+    const pendingRequestId = signatureRequestId;
+    setSignatureRequestId("");
+    setSignedPreviewUrl("");
+    setPreviewConsent(false);
+    onOpenChange(false);
+    if (pendingRequestId) {
+      void invokeDemoSignature({
+        action: "cancel_signature",
+        signatureRequestId: pendingRequestId,
+      }).catch(() => undefined);
     }
   };
 
@@ -345,6 +388,8 @@ export function DemoSignatureDialog({
         action: "complete_signature",
         signatureRequestId,
       });
+      setSignatureRequestId("");
+      setSignedPreviewUrl("");
       onCompleted({ status: result.status, signature_id: result.signature_id });
       onOpenChange(false);
     } catch (confirmError) {
@@ -367,215 +412,265 @@ export function DemoSignatureDialog({
               ? "Configuração concluída"
               : "Preparando assinatura";
 
+  const isPdfStage = step === "review" || step === "preview";
+
   return (
-    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="max-h-[94vh] w-[96vw] max-w-6xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-        </DialogHeader>
-
-        {error ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {step === "loading" ? (
-          <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Verificando...
-          </div>
-        ) : null}
-
-        {step === "complete" ? (
-          <div className="space-y-4">
-            <DialogFooter>
-              <Button type="button" onClick={() => onOpenChange(false)}>
-                Concluir
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : null}
-
-        {step === "draw" ? (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Desenhe sua assinatura no quadro abaixo.
-            </p>
-            <canvas
-              ref={canvasRef}
-              width={760}
-              height={250}
-              aria-label="Área para desenhar a assinatura manuscrita"
-              className="h-56 w-full touch-none rounded-lg border-2 border-dashed border-slate-300 bg-white"
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={stopDrawing}
-              onPointerCancel={stopDrawing}
-              onPointerLeave={stopDrawing}
-            />
-            <div className="flex flex-wrap justify-between gap-2">
-              <p className="text-xs text-muted-foreground">Confira o desenho antes de salvar.</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={clearCanvas}
-                disabled={busy}
-              >
-                <Trash2 className="mr-2 h-4 w-4" /> Apagar e redesenhar
-              </Button>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={busy}
-              >
-                Cancelar
-              </Button>
-              <Button type="button" onClick={() => void saveSignature()} disabled={busy}>
-                {busy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                )}
-                Salvar assinatura
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : null}
-
-        {step === "enroll" ? (
-          <form className="space-y-4" onSubmit={verifyEnrollment}>
-            <p className="text-sm text-muted-foreground">
-              No Google Authenticator, toque em + e escaneie o QR Code. Depois, informe o código de
-              seis dígitos.
-            </p>
-            {qrDataUrl ? (
-              <div className="flex flex-col items-center gap-3 rounded-lg border bg-white p-4">
-                <img src={qrDataUrl} alt="QR Code do Google Authenticator" className="h-60 w-60" />
+    <>
+      {open && step === "review" ? (
+        <PdfDocumentViewer
+          title={`Revise o documento ${documentCode}`}
+          subtitle="Etapa 1 de 3 · Leia o PDF e confirme que deseja assiná-lo."
+          url={previewUrl}
+          fileName={`${documentCode || "documento"}.pdf`}
+          loading={!previewUrl}
+          loadingLabel="Carregando documento..."
+          error={error}
+          onBack={closeSigningFlow}
+          fitHeight
+          footer={
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <label className="flex cursor-pointer items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(event) => setConsent(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-emerald-600"
+                />
+                <span>Li o PDF e quero assinar este documento.</span>
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={closeSigningFlow} disabled={busy}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void prepareSignedPreview()}
+                  disabled={busy || !previewUrl || !consent}
+                >
+                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Próximo
+                </Button>
               </div>
-            ) : (
-              <Alert>
-                <AlertDescription>
-                  Carregando configuração segura do autenticador...
-                </AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="demo-enroll-code">Código do Google Authenticator</Label>
-              <Input
-                id="demo-enroll-code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
-                required
-              />
             </div>
-            <DialogFooter>
-              <Button type="submit" disabled={busy || !qrDataUrl || code.length !== 6}>
-                {busy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                )}
-                Confirmar ativação
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : null}
+          }
+        />
+      ) : null}
 
-        {step === "review" ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border bg-slate-100 p-2">
-              {previewUrl ? (
-                <iframe
-                  src={previewUrl}
-                  title={`PDF ${documentCode} para assinatura`}
-                  className="h-[68vh] min-h-[430px] w-full rounded bg-white"
+      {open && step === "preview" ? (
+        <PdfDocumentViewer
+          title="Confira a assinatura no PDF"
+          subtitle="Etapa 2 de 3 · A rubrica aparece na folha de evidências ao final."
+          url={signedPreviewUrl}
+          fileName={`${documentCode || "documento"}-previa-assinatura.pdf`}
+          loading={!signedPreviewUrl}
+          loadingLabel="Preparando prévia da assinatura..."
+          error={error}
+          onBack={closeSigningFlow}
+          fitHeight
+          footer={
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <label className="flex cursor-pointer items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={previewConsent}
+                  onChange={(event) => setPreviewConsent(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-emerald-600"
                 />
-              ) : (
-                <p className="p-6 text-sm text-muted-foreground">
-                  Gerando pré-visualização do PDF…
-                </p>
-              )}
+                <span>Conferi a prévia da assinatura e quero continuar.</span>
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setError(null);
+                    setStep("review");
+                  }}
+                  disabled={busy}
+                >
+                  Voltar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={continueFromPreview}
+                  disabled={busy || !previewConsent}
+                >
+                  Próximo
+                </Button>
+              </div>
             </div>
-            <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm">
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={(event) => setConsent(event.target.checked)}
-                className="mt-1 h-4 w-4 accent-emerald-600"
-              />
-              <span>Revisei o PDF e autorizo a assinatura desta versão.</span>
-            </label>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void requestSignatureCode()}
-                disabled={busy || !sourcePdf || !consent}
-              >
-                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Assinar
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : null}
+          }
+        />
+      ) : null}
 
-        {step === "code" ? (
-          <form className="space-y-4" onSubmit={confirmSignature}>
-            <div className="rounded-lg border bg-slate-100 p-2">
-              {previewUrl ? (
-                <iframe
-                  src={previewUrl}
-                  title={`PDF ${documentCode} para assinatura`}
-                  className="h-[54vh] min-h-[350px] w-full rounded bg-white"
-                />
-              ) : (
-                <p className="p-6 text-sm text-muted-foreground">Carregando PDF…</p>
-              )}
+      <Dialog
+        open={open && !isPdfStage}
+        onOpenChange={(next) => {
+          if (!next) closeSigningFlow();
+        }}
+      >
+        <DialogContent className="max-h-[94vh] w-[96vw] max-w-md overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+          </DialogHeader>
+
+          {error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {step === "loading" ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Verificando...
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="demo-signature-code">Código do Google Authenticator</Label>
-              <Input
-                id="demo-signature-code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
-                required
-                autoFocus
+          ) : null}
+
+          {step === "complete" ? (
+            <div className="space-y-4">
+              <DialogFooter>
+                <Button type="button" onClick={() => onOpenChange(false)}>
+                  Concluir
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : null}
+
+          {step === "draw" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Desenhe sua assinatura no quadro abaixo.
+              </p>
+              <canvas
+                ref={canvasRef}
+                width={760}
+                height={250}
+                aria-label="Área para desenhar a assinatura manuscrita"
+                className="h-56 w-full touch-none rounded-lg border-2 border-dashed border-slate-300 bg-white"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={stopDrawing}
+                onPointerCancel={stopDrawing}
+                onPointerLeave={stopDrawing}
               />
+              <div className="flex flex-wrap justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Confira o desenho antes de salvar.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={clearCanvas}
+                  disabled={busy}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Apagar e redesenhar
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeSigningFlow} disabled={busy}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={() => void saveSignature()} disabled={busy}>
+                  {busy ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                  )}
+                  Salvar assinatura
+                </Button>
+              </DialogFooter>
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setStep("review")}
-                disabled={busy}
-              >
-                Voltar
-              </Button>
-              <Button type="submit" disabled={busy || code.length !== 6}>
-                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Confirmar assinatura
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+          ) : null}
+
+          {step === "enroll" ? (
+            <form className="space-y-4" onSubmit={verifyEnrollment}>
+              <p className="text-sm text-muted-foreground">
+                No Google Authenticator, toque em + e escaneie o QR Code. Depois, informe o código
+                de seis dígitos.
+              </p>
+              {qrDataUrl ? (
+                <div className="flex flex-col items-center gap-3 rounded-lg border bg-white p-4">
+                  <img
+                    src={qrDataUrl}
+                    alt="QR Code do Google Authenticator"
+                    className="h-60 w-60"
+                  />
+                </div>
+              ) : (
+                <Alert>
+                  <AlertDescription>
+                    Carregando configuração segura do autenticador...
+                  </AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="demo-enroll-code">Código do Google Authenticator</Label>
+                <Input
+                  id="demo-enroll-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  required
+                />
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={busy || !qrDataUrl || code.length !== 6}>
+                  {busy ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                  )}
+                  Confirmar ativação
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+
+          {step === "code" ? (
+            <form className="space-y-4" onSubmit={confirmSignature}>
+              <p className="text-sm text-muted-foreground">
+                Etapa 3 de 3 · Digite o código atual do Google Authenticator para concluir.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="demo-signature-code">Código do Google Authenticator</Label>
+                <Input
+                  id="demo-signature-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                  required
+                  autoFocus
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setError(null);
+                    setStep("preview");
+                  }}
+                  disabled={busy}
+                >
+                  Voltar
+                </Button>
+                <Button type="submit" disabled={busy || code.length !== 6}>
+                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Confirmar assinatura
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
