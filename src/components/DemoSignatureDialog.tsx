@@ -18,14 +18,15 @@ import { supabase } from "@/integrations/supabase/client";
 interface DemoSignatureDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  requestId: string;
-  documentCode: string;
-  documentStage: "request" | "output";
-  sourcePdf: Blob | null;
-  onCompleted: (result: { status?: string; signature_id?: string }) => void;
+  requestId?: string;
+  documentCode?: string;
+  documentStage?: "request" | "output";
+  sourcePdf?: Blob | null;
+  onCompleted?: (result: { status?: string; signature_id?: string }) => void;
+  setupOnly?: boolean;
 }
 
-type Step = "loading" | "draw" | "enroll" | "review" | "code";
+type Step = "loading" | "draw" | "enroll" | "review" | "code" | "complete";
 
 function getFunctionError(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -64,10 +65,11 @@ export function DemoSignatureDialog({
   open,
   onOpenChange,
   requestId,
-  documentCode,
-  documentStage,
-  sourcePdf,
-  onCompleted,
+  documentCode = "",
+  documentStage = "request",
+  sourcePdf = null,
+  onCompleted = () => undefined,
+  setupOnly = false,
 }: DemoSignatureDialogProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
@@ -121,7 +123,15 @@ export function DemoSignatureDialog({
         if (verifiedFactor) setFactorId(verifiedFactor.id);
         const hasTotp = Boolean(verifiedFactor);
         setTotpEnabled(hasTotp);
-        setStep(!status.signature_saved ? "draw" : !hasTotp ? "enroll" : "review");
+        setStep(
+          !status.signature_saved
+            ? "draw"
+            : !hasTotp
+              ? "enroll"
+              : setupOnly
+                ? "complete"
+                : "review",
+        );
       } catch (loadError) {
         if (active) {
           setError(getFunctionError(loadError));
@@ -134,7 +144,7 @@ export function DemoSignatureDialog({
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, setupOnly]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -222,7 +232,7 @@ export function DemoSignatureDialog({
     if (verifiedFactor) {
       setFactorId(verifiedFactor.id);
       setTotpEnabled(true);
-      setStep("review");
+      setStep(setupOnly ? "complete" : "review");
       return;
     }
 
@@ -260,7 +270,7 @@ export function DemoSignatureDialog({
     return () => {
       active = false;
     };
-  }, [open, step, signatureSaved, totpEnabled, qrDataUrl, factorId]);
+  }, [open, step, signatureSaved, totpEnabled, qrDataUrl, factorId, setupOnly]);
 
   const verifyEnrollment = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -281,7 +291,7 @@ export function DemoSignatureDialog({
       setCode("");
       setQrDataUrl("");
       setManualSecret("");
-      setStep("review");
+      setStep(setupOnly ? "complete" : "review");
     } catch (verifyError) {
       setError(getFunctionError(verifyError));
     } finally {
@@ -292,6 +302,10 @@ export function DemoSignatureDialog({
   const requestSignatureCode = async () => {
     if (!sourcePdf) {
       setError("O PDF não está pronto para visualização e assinatura.");
+      return;
+    }
+    if (!requestId) {
+      setError("A solicitação de assinatura não foi identificada. Feche e tente novamente.");
       return;
     }
     if (!consent) {
@@ -359,7 +373,9 @@ export function DemoSignatureDialog({
           ? "Confirme sua identidade"
           : step === "review"
             ? "Revise e assine o documento"
-            : "Preparando assinatura";
+            : step === "complete"
+              ? "Configuração concluída"
+              : "Preparando assinatura";
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
@@ -389,6 +405,23 @@ export function DemoSignatureDialog({
         {step === "loading" ? (
           <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Verificando cadastro e segundo fator...
+          </div>
+        ) : null}
+
+        {step === "complete" ? (
+          <div className="space-y-4">
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                Sua assinatura manuscrita está cadastrada e o autenticador TOTP está ativado para
+                esta conta de demonstração. O cadastro não assina nenhum documento.
+              </AlertDescription>
+            </Alert>
+            <DialogFooter>
+              <Button type="button" onClick={() => onOpenChange(false)}>
+                Concluir
+              </Button>
+            </DialogFooter>
           </div>
         ) : null}
 

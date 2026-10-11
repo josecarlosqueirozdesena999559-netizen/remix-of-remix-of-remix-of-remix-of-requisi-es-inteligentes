@@ -208,6 +208,7 @@ function MinhasAssinaturasPage() {
   const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [demoSignatureEnabled, setDemoSignatureEnabled] = useState(false);
+  const [demoSignatureSetupOpen, setDemoSignatureSetupOpen] = useState(false);
   const [demoSignatureDocument, setDemoSignatureDocument] = useState<{
     requestId: string;
     documentCode: string;
@@ -726,9 +727,22 @@ function MinhasAssinaturasPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Usuário / Assinaturas</p>
-        <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Usuário / Assinaturas</p>
+          <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>
+        </div>
+        {demoSignatureEnabled ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 rounded-xl border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+            onClick={() => setDemoSignatureSetupOpen(true)}
+          >
+            <PenLine className="h-4 w-4" />
+            Cadastrar assinatura eletrônica
+          </Button>
+        ) : null}
       </div>
 
       {message && (
@@ -1015,6 +1029,13 @@ function MinhasAssinaturasPage() {
               console.error("Erro ao notificar WhatsApp:", notificationError),
             );
           }}
+        />
+      ) : null}
+      {demoSignatureSetupOpen ? (
+        <DemoSignatureDialog
+          open={demoSignatureSetupOpen}
+          onOpenChange={setDemoSignatureSetupOpen}
+          setupOnly
         />
       ) : null}
     </div>
