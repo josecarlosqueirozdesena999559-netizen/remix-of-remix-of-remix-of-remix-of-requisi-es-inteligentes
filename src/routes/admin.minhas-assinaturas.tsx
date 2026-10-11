@@ -998,13 +998,11 @@ function MinhasAssinaturasPage() {
           requestId={demoSignatureDocument.requestId}
           documentCode={demoSignatureDocument.documentCode}
           sourcePdf={demoSignatureDocument.sourcePdf}
-          onCompleted={(result) => {
+          onCompleted={() => {
             const signedRequestId = demoSignatureDocument.requestId;
             setDemoSignatureDocument(null);
             setRequests((current) => current.filter((item) => item.id !== signedRequestId));
-            setMessage(
-              `Assinatura eletrônica registrada (${result.signature_id || "ID indisponível"}). O PDF assinado é uma evidência visual/técnica, não uma assinatura ICP-Brasil.`,
-            );
+            setMessage("Assinatura realizada com sucesso.");
             void notifyRequestByWhatsApp({
               requestId: signedRequestId,
               notificationType: "requestSigned",

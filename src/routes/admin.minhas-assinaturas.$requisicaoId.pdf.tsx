@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { PdfDocumentViewer } from "@/components/PdfDocumentViewer";
 import {
   getAttachmentFiles,
+  getOutputSignedAttachments,
   getRequestSignedAttachment,
   resolveAttachmentUrl,
   type AttachmentFile,
@@ -96,6 +97,48 @@ function MinhaAssinaturaPdfPage() {
             setLoading(false);
             return;
           }
+        }
+
+        const signedOutputAttachment =
+          request.status === "concluido"
+            ? getOutputSignedAttachments(request.signed_attachment, request.status).at(-1)
+            : null;
+        const signedRequestAttachment =
+          request.status === "recebido" || request.status === "concluido"
+            ? getRequestSignedAttachment(request.signed_attachment, request.status)
+            : null;
+        const finalizedAttachment = signedOutputAttachment || signedRequestAttachment;
+
+        if (finalizedAttachment) {
+          const signedUrl = await resolveAttachmentUrl(finalizedAttachment);
+
+          if (!signedUrl) {
+            setError("Não foi possível abrir o PDF assinado. Tente novamente.");
+            setLoading(false);
+            return;
+          }
+
+          const signedOutput = Boolean(signedOutputAttachment);
+          const code = request.saida_codigo?.trim();
+          setPdf({
+            title: signedOutput
+              ? code
+                ? `Saída ${code} assinada`
+                : "Documento de saída assinado"
+              : code
+                ? `Requisição ${code} assinada`
+                : "Requisição assinada",
+            fileName: signedOutput
+              ? code
+                ? `Saida_${code}_assinada.pdf`
+                : "Saida_assinada.pdf"
+              : code
+                ? getRequestFileName(`${code}_assinada`)
+                : "Requisicao_assinada.pdf",
+            url: signedUrl,
+          });
+          setLoading(false);
+          return;
         }
 
         const code =
