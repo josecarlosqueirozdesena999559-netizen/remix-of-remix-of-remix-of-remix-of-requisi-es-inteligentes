@@ -453,81 +453,87 @@ async function createEvidencePdf(
   original: Uint8Array,
   signaturePng: Uint8Array,
   input: {
-    signerName: string;
-    requestCode: string;
     signedAt: string;
     preview?: boolean;
   },
 ) {
   const pdf = await PDFDocument.load(original, { updateMetadata: false });
   const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const image = await pdf.embedPng(signaturePng);
-  const page = pdf.addPage([595.28, 841.89]);
-  const pageWidth = page.getWidth();
-  const ink = rgb(0.12, 0.16, 0.2);
-  const muted = rgb(0.4, 0.43, 0.47);
-  const title = input.preview ? "Prévia de assinatura" : "Assinatura";
-  page.drawText(title, {
-    x: 72,
-    y: 748,
-    size: 18,
-    font: bold,
-    color: ink,
-  });
-  page.drawText(`Documento ${input.requestCode}`, {
-    x: 72,
-    y: 718,
-    size: 11,
-    font,
-    color: muted,
-  });
-  if (input.preview) {
-    page.drawText("Aguardando confirmação", {
-      x: 72,
-      y: 692,
-      size: 10,
-      font,
-      color: muted,
-    });
+  const pages = pdf.getPages();
+  const page = pages[pages.length - 1];
+  if (!page) throw new Error("O PDF não contém páginas para assinatura.");
+
+  // Alinha com o bloco do solicitante em src/lib/request-pdf.ts (A4, retrato).
+  // O campo GOV.BR é apagado e substituído pela assinatura; a página não é ampliada.
+  const mmToPt = 72 / 25.4;
+  const pageSize = page.getSize();
+  const expectedWidth = 210 * mmToPt;
+  const expectedHeight = 297 * mmToPt;
+  if (
+    Math.abs(pageSize.width - expectedWidth) > 2 ||
+    Math.abs(pageSize.height - expectedHeight) > 2
+  ) {
+    throw new Error("Este documento não usa o formato A4 esperado para o campo de assinatura.");
   }
 
-  const imageBox = { x: (pageWidth - 360) / 2, y: 570, width: 360, height: 110 };
+  const pageWidth = page.getWidth();
+  const signatureCenterX = 54 * mmToPt;
+  const signatureBlockTop = 241;
+  const signatureLineY = pageSize.height - (signatureBlockTop + 16) * mmToPt;
+  const govBoxX = 16 * mmToPt;
+  const govBoxY = pageSize.height - (signatureBlockTop + 12) * mmToPt;
+  const govBoxWidth = 76 * mmToPt;
+  const govBoxHeight = 12 * mmToPt;
+
+  // Remove o quadro e seus dizeres GOV.BR, sem encobrir a linha nem os dados abaixo.
+  page.drawRectangle({
+    x: govBoxX - 1.2,
+    y: govBoxY - 1,
+    width: govBoxWidth + 2.4,
+    height: govBoxHeight + 2,
+    color: rgb(1, 1, 1),
+  });
+
+  const imageBox = { width: 72 * mmToPt, height: 17 * mmToPt };
   const imageSize = image.scaleToFit(imageBox.width, imageBox.height);
   page.drawImage(image, {
-    x: imageBox.x + (imageBox.width - imageSize.width) / 2,
-    y: 626 - imageSize.height / 2,
+    x: signatureCenterX - imageSize.width / 2,
+    y: signatureLineY,
     width: imageSize.width,
     height: imageSize.height,
   });
+
+  // Reforça a linha existente do campo de assinatura para a rubrica ficar bem apoiada.
   page.drawLine({
-    start: { x: imageBox.x, y: 626 },
-    end: { x: imageBox.x + imageBox.width, y: 626 },
-    thickness: 0.8,
-    color: ink,
+    start: { x: signatureCenterX - 40 * mmToPt, y: signatureLineY },
+    end: { x: signatureCenterX + 40 * mmToPt, y: signatureLineY },
+    thickness: 0.7,
+    color: rgb(0.35, 0.35, 0.35),
   });
-  page.drawText(input.signerName, {
-    x: imageBox.x,
-    y: 601,
-    size: 11,
-    font: bold,
-    color: ink,
-  });
-  const dateTime = input.preview
-    ? "Data e hora após a confirmação"
-    : new Intl.DateTimeFormat("pt-BR", {
-        dateStyle: "long",
-        timeStyle: "medium",
-        timeZone: "America/Fortaleza",
-        timeZoneName: "short",
-      }).format(new Date(input.signedAt));
-  page.drawText(dateTime, {
-    x: imageBox.x,
-    y: 578,
-    size: 10,
-    font,
-    color: muted,
-  });
+
+  if (!input.preview) {
+    const dateTime = `Assinado em ${new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "long",
+      timeStyle: "medium",
+      timeZone: "America/Fortaleza",
+      timeZoneName: "short",
+    }).format(new Date(input.signedAt))}`;
+    const dateFontSize = 7;
+    const dateWidth = font.widthOfTextAtSize(dateTime, dateFontSize);
+    const dateY = pageSize.height - (signatureBlockTop + 33) * mmToPt;
+    page.drawText(dateTime, {
+      x: Math.max(
+        14 * mmToPt,
+        Math.min(signatureCenterX - dateWidth / 2, pageWidth - 14 * mmToPt - dateWidth),
+      ),
+      y: dateY,
+      size: dateFontSize,
+      font,
+      color: rgb(0.4, 0.43, 0.47),
+    });
+  }
+
   return new Uint8Array(await pdf.save({ useObjectStreams: false }));
 }
 
@@ -588,8 +594,6 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
   }
 
   const previewBytes = await createEvidencePdf(originalBytes, signatureBytes, {
-    signerName: user.profile.nome,
-    requestCode: getRequestCode(document),
     signedAt: new Date().toISOString(),
     preview: true,
   });
@@ -742,8 +746,6 @@ async function completeSignature(
   }
   const signedAt = new Date().toISOString();
   const signedBytes = await createEvidencePdf(originalBytes, signatureBytes, {
-    signerName: user.profile.nome,
-    requestCode: getRequestCode(document),
     signedAt,
   });
   const finalHash = await sha256(signedBytes);
