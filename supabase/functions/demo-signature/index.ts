@@ -2,6 +2,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import { createRequestPdfBlob, type RequestPdfItem } from "./request-pdf.ts";
 import { PDF_LOGO_DATA_URL } from "./pdf-assets.ts";
+import {
+  generateSixDigitOtp,
+  hashSignatureOtp,
+  maskWhatsAppPhoneNumber,
+  normalizeWhatsAppPhoneNumber,
+  sendWhatsAppAuthenticationOtp,
+  SIGNATURE_OTP_TEMPLATE_NAME,
+  SIGNATURE_OTP_TTL_SECONDS,
+} from "./whatsapp-otp.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -36,6 +45,7 @@ type AuthenticatedDemoUser = {
     setor: string | null;
     unidade_nome: string | null;
     cpf: string | null;
+    whatsapp: string | null;
     is_admin: boolean;
   };
   claims: Record<string, unknown>;
@@ -117,7 +127,7 @@ async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser>
 
   const { data: profile, error: profileError } = await admin
     .from("usuarios")
-    .select("id,auth_user_id,email,nome,usuario,setor,unidade_nome,cpf,is_admin")
+    .select("id,auth_user_id,email,nome,usuario,setor,unidade_nome,cpf,whatsapp,is_admin")
     .eq("id", DEMO_PROFILE_ID)
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
@@ -136,38 +146,6 @@ async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser>
     profile,
     claims: decodeJwtClaims(token),
     token,
-  };
-}
-
-function requireFreshTotp(user: AuthenticatedDemoUser, createdAt?: string) {
-  const claims = user.claims;
-  if (claims.aal !== "aal2") throw new Error("Confirme sua identidade com o Google Authenticator.");
-
-  const amr = Array.isArray(claims.amr) ? claims.amr : [];
-  const totpEntries = amr
-    .filter((entry) => entry && typeof entry === "object")
-    .filter((entry) => (entry as Record<string, unknown>).method === "totp") as Array<{
-    method: string;
-    timestamp?: number;
-  }>;
-  const latestTotp = totpEntries
-    .map((entry) => Number(entry.timestamp || 0))
-    .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0)
-    .sort((left, right) => right - left)[0];
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  if (!latestTotp || latestTotp > nowSeconds + 30 || nowSeconds - latestTotp > 120) {
-    throw new Error(
-      "Faça uma nova confirmação pelo Google Authenticator para assinar este documento.",
-    );
-  }
-  if (createdAt && latestTotp * 1000 < new Date(createdAt).getTime() - 5000) {
-    throw new Error(
-      "O código foi confirmado antes desta solicitação. Gere um novo código e tente novamente.",
-    );
-  }
-  return {
-    verifiedAt: new Date(latestTotp * 1000).toISOString(),
-    step: Math.floor(latestTotp / 30),
   };
 }
 
@@ -337,11 +315,11 @@ async function recordAudit(
 const SIGNATURE_ACTION_RATE_LIMITS: Record<string, { limit: number; windowSeconds: number }> = {
   status: { limit: 30, windowSeconds: 60 },
   save_signature: { limit: 3, windowSeconds: 300 },
-  totp_enabled: { limit: 5, windowSeconds: 300 },
   begin_signature: { limit: 5, windowSeconds: 60 },
   preview_signature: { limit: 10, windowSeconds: 60 },
   confirm_preview: { limit: 10, windowSeconds: 60 },
   cancel_signature: { limit: 10, windowSeconds: 60 },
+  send_signature_otp: { limit: 3, windowSeconds: 300 },
   complete_signature: { limit: 5, windowSeconds: 300 },
 };
 
@@ -378,7 +356,12 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
   const signatureHash = await sha256(png);
   const storageKey = `signatures/${user.id}/signature.png`;
   const existing = await getVerifiedSignature(user.id);
-  if (existing) requireFreshTotp(user);
+  if (existing) {
+    if (existing.signature_sha256 === signatureHash) {
+      return { ok: true, signature_saved: true };
+    }
+    throw new Error("Sua assinatura já está cadastrada. Solicite ao administrador a alteração.");
+  }
 
   const { error: uploadError } = await admin.storage
     .from(SIGNATURE_BUCKET)
@@ -391,7 +374,7 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
       profile_id: DEMO_PROFILE_ID,
       storage_key: storageKey,
       signature_sha256: signatureHash,
-      last_accepted_step: existing?.last_accepted_step ?? 0,
+      last_accepted_step: 0,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },
@@ -402,20 +385,154 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
   return { ok: true, signature_saved: true, signature_sha256: signatureHash };
 }
 
-async function recordTotpEnabled(user: AuthenticatedDemoUser, request: Request) {
-  const totp = requireFreshTotp(user);
-  const { error: stepError } = await admin
-    .from("demo_user_signatures")
-    .update({ last_accepted_step: totp.step, updated_at: new Date().toISOString() })
+async function getWhatsAppOtpConfig() {
+  const { data, error } = await admin
+    .from("app_settings")
+    .select("key,value")
+    .in("key", ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_GRAPH_API_VERSION"]);
+  if (error) throw new Error("Não foi possível carregar a configuração do WhatsApp.");
+
+  const settings = new Map(
+    ((data ?? []) as Array<{ key: string; value: string }>).map((setting) => [
+      setting.key,
+      setting.value,
+    ]),
+  );
+  const accessToken =
+    settings.get("WHATSAPP_ACCESS_TOKEN")?.trim() || Deno.env.get("WHATSAPP_ACCESS_TOKEN")?.trim();
+  const phoneNumberId =
+    settings.get("WHATSAPP_PHONE_NUMBER_ID")?.trim() ||
+    Deno.env.get("WHATSAPP_PHONE_NUMBER_ID")?.trim();
+  const graphApiVersion =
+    settings.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
+    Deno.env.get("WHATSAPP_GRAPH_API_VERSION")?.trim() ||
+    "v25.0";
+  if (!accessToken || !phoneNumberId) {
+    throw new Error("O envio por WhatsApp não está configurado.");
+  }
+  return { accessToken, phoneNumberId, graphApiVersion };
+}
+
+async function sendSignatureOtp(
+  user: AuthenticatedDemoUser,
+  request: Request,
+  payload: Record<string, unknown>,
+) {
+  const signatureRequestId = String(payload.signatureRequestId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(signatureRequestId)) {
+    throw new Error("Solicitação de assinatura inválida.");
+  }
+  const { data: intent, error: intentError } = await admin
+    .from("demo_signature_requests")
+    .select(
+      "id,requisicao_id,document_stage,document_version,original_sha256,status,expires_at,preview_sha256,preview_reviewed_at",
+    )
+    .eq("id", signatureRequestId)
     .eq("user_id", user.id)
-    .eq("profile_id", DEMO_PROFILE_ID)
-    .lt("last_accepted_step", totp.step);
-  if (stepError) throw new Error("Não foi possível registrar a ativação do autenticador.");
-  await recordAudit(user, "TOTP_ENABLED", request, {
-    method: "totp",
-    verified_at: totp.verifiedAt,
-  });
-  return { ok: true, totp_enabled: true };
+    .maybeSingle();
+  if (
+    intentError ||
+    !intent ||
+    intent.status !== "pending" ||
+    new Date(intent.expires_at).getTime() <= Date.now()
+  ) {
+    throw new Error("A solicitação expirou. Reabra o documento para continuar.");
+  }
+  if (!intent.preview_reviewed_at || !/^[0-9a-f]{64}$/.test(intent.preview_sha256 || "")) {
+    throw new Error("Confira e confirme a prévia do PDF antes de solicitar o código.");
+  }
+
+  const document = await getRequestForDemo(intent.requisicao_id, user);
+  const expectedStage = isPendingStage(document.status);
+  const currentVersion = `${document.updated_at || document.created_at}/${intent.original_sha256}`;
+  if (
+    !expectedStage ||
+    expectedStage !== intent.document_stage ||
+    currentVersion !== intent.document_version
+  ) {
+    throw new Error("O documento mudou. Reabra a solicitação para conferir a versão atual.");
+  }
+
+  const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
+  const { data: previewBlob, error: previewError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .download(previewStorageKey);
+  if (previewError || !previewBlob) throw new Error("A prévia confirmada não está disponível.");
+  const previewHash = await sha256(new Uint8Array(await previewBlob.arrayBuffer()));
+  if (previewHash !== intent.preview_sha256) {
+    throw new Error("A integridade da prévia não confere. Gere e confirme novamente.");
+  }
+
+  const profilePhone = user.profile.whatsapp?.trim();
+  if (!profilePhone) throw new Error("Cadastre um WhatsApp no perfil do usuário antes de assinar.");
+  const recipient = normalizeWhatsAppPhoneNumber(profilePhone);
+  const phoneHint = maskWhatsAppPhoneNumber(recipient);
+  const code = generateSixDigitOtp();
+  const otpHash = await hashSignatureOtp(
+    SUPABASE_SERVICE_ROLE_KEY,
+    user.id,
+    signatureRequestId,
+    intent.preview_sha256,
+    code,
+  );
+  const sentAt = new Date();
+  const expiresAt = new Date(sentAt.getTime() + SIGNATURE_OTP_TTL_SECONDS * 1000);
+  const { error: otpSaveError } = await admin.from("demo_signature_otps").upsert(
+    {
+      signature_request_id: signatureRequestId,
+      user_id: user.id,
+      preview_sha256: intent.preview_sha256,
+      otp_hash: otpHash,
+      attempt_count: 0,
+      sent_at: sentAt.toISOString(),
+      expires_at: expiresAt.toISOString(),
+      verified_at: null,
+      consumed_at: null,
+      created_at: sentAt.toISOString(),
+    },
+    { onConflict: "signature_request_id" },
+  );
+  if (otpSaveError) throw new Error("Não foi possível preparar o código da assinatura.");
+
+  try {
+    const config = await getWhatsAppOtpConfig();
+    await sendWhatsAppAuthenticationOtp(config, recipient, code);
+  } catch (sendError) {
+    await admin
+      .from("demo_signature_otps")
+      .update({ otp_hash: null, attempt_count: 5 })
+      .eq("signature_request_id", signatureRequestId)
+      .eq("user_id", user.id);
+    await recordAudit(
+      user,
+      "WHATSAPP_OTP_FAILED",
+      request,
+      { stage: "send", template: SIGNATURE_OTP_TEMPLATE_NAME },
+      signatureRequestId,
+    );
+    throw sendError;
+  }
+
+  await recordAudit(
+    user,
+    "WHATSAPP_OTP_SENT",
+    request,
+    {
+      channel: "whatsapp",
+      template: SIGNATURE_OTP_TEMPLATE_NAME,
+      phone_hint: phoneHint,
+      preview_sha256: intent.preview_sha256,
+      expires_at: expiresAt.toISOString(),
+    },
+    signatureRequestId,
+  );
+  return {
+    ok: true,
+    otp_sent: true,
+    phone_hint: phoneHint,
+    expires_at: expiresAt.toISOString(),
+    valid_for_seconds: SIGNATURE_OTP_TTL_SECONDS,
+  };
 }
 
 async function beginSignature(
@@ -800,15 +917,24 @@ async function cancelSignature(
     .eq("status", "pending");
   if (updateError) throw new Error("Não foi possível cancelar a solicitação pendente.");
 
+  const { error: otpInvalidateError } = await admin
+    .from("demo_signature_otps")
+    .update({ otp_hash: null })
+    .eq("signature_request_id", signatureRequestId)
+    .eq("user_id", user.id)
+    .is("consumed_at", null);
   const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
   await admin.storage
     .from(SIGNATURE_BUCKET)
     .remove([intent.original_storage_key, previewStorageKey]);
+  if (otpInvalidateError) {
+    console.error("signature_otp_invalidation_failed", { signatureRequestId });
+  }
   await recordAudit(
     user,
     "SIGN_CANCELLED",
     request,
-    { document_id: intent.requisicao_id, reason: "user_cancelled_before_totp" },
+    { document_id: intent.requisicao_id, reason: "user_cancelled" },
     signatureRequestId,
   );
   return { ok: true, cancelled: true };
@@ -831,12 +957,19 @@ async function cleanupExpiredIntents(userId: string) {
     .in("id", ids)
     .eq("user_id", userId)
     .eq("status", "pending");
+  const { error: otpInvalidateError } = await admin
+    .from("demo_signature_otps")
+    .update({ otp_hash: null })
+    .in("signature_request_id", ids)
+    .is("consumed_at", null);
   const paths = expired.flatMap((intent) => [
     intent.original_storage_key,
     `previews/${userId}/${intent.id}.pdf`,
   ]);
   const { error: removeError } = await admin.storage.from(SIGNATURE_BUCKET).remove(paths);
-  if (updateError || removeError) console.warn("Falha ao limpar prévias expiradas de assinatura.");
+  if (updateError || removeError || otpInvalidateError) {
+    console.warn("Falha ao limpar artefatos expirados de assinatura.");
+  }
 }
 
 async function completeSignature(
@@ -878,7 +1011,40 @@ async function completeSignature(
     throw new Error("A prévia foi alterada. Gere e confirme a versão atual novamente.");
   }
 
-  const totp = requireFreshTotp(user, intent.created_at);
+  const code = String(payload.code || "").trim();
+  if (!/^\d{6}$/.test(code))
+    throw new Error("Digite o código de seis dígitos recebido no WhatsApp.");
+  const otpHash = await hashSignatureOtp(
+    SUPABASE_SERVICE_ROLE_KEY,
+    user.id,
+    signatureRequestId,
+    intent.preview_sha256,
+    code,
+  );
+  const { data: otpVerification, error: otpVerificationError } = await admin.rpc(
+    "verify_demo_signature_otp",
+    {
+      p_signature_request_id: signatureRequestId,
+      p_user_id: user.id,
+      p_preview_sha256: intent.preview_sha256,
+      p_otp_hash: otpHash,
+    },
+  );
+  if (otpVerificationError) {
+    console.error("signature_whatsapp_otp_check_failed", { code: otpVerificationError.code });
+    throw new Error("Não foi possível validar o código. Tente novamente.");
+  }
+  if (!otpVerification?.ok) {
+    await recordAudit(
+      user,
+      "WHATSAPP_OTP_FAILED",
+      request,
+      { stage: "verify" },
+      signatureRequestId,
+    );
+    throw new Error("Código incorreto, expirado ou já utilizado. Solicite um novo código.");
+  }
+
   const signature = await getVerifiedSignature(user.id);
   if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
 
@@ -924,26 +1090,29 @@ async function completeSignature(
     .upload(signedStorageKey, signedBytes, { contentType: "application/pdf", upsert: false });
   if (uploadError) throw new Error("Não foi possível salvar o PDF assinado.");
 
-  const { data: completion, error: rpcError } = await admin.rpc("complete_demo_signature", {
-    p_signature_request_id: signatureRequestId,
-    p_user_id: user.id,
-    p_totp_step: totp.step,
-    p_totp_verified_at: totp.verifiedAt,
-    p_signed_storage_key: signedStorageKey,
-    p_final_sha256: finalHash,
-    p_signed_at: signedAt,
-    p_ip_address: getClientIp(request),
-    p_session_id: typeof user.claims.session_id === "string" ? user.claims.session_id : null,
-    p_user_agent: request.headers.get("user-agent"),
-  });
+  const { data: completion, error: rpcError } = await admin.rpc(
+    "complete_demo_signature_with_otp",
+    {
+      p_signature_request_id: signatureRequestId,
+      p_user_id: user.id,
+      p_otp_hash: otpHash,
+      p_signed_storage_key: signedStorageKey,
+      p_final_sha256: finalHash,
+      p_signed_at: signedAt,
+      p_ip_address: getClientIp(request),
+      p_session_id: typeof user.claims.session_id === "string" ? user.claims.session_id : null,
+      p_user_agent: request.headers.get("user-agent"),
+    },
+  );
   if (rpcError) {
     await admin.storage.from(REQUESTS_BUCKET).remove([signedStorageKey]);
-    if (rpcError.message.includes("TOTP_STEP_ALREADY_USED")) {
-      throw new Error(
-        "Este código já foi utilizado. Aguarde o próximo código do aplicativo autenticador.",
-      );
+    if (rpcError.message.includes("WHATSAPP_OTP_")) {
+      throw new Error("Código expirado ou já utilizado. Solicite um novo código do WhatsApp.");
     }
-    throw new Error(rpcError.message || "Não foi possível concluir a assinatura.");
+    console.error("signature_completion_failed", { code: rpcError.code });
+    throw new Error(
+      "Não foi possível concluir a assinatura. Confira a solicitação e tente novamente.",
+    );
   }
 
   await admin.storage
@@ -976,10 +1145,6 @@ Deno.serve(async (request) => {
       return jsonResponse(await saveUserSignature(user, request, payload.signaturePng));
     }
 
-    if (action === "totp_enabled") {
-      return jsonResponse(await recordTotpEnabled(user, request));
-    }
-
     if (action === "begin_signature") {
       return jsonResponse(await beginSignature(user, request, payload));
     }
@@ -990,6 +1155,10 @@ Deno.serve(async (request) => {
 
     if (action === "confirm_preview") {
       return jsonResponse(await confirmPreview(user, request, payload));
+    }
+
+    if (action === "send_signature_otp") {
+      return jsonResponse(await sendSignatureOtp(user, request, payload));
     }
 
     if (action === "cancel_signature") {

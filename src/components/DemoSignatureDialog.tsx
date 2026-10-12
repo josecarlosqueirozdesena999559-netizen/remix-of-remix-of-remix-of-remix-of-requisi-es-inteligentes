@@ -1,5 +1,4 @@
-import { AlertCircle, CheckCircle2, Loader2, ShieldCheck, Trash2 } from "lucide-react";
-import QRCode from "qrcode";
+import { AlertCircle, CheckCircle2, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -25,7 +24,7 @@ interface DemoSignatureDialogProps {
   setupOnly?: boolean;
 }
 
-type Step = "loading" | "draw" | "enroll" | "review" | "preview" | "code" | "complete";
+type Step = "loading" | "draw" | "review" | "preview" | "code" | "complete";
 
 function getFunctionError(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -60,11 +59,10 @@ export function DemoSignatureDialog({
   const drewRef = useRef(false);
   const [step, setStep] = useState<Step>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [signatureSaved, setSignatureSaved] = useState(false);
-  const [totpEnabled, setTotpEnabled] = useState(false);
-  const [factorId, setFactorId] = useState("");
-  const [qrDataUrl, setQrDataUrl] = useState("");
   const [code, setCode] = useState("");
+  const [phoneHint, setPhoneHint] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<string | null>(null);
+  const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
   const [consent, setConsent] = useState(false);
   const [previewConsent, setPreviewConsent] = useState(false);
   const [signatureRequestId, setSignatureRequestId] = useState("");
@@ -83,42 +81,38 @@ export function DemoSignatureDialog({
   }, [sourcePdf]);
 
   useEffect(() => {
+    if (!open || step !== "code" || !otpExpiresAt) {
+      setOtpSecondsLeft(0);
+      return;
+    }
+    const updateRemaining = () => {
+      setOtpSecondsLeft(Math.max(0, Math.ceil((Date.parse(otpExpiresAt) - Date.now()) / 1000)));
+    };
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [open, step, otpExpiresAt]);
+
+  useEffect(() => {
     if (!open) return;
     let active = true;
     setError(null);
     setBusy(false);
     setConsent(false);
     setPreviewConsent(false);
-    setSignatureSaved(false);
-    setTotpEnabled(false);
-    setFactorId("");
     setCode("");
+    setPhoneHint("");
+    setOtpExpiresAt(null);
+    setOtpSecondsLeft(0);
     setSignatureRequestId("");
     setSignedPreviewUrl("");
-    setQrDataUrl("");
     setStep("loading");
 
     async function loadStatus() {
       try {
         const status = await invokeDemoSignature({ action: "status" });
         if (!active) return;
-        setSignatureSaved(Boolean(status.signature_saved));
-
-        const { data, error: factorError } = await supabase.auth.mfa.listFactors();
-        if (factorError) throw new Error(factorError.message);
-        const verifiedFactor = (data?.totp || []).find((factor) => factor.status === "verified");
-        if (verifiedFactor) setFactorId(verifiedFactor.id);
-        const hasTotp = Boolean(verifiedFactor);
-        setTotpEnabled(hasTotp);
-        setStep(
-          !status.signature_saved
-            ? "draw"
-            : setupOnly
-              ? hasTotp
-                ? "complete"
-                : "enroll"
-              : "review",
-        );
+        setStep(!status.signature_saved ? "draw" : setupOnly ? "complete" : "review");
       } catch (loadError) {
         if (active) {
           setError(getFunctionError(loadError));
@@ -203,83 +197,9 @@ export function DemoSignatureDialog({
         action: "save_signature",
         signaturePng: canvas.toDataURL("image/png"),
       });
-      setSignatureSaved(true);
-      if (setupOnly) await startEnrollment();
-      else setStep("review");
+      setStep(setupOnly ? "complete" : "review");
     } catch (saveError) {
       setError(getFunctionError(saveError));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startEnrollment = async () => {
-    const { data: factors, error: listError } = await supabase.auth.mfa.listFactors();
-    if (listError) throw new Error(listError.message);
-    const verifiedFactor = (factors?.totp || []).find((factor) => factor.status === "verified");
-    if (verifiedFactor) {
-      setFactorId(verifiedFactor.id);
-      setTotpEnabled(true);
-      setStep(setupOnly ? "complete" : signatureRequestId ? "code" : "review");
-      return;
-    }
-
-    for (const pending of (factors?.totp || []).filter((factor) => factor.status !== "verified")) {
-      const { error: unenrollError } = await supabase.auth.mfa.unenroll({ factorId: pending.id });
-      if (unenrollError) throw new Error(unenrollError.message);
-    }
-
-    const { data, error: enrollError } = await supabase.auth.mfa.enroll({
-      factorType: "totp",
-      friendlyName: "Assinatura eletrônica",
-    });
-    if (enrollError) throw new Error(enrollError.message);
-    if (!data?.id || !data.totp?.uri) {
-      throw new Error("O Supabase não retornou os dados de ativação do autenticador.");
-    }
-    const qr = await QRCode.toDataURL(data.totp.uri, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      width: 240,
-    });
-    setFactorId(data.id);
-    setQrDataUrl(qr);
-    setStep("enroll");
-  };
-
-  useEffect(() => {
-    if (!open || step !== "enroll" || !signatureSaved || totpEnabled || qrDataUrl || factorId)
-      return;
-    let active = true;
-    void startEnrollment().catch((enrollError) => {
-      if (active) setError(getFunctionError(enrollError));
-    });
-    return () => {
-      active = false;
-    };
-  }, [open, step, signatureSaved, totpEnabled, qrDataUrl, factorId, setupOnly]);
-
-  const verifyEnrollment = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!factorId || !/^\d{6}$/.test(code)) {
-      setError("Digite o código do Google Authenticator.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
-        factorId,
-        code,
-      });
-      if (verifyError) throw new Error(verifyError.message);
-      await invokeDemoSignature({ action: "totp_enabled" });
-      setTotpEnabled(true);
-      setCode("");
-      setQrDataUrl("");
-      setStep(setupOnly ? "complete" : signatureRequestId ? "code" : "review");
-    } catch (verifyError) {
-      setError(getFunctionError(verifyError));
     } finally {
       setBusy(false);
     }
@@ -321,6 +241,7 @@ export function DemoSignatureDialog({
       setSignedPreviewUrl(preview.preview_url);
       setPreviewConsent(false);
       setCode("");
+      setOtpExpiresAt(null);
       setStep("preview");
     } catch (beginError) {
       setError(getFunctionError(beginError));
@@ -345,9 +266,40 @@ export function DemoSignatureDialog({
         action: "confirm_preview",
         signatureRequestId,
       });
-      setStep(totpEnabled && factorId ? "code" : "enroll");
+      const delivery = await invokeDemoSignature({
+        action: "send_signature_otp",
+        signatureRequestId,
+      });
+      setPhoneHint(String(delivery.phone_hint || ""));
+      setOtpExpiresAt(String(delivery.expires_at || ""));
+      setOtpSecondsLeft(Number(delivery.valid_for_seconds) || 60);
+      setCode("");
+      setStep("code");
     } catch (previewError) {
       setError(getFunctionError(previewError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resendSignatureOtp = async () => {
+    if (!signatureRequestId) {
+      setError("A solicitação expirou. Feche e inicie novamente.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const delivery = await invokeDemoSignature({
+        action: "send_signature_otp",
+        signatureRequestId,
+      });
+      setPhoneHint(String(delivery.phone_hint || ""));
+      setOtpExpiresAt(String(delivery.expires_at || ""));
+      setOtpSecondsLeft(Number(delivery.valid_for_seconds) || 60);
+      setCode("");
+    } catch (sendError) {
+      setError(getFunctionError(sendError));
     } finally {
       setBusy(false);
     }
@@ -371,40 +323,22 @@ export function DemoSignatureDialog({
   const confirmSignature = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!/^\d{6}$/.test(code)) {
-      setError("Digite os seis dígitos do seu Google Authenticator.");
+      setError("Digite os seis dígitos enviados pelo WhatsApp.");
       return;
     }
-    if (!signatureRequestId || !factorId) {
+    if (!signatureRequestId) {
       setError("A solicitação expirou. Feche e inicie novamente.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
-        factorId,
-      });
-      if (challengeError) {
-        throw new Error(
-          `Não foi possível iniciar a validação do Google Authenticator: ${challengeError.message}`,
-        );
-      }
-      if (!challenge?.id) throw new Error("Não foi possível iniciar a validação do código.");
-
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId,
-        challengeId: challenge.id,
-        code,
-      });
-      if (verifyError) {
-        throw new Error(`O Google Authenticator não aceitou o código: ${verifyError.message}`);
-      }
-
       let result;
       try {
         result = await invokeDemoSignature({
           action: "complete_signature",
           signatureRequestId,
+          code,
         });
       } catch (completionError) {
         throw new Error(`Falha ao registrar a assinatura: ${getFunctionError(completionError)}`);
@@ -423,15 +357,13 @@ export function DemoSignatureDialog({
   const dialogTitle =
     step === "draw"
       ? "Cadastre sua assinatura"
-      : step === "enroll"
-        ? "Ative o Google Authenticator"
-        : step === "code"
-          ? "Confirme a assinatura"
-          : step === "review"
-            ? "Revise e assine o documento"
-            : step === "complete"
-              ? "Configuração concluída"
-              : "Preparando assinatura";
+      : step === "code"
+        ? "Confirme a assinatura"
+        : step === "review"
+          ? "Revise e assine o documento"
+          : step === "complete"
+            ? "Configuração concluída"
+            : "Preparando assinatura";
 
   const isPdfStage = step === "review" || step === "preview";
 
@@ -609,61 +541,19 @@ export function DemoSignatureDialog({
             </div>
           ) : null}
 
-          {step === "enroll" ? (
-            <form className="space-y-4" onSubmit={verifyEnrollment}>
-              <p className="text-sm text-muted-foreground">
-                No Google Authenticator, toque em + e escaneie o QR Code. Depois, informe o código
-                de seis dígitos.
-              </p>
-              {qrDataUrl ? (
-                <div className="flex flex-col items-center gap-3 rounded-lg border bg-white p-4">
-                  <img
-                    src={qrDataUrl}
-                    alt="QR Code do Google Authenticator"
-                    className="h-60 w-60"
-                  />
-                </div>
-              ) : (
-                <Alert>
-                  <AlertDescription>
-                    Carregando configuração segura do autenticador...
-                  </AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="demo-enroll-code">Código do Google Authenticator</Label>
-                <Input
-                  id="demo-enroll-code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  pattern="[0-9]{6}"
-                  value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                  required
-                />
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={busy || !qrDataUrl || code.length !== 6}>
-                  {busy ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                  )}
-                  Confirmar ativação
-                </Button>
-              </DialogFooter>
-            </form>
-          ) : null}
-
           {step === "code" ? (
             <form className="mx-auto w-full max-w-md space-y-4" onSubmit={confirmSignature}>
               <p className="text-sm text-muted-foreground">
-                Etapa 3 de 3 · Digite o código atual do Google Authenticator para concluir.
+                Etapa 3 de 3 · Digite o código enviado para o WhatsApp cadastrado.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Enviado para {phoneHint || "o WhatsApp do perfil"}.{" "}
+                {otpSecondsLeft > 0
+                  ? `O código expira em 00:${String(otpSecondsLeft).padStart(2, "0")}.`
+                  : "O código expirou. Solicite outro para continuar."}
               </p>
               <div className="space-y-2">
-                <Label htmlFor="demo-signature-code">Código do Google Authenticator</Label>
+                <Label htmlFor="demo-signature-code">Código do WhatsApp</Label>
                 <Input
                   id="demo-signature-code"
                   inputMode="numeric"
@@ -677,22 +567,32 @@ export function DemoSignatureDialog({
                   autoFocus
                 />
               </div>
-              <DialogFooter>
+              <DialogFooter className="gap-2 sm:justify-between">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => {
-                    setError(null);
-                    setStep("preview");
-                  }}
-                  disabled={busy}
+                  onClick={() => void resendSignatureOtp()}
+                  disabled={busy || otpSecondsLeft > 0}
                 >
-                  Voltar
+                  Reenviar código
                 </Button>
-                <Button type="submit" disabled={busy || code.length !== 6}>
-                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Confirmar assinatura
-                </Button>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setError(null);
+                      setStep("preview");
+                    }}
+                    disabled={busy}
+                  >
+                    Voltar
+                  </Button>
+                  <Button type="submit" disabled={busy || code.length !== 6 || otpSecondsLeft <= 0}>
+                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Confirmar assinatura
+                  </Button>
+                </div>
               </DialogFooter>
             </form>
           ) : null}
