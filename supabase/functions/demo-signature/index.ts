@@ -15,8 +15,9 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const DEMO_PROFILE_ID = "34708484-8caa-456b-a423-9f91aeba52d8";
-const DEMO_EMAIL = "demo.assinatura@usuarios.solicite.local";
+const DYELSSE_HOSPITAL_USER = "dyelssehospital";
+const DYELSSE_HOSPITAL_NAME = "dyelsse larissa dos santos";
+const HOSPITAL_SHARED_EMAIL = "hospital@usuarios.solicite.local";
 const SIGNATURE_BUCKET = "demo-signature-private";
 const REQUESTS_BUCKET = "requisicoes";
 const MAX_PDF_BYTES = 14 * 1024 * 1024;
@@ -38,7 +39,7 @@ type AuthenticatedDemoUser = {
   email: string;
   profile: {
     id: string;
-    auth_user_id: string;
+    auth_user_id: string | null;
     email: string;
     nome: string;
     usuario: string | null;
@@ -121,23 +122,30 @@ async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser>
   if (authError || !authData.user?.id || !authData.user.email) {
     throw new Error("Sessão expirada ou inválida.");
   }
-  if (!safeEqual(authData.user.email.trim().toLowerCase(), DEMO_EMAIL)) {
-    throw new Error("Você não está autorizado a usar a assinatura eletrônica.");
+  if (!safeEqual(authData.user.email.trim().toLowerCase(), HOSPITAL_SHARED_EMAIL)) {
+    throw new Error(
+      "A assinatura digital está disponível somente para a usuária Dyelsse do Hospital.",
+    );
   }
 
   const { data: profile, error: profileError } = await admin
     .from("usuarios")
     .select("id,auth_user_id,email,nome,usuario,setor,unidade_nome,cpf,whatsapp,is_admin")
-    .eq("id", DEMO_PROFILE_ID)
-    .eq("auth_user_id", authData.user.id)
+    .eq("usuario", DYELSSE_HOSPITAL_USER)
+    .ilike("nome", DYELSSE_HOSPITAL_NAME)
     .maybeSingle();
   if (
     profileError ||
     !profile ||
     profile.is_admin ||
-    profile.email?.trim().toLowerCase() !== DEMO_EMAIL
+    profile.usuario?.trim().toLowerCase() !== DYELSSE_HOSPITAL_USER ||
+    profile.nome?.trim().toLowerCase() !== DYELSSE_HOSPITAL_NAME ||
+    profile.setor?.trim().toLowerCase() !== "hospital" ||
+    profile.unidade_nome?.trim().toLowerCase() !== "hospital"
   ) {
-    throw new Error("O perfil autenticado não está autorizado a usar a assinatura eletrônica.");
+    throw new Error(
+      "O perfil Dyelsse do Hospital não está autorizado a usar a assinatura eletrônica.",
+    );
   }
 
   return {
@@ -340,12 +348,12 @@ async function enforceSignatureRateLimit(userId: string, action: string) {
   throw new Error("Não foi possível validar a segurança desta etapa. Tente novamente.");
 }
 
-async function getVerifiedSignature(userId: string) {
+async function getVerifiedSignature(user: AuthenticatedDemoUser) {
   const { data, error } = await admin
     .from("demo_user_signatures")
     .select("user_id,profile_id,storage_key,signature_sha256,last_accepted_step,created_at")
-    .eq("user_id", userId)
-    .eq("profile_id", DEMO_PROFILE_ID)
+    .eq("user_id", user.id)
+    .eq("profile_id", user.profile.id)
     .maybeSingle();
   if (error) throw new Error("Não foi possível verificar sua assinatura cadastrada.");
   return data;
@@ -355,7 +363,7 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
   const png = decodePng(value);
   const signatureHash = await sha256(png);
   const storageKey = `signatures/${user.id}/signature.png`;
-  const existing = await getVerifiedSignature(user.id);
+  const existing = await getVerifiedSignature(user);
   if (existing) {
     if (existing.signature_sha256 === signatureHash) {
       return { ok: true, signature_saved: true };
@@ -371,7 +379,7 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
   const { error: saveError } = await admin.from("demo_user_signatures").upsert(
     {
       user_id: user.id,
-      profile_id: DEMO_PROFILE_ID,
+      profile_id: user.profile.id,
       storage_key: storageKey,
       signature_sha256: signatureHash,
       last_accepted_step: 0,
@@ -540,7 +548,7 @@ async function beginSignature(
   request: Request,
   payload: Record<string, unknown>,
 ) {
-  const savedSignature = await getVerifiedSignature(user.id);
+  const savedSignature = await getVerifiedSignature(user);
   if (!savedSignature) throw new Error("Cadastre primeiro sua assinatura manuscrita.");
 
   const requestId = String(payload.requestId || "");
@@ -747,7 +755,7 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
     throw new Error("A solicitação expirou. Reabra o documento para continuar.");
   }
 
-  const signature = await getVerifiedSignature(user.id);
+  const signature = await getVerifiedSignature(user);
   if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
 
   const { data: originalBlob, error: originalError } = await admin.storage
@@ -1045,7 +1053,7 @@ async function completeSignature(
     throw new Error("Código incorreto, expirado ou já utilizado. Solicite um novo código.");
   }
 
-  const signature = await getVerifiedSignature(user.id);
+  const signature = await getVerifiedSignature(user);
   if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
 
   const { data: originalBlob, error: originalError } = await admin.storage
@@ -1133,7 +1141,7 @@ Deno.serve(async (request) => {
 
     if (action === "status") {
       await cleanupExpiredIntents(user.id);
-      const signature = await getVerifiedSignature(user.id);
+      const signature = await getVerifiedSignature(user);
       return jsonResponse({
         ok: true,
         signature_saved: Boolean(signature),

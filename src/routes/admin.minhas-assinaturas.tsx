@@ -230,7 +230,6 @@ function MinhasAssinaturasPage() {
 
     try {
       const { user, profile: authProfile } = await getCurrentUserProfile();
-      setDemoSignatureEnabled(isDemoSignatureUser(user, authProfile));
       const isSharedSectorSession = isSharedSectorProfile(authProfile);
       const profile = isSharedSectorSession
         ? await getSelectedSharedRequesterProfile(authProfile)
@@ -240,6 +239,7 @@ function MinhasAssinaturasPage() {
         navigate({ to: "/admin/selecionar-solicitante" });
         return;
       }
+      setDemoSignatureEnabled(isDemoSignatureUser(user, profile));
 
       const cpfVariants = getRequestOwnerCpfVariants(profile);
       const location =
@@ -805,7 +805,9 @@ function MinhasAssinaturasPage() {
                           {getStageLabel(request.status)}
                           {missingItems && (
                             <span className="text-xs text-destructive">
-                              Solicitação sem itens. Refaça antes de assinar.
+                              {demoSignatureEnabled
+                                ? "Documento digital será gerado automaticamente para assinatura."
+                                : "Solicitação sem itens. Refaça antes de assinar manualmente."}
                             </span>
                           )}
                           {request.return_reason && request.status === "correcao_requisicao" && (
@@ -872,7 +874,7 @@ function MinhasAssinaturasPage() {
                                 variant="outline"
                                 size="sm"
                                 className="rounded-xl border-emerald-300 text-emerald-800 hover:bg-emerald-50"
-                                disabled={uploadingId === request.id || missingItems}
+                                disabled={uploadingId === request.id}
                                 onClick={() => void openDemoSignature(request)}
                               >
                                 {uploadingId === request.id ? (
