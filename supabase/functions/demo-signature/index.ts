@@ -362,6 +362,7 @@ async function recordAudit(
 const SIGNATURE_ACTION_RATE_LIMITS: Record<string, { limit: number; windowSeconds: number }> = {
   status: { limit: 30, windowSeconds: 60 },
   save_signature: { limit: 3, windowSeconds: 300 },
+  remove_signature: { limit: 2, windowSeconds: 300 },
   begin_signature: { limit: 5, windowSeconds: 60 },
   preview_signature: { limit: 10, windowSeconds: 60 },
   confirm_preview: { limit: 10, windowSeconds: 60 },
@@ -430,6 +431,67 @@ async function saveUserSignature(user: AuthenticatedDemoUser, request: Request, 
 
   await recordAudit(user, "SIGNATURE_SAVED", request, { signature_sha256: signatureHash });
   return { ok: true, signature_saved: true, signature_sha256: signatureHash };
+}
+
+async function removeUserSignature(user: AuthenticatedDemoUser, request: Request) {
+  const signature = await getVerifiedSignature(user);
+  if (!signature) return { ok: true, removed: false };
+
+  const { data: pending, error: pendingError } = await admin
+    .from("demo_signature_requests")
+    .select("id,original_storage_key")
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .limit(50);
+  if (pendingError) throw new Error("Não foi possível cancelar assinaturas pendentes.");
+
+  const pendingIds = (pending ?? []).map((item) => item.id);
+  if (pendingIds.length) {
+    const { error: expireError } = await admin
+      .from("demo_signature_requests")
+      .update({ status: "expired" })
+      .in("id", pendingIds)
+      .eq("user_id", user.id)
+      .eq("status", "pending");
+    const { error: invalidateError } = await admin
+      .from("demo_signature_otps")
+      .update({ otp_hash: null })
+      .in("signature_request_id", pendingIds)
+      .eq("user_id", user.id)
+      .is("consumed_at", null);
+    if (expireError || invalidateError) {
+      throw new Error("Não foi possível cancelar a solicitação OTP pendente.");
+    }
+  }
+
+  const storagePaths = [
+    signature.storage_key,
+    ...(pending ?? []).flatMap((item) => [
+      item.original_storage_key,
+      `previews/${user.id}/${item.id}.pdf`,
+    ]),
+  ];
+  const { error: storageError } = await admin.storage.from(SIGNATURE_BUCKET).remove(storagePaths);
+  if (storageError) throw new Error("Não foi possível remover a imagem antiga da assinatura.");
+
+  const { data: deleted, error: deleteError } = await admin
+    .from("demo_user_signatures")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("profile_id", user.profile.id)
+    .eq("storage_key", signature.storage_key)
+    .eq("signature_sha256", signature.signature_sha256)
+    .select("user_id")
+    .maybeSingle();
+  if (deleteError || !deleted) {
+    throw new Error("Não foi possível desvincular a assinatura antiga do perfil.");
+  }
+
+  await recordAudit(user, "SIGNATURE_REMOVED", request, {
+    signature_sha256: signature.signature_sha256,
+    cancelled_pending_requests: pendingIds.length,
+  });
+  return { ok: true, removed: true };
 }
 
 async function getWhatsAppOtpConfig() {
@@ -632,6 +694,14 @@ async function beginSignature(
   if (uploadError)
     throw new Error("Não foi possível preparar a versão exata do PDF para assinatura.");
 
+  const { data: originalUrl, error: originalUrlError } = await admin.storage
+    .from(SIGNATURE_BUCKET)
+    .createSignedUrl(storageKey, 10 * 60);
+  if (originalUrlError || !originalUrl?.signedUrl) {
+    await admin.storage.from(SIGNATURE_BUCKET).remove([storageKey]);
+    throw new Error("Não foi possível abrir a versão exata do PDF para assinatura.");
+  }
+
   const createdAt = new Date().toISOString();
   const documentVersion = `${document.updated_at || document.created_at}/${originalHash}`;
   const { error: insertError } = await admin.from("demo_signature_requests").insert({
@@ -678,11 +748,27 @@ async function beginSignature(
     ok: true,
     signature_request_id: intentId,
     original_sha256: originalHash,
+    original_url: originalUrl.signedUrl,
     document_id: document.id,
     document_code: getRequestCode(document),
     document_stage: stage,
+    signature_placement:
+      stage === "output" && getAttachment(document.admin_attachment)?.storagePath
+        ? "output_attachment"
+        : "canonical",
     expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   };
+}
+
+function parseSignaturePosition(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const position = value as Record<string, unknown>;
+  const x = Number(position.x);
+  const y = Number(position.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+    throw new Error("A posição da rubrica está fora da página.");
+  }
+  return { x, y };
 }
 
 async function createEvidencePdf(
@@ -692,6 +778,7 @@ async function createEvidencePdf(
     signedAt: string;
     preview?: boolean;
     placement?: "canonical" | "output_attachment";
+    signaturePosition?: { x: number; y: number };
   },
 ) {
   const pdf = await PDFDocument.load(original, { updateMetadata: false });
@@ -742,16 +829,20 @@ async function createEvidencePdf(
     ? { width: pageWidth * 0.24, height: pageHeight * 0.05 }
     : { width: 72 * mmToPt * scaleX, height: 17 * mmToPt * scaleY };
   const imageSize = image.scaleToFit(imageBox.width, imageBox.height);
+  const requestedCenterX = input.signaturePosition
+    ? input.signaturePosition.x * pageWidth
+    : signatureCenterX;
+  const defaultImageY = signatureLineY + (isOutputAttachment ? scale : 0);
+  const requestedImageY = input.signaturePosition
+    ? (1 - input.signaturePosition.y) * pageHeight - imageSize.height / 2
+    : defaultImageY;
   const imageX = Math.max(
     8 * scale,
-    Math.min(signatureCenterX - imageSize.width / 2, pageWidth - 8 * scale - imageSize.width),
+    Math.min(requestedCenterX - imageSize.width / 2, pageWidth - 8 * scale - imageSize.width),
   );
   const imageY = Math.max(
     8 * scale,
-    Math.min(
-      signatureLineY + (isOutputAttachment ? scale : 0),
-      pageHeight - 8 * scale - imageSize.height,
-    ),
+    Math.min(requestedImageY, pageHeight - 8 * scale - imageSize.height),
   );
   page.drawImage(image, {
     x: imageX,
@@ -845,13 +936,16 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
     throw new Error("O documento mudou. Reabra a solicitação para conferir a versão atual.");
   }
 
+  const signaturePosition = parseSignaturePosition(payload.signaturePosition);
+  const placement =
+    intent.document_stage === "output" && getAttachment(document.admin_attachment)?.storagePath
+      ? "output_attachment"
+      : "canonical";
   const previewBytes = await createEvidencePdf(originalBytes, signatureBytes, {
     signedAt: new Date().toISOString(),
     preview: true,
-    placement:
-      intent.document_stage === "output" && getAttachment(document.admin_attachment)?.storagePath
-        ? "output_attachment"
-        : "canonical",
+    placement,
+    signaturePosition,
   });
   const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
   const { error: uploadError } = await admin.storage
@@ -1073,7 +1167,8 @@ async function completeSignature(
   if (confirmedPreviewError || !confirmedPreview) {
     throw new Error("A prévia confirmada não está mais disponível. Gere-a novamente.");
   }
-  const confirmedPreviewHash = await sha256(new Uint8Array(await confirmedPreview.arrayBuffer()));
+  const confirmedPreviewBytes = new Uint8Array(await confirmedPreview.arrayBuffer());
+  const confirmedPreviewHash = await sha256(confirmedPreviewBytes);
   if (confirmedPreviewHash !== intent.preview_sha256) {
     throw new Error("A prévia foi alterada. Gere e confirme a versão atual novamente.");
   }
@@ -1112,32 +1207,9 @@ async function completeSignature(
     throw new Error("Código incorreto, expirado ou já utilizado. Solicite um novo código.");
   }
 
-  const signature = await getVerifiedSignature(user);
-  if (!signature) throw new Error("Sua assinatura manuscrita não está cadastrada.");
-
-  const { data: originalBlob, error: originalError } = await admin.storage
-    .from(SIGNATURE_BUCKET)
-    .download(intent.original_storage_key);
-  if (originalError || !originalBlob)
-    throw new Error("A versão original do PDF não está disponível.");
-  const originalBytes = new Uint8Array(await originalBlob.arrayBuffer());
-  const originalHash = await sha256(originalBytes);
-  if (originalHash !== intent.original_sha256)
-    throw new Error("A integridade do PDF original não confere.");
-
-  const { data: signatureBlob, error: signatureError } = await admin.storage
-    .from(SIGNATURE_BUCKET)
-    .download(signature.storage_key);
-  if (signatureError || !signatureBlob)
-    throw new Error("A imagem da assinatura cadastrada não está disponível.");
-  const signatureBytes = new Uint8Array(await signatureBlob.arrayBuffer());
-  if ((await sha256(signatureBytes)) !== signature.signature_sha256) {
-    throw new Error("A integridade da assinatura manuscrita não confere.");
-  }
-
   const document = await getRequestForDemo(intent.requisicao_id, user);
   const expectedStage = isPendingStage(document.status);
-  const currentVersion = `${document.updated_at || document.created_at}/${originalHash}`;
+  const currentVersion = `${document.updated_at || document.created_at}/${intent.original_sha256}`;
   if (
     !expectedStage ||
     expectedStage !== intent.document_stage ||
@@ -1146,13 +1218,7 @@ async function completeSignature(
     throw new Error("A etapa do documento mudou. Reabra a solicitação e confirme novamente.");
   }
   const signedAt = new Date().toISOString();
-  const signedBytes = await createEvidencePdf(originalBytes, signatureBytes, {
-    signedAt,
-    placement:
-      intent.document_stage === "output" && getAttachment(document.admin_attachment)?.storagePath
-        ? "output_attachment"
-        : "canonical",
-  });
+  const signedBytes = confirmedPreviewBytes;
   const finalHash = await sha256(signedBytes);
   const safeDate = Date.now();
   const signedStorageKey = `requisicoes-assinadas/${document.id}/${safeDate}-${signatureRequestId}-assinado.pdf`;
@@ -1206,15 +1272,30 @@ Deno.serve(async (request) => {
     if (action === "status") {
       await cleanupExpiredIntents(user.id);
       const signature = await getVerifiedSignature(user);
+      let signatureUrl: string | null = null;
+      if (signature) {
+        const { data, error } = await admin.storage
+          .from(SIGNATURE_BUCKET)
+          .createSignedUrl(signature.storage_key, 10 * 60);
+        if (error || !data?.signedUrl) {
+          throw new Error("Não foi possível carregar sua assinatura cadastrada.");
+        }
+        signatureUrl = data.signedUrl;
+      }
       return jsonResponse({
         ok: true,
         signature_saved: Boolean(signature),
         signature_created_at: signature?.created_at ?? null,
+        signature_url: signatureUrl,
       });
     }
 
     if (action === "save_signature") {
       return jsonResponse(await saveUserSignature(user, request, payload.signaturePng));
+    }
+
+    if (action === "remove_signature") {
+      return jsonResponse(await removeUserSignature(user, request));
     }
 
     if (action === "begin_signature") {

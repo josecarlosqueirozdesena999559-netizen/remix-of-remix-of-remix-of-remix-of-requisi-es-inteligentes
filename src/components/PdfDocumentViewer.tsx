@@ -14,6 +14,7 @@ interface PdfDocumentViewerProps {
   onBack: () => void;
   footer?: ReactNode;
   fitHeight?: boolean;
+  content?: ReactNode;
 }
 
 export function PdfDocumentViewer({
@@ -27,6 +28,7 @@ export function PdfDocumentViewer({
   onBack,
   footer,
   fitHeight = false,
+  content,
 }: PdfDocumentViewerProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -103,6 +105,8 @@ export function PdfDocumentViewer({
             <div className="m-4 rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700">
               {error}
             </div>
+          ) : content ? (
+            content
           ) : url ? (
             <iframe
               src={url}
