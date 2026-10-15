@@ -700,38 +700,39 @@ async function createEvidencePdf(
   const page = pages[pages.length - 1];
   if (!page) throw new Error("O PDF não contém páginas para assinatura.");
 
-  // Alinha com o bloco do solicitante em src/lib/request-pdf.ts (A4, retrato).
+  // Usa o bloco do PDF A4 como referência e o escala para o tamanho real da página.
   // O campo GOV.BR é apagado e substituído pela assinatura; a página não é ampliada.
   const mmToPt = 72 / 25.4;
   const pageSize = page.getSize();
   const expectedWidth = 210 * mmToPt;
   const expectedHeight = 297 * mmToPt;
-  if (
-    Math.abs(pageSize.width - expectedWidth) > 2 ||
-    Math.abs(pageSize.height - expectedHeight) > 2
-  ) {
-    throw new Error("Este documento não usa o formato A4 esperado para o campo de assinatura.");
+  const pageWidth = pageSize.width;
+  const pageHeight = pageSize.height;
+  if (Math.min(pageWidth, pageHeight) < 360) {
+    throw new Error("A página do PDF é pequena demais para uma assinatura legível.");
   }
 
-  const pageWidth = page.getWidth();
-  const signatureCenterX = 54 * mmToPt;
+  const scaleX = pageWidth / expectedWidth;
+  const scaleY = pageHeight / expectedHeight;
+  const scale = Math.min(scaleX, scaleY);
+  const signatureCenterX = 54 * mmToPt * scaleX;
   const signatureBlockTop = 241;
-  const signatureLineY = pageSize.height - (signatureBlockTop + 16) * mmToPt;
-  const govBoxX = 16 * mmToPt;
-  const govBoxY = pageSize.height - (signatureBlockTop + 12) * mmToPt;
-  const govBoxWidth = 76 * mmToPt;
-  const govBoxHeight = 12 * mmToPt;
+  const signatureLineY = pageHeight - (signatureBlockTop + 16) * mmToPt * scaleY;
+  const govBoxX = 16 * mmToPt * scaleX;
+  const govBoxY = pageHeight - (signatureBlockTop + 12) * mmToPt * scaleY;
+  const govBoxWidth = 76 * mmToPt * scaleX;
+  const govBoxHeight = 12 * mmToPt * scaleY;
 
   // Remove o quadro e seus dizeres GOV.BR, sem encobrir a linha nem os dados abaixo.
   page.drawRectangle({
-    x: govBoxX - 1.2,
-    y: govBoxY - 1,
-    width: govBoxWidth + 2.4,
-    height: govBoxHeight + 2,
+    x: govBoxX - 1.2 * scale,
+    y: govBoxY - scale,
+    width: govBoxWidth + 2.4 * scale,
+    height: govBoxHeight + 2 * scale,
     color: rgb(1, 1, 1),
   });
 
-  const imageBox = { width: 72 * mmToPt, height: 17 * mmToPt };
+  const imageBox = { width: 72 * mmToPt * scaleX, height: 17 * mmToPt * scaleY };
   const imageSize = image.scaleToFit(imageBox.width, imageBox.height);
   page.drawImage(image, {
     x: signatureCenterX - imageSize.width / 2,
@@ -742,9 +743,9 @@ async function createEvidencePdf(
 
   // Reforça a linha existente do campo de assinatura para a rubrica ficar bem apoiada.
   page.drawLine({
-    start: { x: signatureCenterX - 40 * mmToPt, y: signatureLineY },
-    end: { x: signatureCenterX + 40 * mmToPt, y: signatureLineY },
-    thickness: 0.7,
+    start: { x: signatureCenterX - 40 * mmToPt * scaleX, y: signatureLineY },
+    end: { x: signatureCenterX + 40 * mmToPt * scaleX, y: signatureLineY },
+    thickness: 0.7 * scale,
     color: rgb(0.35, 0.35, 0.35),
   });
 
@@ -759,13 +760,13 @@ async function createEvidencePdf(
       timeZone: "America/Fortaleza",
       timeZoneName: "short",
     }).format(new Date(input.signedAt))}`;
-    const dateFontSize = 7;
+    const dateFontSize = 7 * scale;
     const dateWidth = font.widthOfTextAtSize(dateTime, dateFontSize);
-    const dateY = pageSize.height - (signatureBlockTop + 33) * mmToPt;
+    const dateY = pageHeight - (signatureBlockTop + 33) * mmToPt * scaleY;
     page.drawText(dateTime, {
       x: Math.max(
-        14 * mmToPt,
-        Math.min(signatureCenterX - dateWidth / 2, pageWidth - 14 * mmToPt - dateWidth),
+        14 * mmToPt * scaleX,
+        Math.min(signatureCenterX - dateWidth / 2, pageWidth - 14 * mmToPt * scaleX - dateWidth),
       ),
       y: dateY,
       size: dateFontSize,
