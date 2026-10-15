@@ -31,6 +31,12 @@ function getFunctionError(error: unknown) {
   return "Não foi possível concluir a operação. Tente novamente.";
 }
 
+function formatOtpCountdown(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 async function invokeDemoSignature(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("demo-signature", { body });
   if (error) {
@@ -553,7 +559,7 @@ export function DemoSignatureDialog({
               <p className="text-sm text-muted-foreground">
                 Enviado para {phoneHint || "o WhatsApp do perfil"}.{" "}
                 {otpSecondsLeft > 0
-                  ? `O código expira em 00:${String(otpSecondsLeft).padStart(2, "0")}.`
+                  ? `O código expira em ${formatOtpCountdown(otpSecondsLeft)}.`
                   : "O código expirou. Solicite outro para continuar."}
               </p>
               <div className="space-y-2">
@@ -576,7 +582,7 @@ export function DemoSignatureDialog({
                   type="button"
                   variant="outline"
                   onClick={() => void resendSignatureOtp()}
-                  disabled={busy || otpSecondsLeft > 0}
+                  disabled={busy || otpSecondsLeft > 240}
                 >
                   Reenviar código
                 </Button>

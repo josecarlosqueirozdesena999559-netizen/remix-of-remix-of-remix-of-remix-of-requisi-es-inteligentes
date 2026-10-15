@@ -1,4 +1,4 @@
-export const SIGNATURE_OTP_TTL_SECONDS = 60;
+export const SIGNATURE_OTP_TTL_SECONDS = 300;
 export const SIGNATURE_OTP_TEMPLATE_NAME = "assinatura_documento_otp";
 export const SIGNATURE_OTP_TEMPLATE_LANGUAGE = "pt_BR";
 

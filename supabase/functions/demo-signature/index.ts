@@ -691,6 +691,7 @@ async function createEvidencePdf(
   input: {
     signedAt: string;
     preview?: boolean;
+    placement?: "canonical" | "output_attachment";
   },
 ) {
   const pdf = await PDFDocument.load(original, { updateMetadata: false });
@@ -700,8 +701,8 @@ async function createEvidencePdf(
   const page = pages[pages.length - 1];
   if (!page) throw new Error("O PDF não contém páginas para assinatura.");
 
-  // Usa o bloco do PDF A4 como referência e o escala para o tamanho real da página.
-  // O campo GOV.BR é apagado e substituído pela assinatura; a página não é ampliada.
+  // PDFs canônicos usam o campo de assinatura gerado pelo app; anexos SIG
+  // usam a linha já impressa à direita, acima do nome da responsável.
   const mmToPt = 72 / 25.4;
   const pageSize = page.getSize();
   const expectedWidth = 210 * mmToPt;
@@ -715,38 +716,48 @@ async function createEvidencePdf(
   const scaleX = pageWidth / expectedWidth;
   const scaleY = pageHeight / expectedHeight;
   const scale = Math.min(scaleX, scaleY);
-  const signatureCenterX = 54 * mmToPt * scaleX;
+  const isOutputAttachment = input.placement === "output_attachment";
+  const signatureCenterX = isOutputAttachment ? pageWidth * 0.8 : 54 * mmToPt * scaleX;
   const signatureBlockTop = 241;
-  const signatureLineY = pageHeight - (signatureBlockTop + 16) * mmToPt * scaleY;
+  const signatureLineY = isOutputAttachment
+    ? pageHeight * 0.38
+    : pageHeight - (signatureBlockTop + 16) * mmToPt * scaleY;
   const govBoxX = 16 * mmToPt * scaleX;
   const govBoxY = pageHeight - (signatureBlockTop + 12) * mmToPt * scaleY;
   const govBoxWidth = 76 * mmToPt * scaleX;
   const govBoxHeight = 12 * mmToPt * scaleY;
 
-  // Remove o quadro e seus dizeres GOV.BR, sem encobrir a linha nem os dados abaixo.
-  page.drawRectangle({
-    x: govBoxX - 1.2 * scale,
-    y: govBoxY - scale,
-    width: govBoxWidth + 2.4 * scale,
-    height: govBoxHeight + 2 * scale,
-    color: rgb(1, 1, 1),
-  });
+  if (!isOutputAttachment) {
+    // No PDF canônico, troca apenas o quadro GOV.BR pelo campo manuscrito.
+    page.drawRectangle({
+      x: govBoxX - 1.2 * scale,
+      y: govBoxY - scale,
+      width: govBoxWidth + 2.4 * scale,
+      height: govBoxHeight + 2 * scale,
+      color: rgb(1, 1, 1),
+    });
+  }
 
-  const imageBox = { width: 72 * mmToPt * scaleX, height: 17 * mmToPt * scaleY };
+  const imageBox = isOutputAttachment
+    ? { width: pageWidth * 0.24, height: pageHeight * 0.05 }
+    : { width: 72 * mmToPt * scaleX, height: 17 * mmToPt * scaleY };
   const imageSize = image.scaleToFit(imageBox.width, imageBox.height);
+  const imageX = Math.max(
+    8 * scale,
+    Math.min(signatureCenterX - imageSize.width / 2, pageWidth - 8 * scale - imageSize.width),
+  );
+  const imageY = Math.max(
+    8 * scale,
+    Math.min(
+      signatureLineY + (isOutputAttachment ? scale : 0),
+      pageHeight - 8 * scale - imageSize.height,
+    ),
+  );
   page.drawImage(image, {
-    x: signatureCenterX - imageSize.width / 2,
-    y: signatureLineY,
+    x: imageX,
+    y: imageY,
     width: imageSize.width,
     height: imageSize.height,
-  });
-
-  // Reforça a linha existente do campo de assinatura para a rubrica ficar bem apoiada.
-  page.drawLine({
-    start: { x: signatureCenterX - 40 * mmToPt * scaleX, y: signatureLineY },
-    end: { x: signatureCenterX + 40 * mmToPt * scaleX, y: signatureLineY },
-    thickness: 0.7 * scale,
-    color: rgb(0.35, 0.35, 0.35),
   });
 
   if (!input.preview) {
@@ -762,7 +773,9 @@ async function createEvidencePdf(
     }).format(new Date(input.signedAt))}`;
     const dateFontSize = 7 * scale;
     const dateWidth = font.widthOfTextAtSize(dateTime, dateFontSize);
-    const dateY = pageHeight - (signatureBlockTop + 33) * mmToPt * scaleY;
+    const dateY = isOutputAttachment
+      ? Math.max(12 * scale, signatureLineY - pageHeight * 0.055)
+      : pageHeight - (signatureBlockTop + 33) * mmToPt * scaleY;
     page.drawText(dateTime, {
       x: Math.max(
         14 * mmToPt * scaleX,
@@ -837,6 +850,10 @@ async function previewSignature(user: AuthenticatedDemoUser, payload: Record<str
   const previewBytes = await createEvidencePdf(originalBytes, signatureBytes, {
     signedAt: new Date().toISOString(),
     preview: true,
+    placement:
+      intent.document_stage === "output" && getAttachment(document.admin_attachment)?.storagePath
+        ? "output_attachment"
+        : "canonical",
   });
   const previewStorageKey = `previews/${user.id}/${signatureRequestId}.pdf`;
   const { error: uploadError } = await admin.storage
@@ -1133,6 +1150,10 @@ async function completeSignature(
   const signedAt = new Date().toISOString();
   const signedBytes = await createEvidencePdf(originalBytes, signatureBytes, {
     signedAt,
+    placement:
+      intent.document_stage === "output" && getAttachment(document.admin_attachment)?.storagePath
+        ? "output_attachment"
+        : "canonical",
   });
   const finalHash = await sha256(signedBytes);
   const safeDate = Date.now();
