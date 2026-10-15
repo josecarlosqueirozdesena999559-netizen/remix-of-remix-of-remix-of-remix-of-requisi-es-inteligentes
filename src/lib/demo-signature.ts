@@ -22,7 +22,6 @@ export function isDemoSignatureUser(
     normalize(user.email) === HOSPITAL_SHARED_EMAIL &&
     normalize(profile?.usuario) === DYELSSE_HOSPITAL_USER &&
     normalize(profile?.nome) === DYELSSE_HOSPITAL_NAME &&
-    normalize(profile?.setor) === "hospital" &&
     normalize(profile?.unidade_nome) === "hospital" &&
     !profile?.is_admin,
   );

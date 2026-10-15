@@ -142,7 +142,6 @@ async function requireDemoUser(request: Request): Promise<AuthenticatedDemoUser>
     profile.is_admin ||
     profile.usuario?.trim().toLowerCase() !== DYELSSE_HOSPITAL_USER ||
     profile.nome?.trim().toLowerCase() !== DYELSSE_HOSPITAL_NAME ||
-    profile.setor?.trim().toLowerCase() !== "hospital" ||
     profile.unidade_nome?.trim().toLowerCase() !== "hospital"
   ) {
     throw new Error(
