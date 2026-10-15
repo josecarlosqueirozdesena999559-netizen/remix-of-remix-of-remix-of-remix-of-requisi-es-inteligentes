@@ -62,6 +62,8 @@ type RequestRecord = {
   categoria: string | null;
   programa: string | null;
   data: string | null;
+  saida_vinculada_codigo?: string | null;
+  saida_vinculada_data?: string | null;
   items: RequestPdfItem[] | null;
   saida_codigo: string | null;
   created_at: string;
@@ -232,7 +234,11 @@ async function getRequestForDemo(requestId: string, user: AuthenticatedDemoUser)
   return request;
 }
 
-async function createCanonicalRequestPdf(request: RequestRecord, user: AuthenticatedDemoUser) {
+async function createCanonicalRequestPdf(
+  request: RequestRecord,
+  user: AuthenticatedDemoUser,
+  stage: "request" | "output" = "request",
+) {
   let program = request.programa?.trim() || "";
   if (!program && request.setor) {
     const { data: sector } = await admin
@@ -245,7 +251,19 @@ async function createCanonicalRequestPdf(request: RequestRecord, user: Authentic
   const pdf = await createRequestPdfBlob(
     {
       id: request.id,
-      saida_codigo: request.saida_codigo,
+      saida_codigo:
+        stage === "output"
+          ? request.saida_vinculada_codigo ||
+            request.saida_codigo ||
+            request.id.slice(0, 8).toUpperCase()
+          : request.saida_codigo || request.id.slice(0, 8).toUpperCase(),
+      documentStage: stage,
+      outputCode:
+        request.saida_vinculada_codigo ||
+        request.saida_codigo ||
+        request.id.slice(0, 8).toUpperCase(),
+      requestCode: request.saida_codigo || request.id.slice(0, 8).toUpperCase(),
+      outputDate: request.saida_vinculada_data || request.data,
       categoria: request.categoria,
       setor: request.setor,
       programa: program || request.setor || "-",
@@ -559,22 +577,26 @@ async function beginSignature(
   let originalPdf: Uint8Array;
   if (stage === "output") {
     const attachment = getAttachment(document.admin_attachment);
-    if (
-      !attachment?.storagePath ||
-      (attachment.storageBucket && attachment.storageBucket !== REQUESTS_BUCKET)
-    ) {
-      throw new Error("O PDF de saída aguardando assinatura não foi encontrado.");
-    }
-    const { data, error } = await admin.storage
-      .from(REQUESTS_BUCKET)
-      .download(attachment.storagePath);
-    if (error || !data) throw new Error("Não foi possível carregar o PDF original da saída.");
-    originalPdf = new Uint8Array(await data.arrayBuffer());
-    if (
-      originalPdf.byteLength > MAX_PDF_BYTES ||
-      new TextDecoder().decode(originalPdf.slice(0, 5)) !== "%PDF-"
-    ) {
-      throw new Error("O PDF original é inválido ou maior que 14 MB.");
+    if (attachment) {
+      if (
+        !attachment.storagePath ||
+        (attachment.storageBucket && attachment.storageBucket !== REQUESTS_BUCKET)
+      ) {
+        throw new Error("O PDF de saída anexado é inválido.");
+      }
+      const { data, error } = await admin.storage
+        .from(REQUESTS_BUCKET)
+        .download(attachment.storagePath);
+      if (error || !data) throw new Error("Não foi possível carregar o PDF original da saída.");
+      originalPdf = new Uint8Array(await data.arrayBuffer());
+      if (
+        originalPdf.byteLength > MAX_PDF_BYTES ||
+        new TextDecoder().decode(originalPdf.slice(0, 5)) !== "%PDF-"
+      ) {
+        throw new Error("O PDF original é inválido ou maior que 14 MB.");
+      }
+    } else {
+      originalPdf = await createCanonicalRequestPdf(document, user, "output");
     }
   } else {
     originalPdf = await createCanonicalRequestPdf(document, user);

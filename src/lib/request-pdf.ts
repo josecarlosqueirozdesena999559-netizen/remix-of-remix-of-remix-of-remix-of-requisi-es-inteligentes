@@ -42,6 +42,10 @@ export interface RequestPdfItem {
 export interface RequestPdfData {
   id: string;
   saida_codigo?: string | null;
+  documentStage?: "request" | "output";
+  outputCode?: string | null;
+  requestCode?: string | null;
+  outputDate?: string | null;
   categoria?: string | null;
   data?: string | null;
   setor?: string | null;
@@ -56,11 +60,13 @@ export interface RequestPdfData {
 }
 
 function getRequestCode(request: RequestPdfData) {
-  return request.saida_codigo || request.id;
+  return request.documentStage === "output"
+    ? request.outputCode || request.saida_codigo || request.id
+    : request.saida_codigo || request.id;
 }
 
-function getRequestPdfName(code: string) {
-  return `Solicitação ${code}.pdf`;
+function getRequestPdfName(code: string, documentStage?: RequestPdfData["documentStage"]) {
+  return documentStage === "output" ? `Saída SIG ${code}.pdf` : `Solicitação ${code}.pdf`;
 }
 
 function formatDate(value?: string | null) {
@@ -163,7 +169,8 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
   const leftColX = PDF_MARGIN + 2;
   const rightColX = pageWidth - PDF_MARGIN;
   const lineY = 35;
-  const requestDate = formatDate(request.data);
+  const isOutput = request.documentStage === "output";
+  const requestDate = formatDate(isOutput ? request.outputDate || request.data : request.data);
   const programa = formatProgramName(request.programa || request.setor) || "-";
 
   doc.setDrawColor(76, 124, 73);
@@ -184,7 +191,7 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
   doc.setFontSize(10.5);
   doc.text(toPdfAscii("FUNDO MUNICIPAL DE SAÚDE"), leftColX + 18, 25);
   doc.setFontSize(11);
-  doc.text(toPdfAscii("Solicitação de Material"), leftColX + 18, 32);
+  doc.text(toPdfAscii(isOutput ? "Saída do SIG" : "Solicitação de Material"), leftColX + 18, 32);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.2);
@@ -205,7 +212,7 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
 
   const headers = [
     { label: "Número", value: toPdfAscii(getRequestCode(request)) },
-    { label: "Modalidade", value: toPdfAscii("Solicitação") },
+    { label: "Modalidade", value: toPdfAscii(isOutput ? "Saída do SIG" : "Solicitação") },
     { label: "Data", value: toPdfAscii(requestDate) },
     { label: "Programa", value: toPdfAscii(programa) },
     { label: "Setor", value: toPdfAscii(request.setor || "-") },
@@ -240,7 +247,15 @@ function drawRequestPdfHeader(doc: jsPDF, request: RequestPdfData, logoDataUrl: 
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
-  doc.text(toPdfAscii(`Categorias: ${String(request.categoria || "-")}`), PDF_MARGIN, 75);
+  doc.text(
+    toPdfAscii(
+      isOutput
+        ? `Solicitação de origem: ${request.requestCode || request.saida_codigo || "-"}`
+        : `Categorias: ${String(request.categoria || "-")}`,
+    ),
+    PDF_MARGIN,
+    75,
+  );
   doc.text(toPdfAscii(`Programa: ${programa}`), PDF_MARGIN, 82);
 
   const cpf = toPdfAscii(request.requesterDisplayCpf || request.solicitante_cpf || "-");
@@ -333,8 +348,11 @@ export async function createRequestPdfBlob(request: RequestPdfData) {
   const bodyRows = getRequestItemsForPdf(request);
 
   doc.setProperties({
-    title: getRequestPdfName(getRequestCode(request)),
-    subject: `Solicitação de material gerada pelo ${PDF_SYSTEM_NAME}`,
+    title: getRequestPdfName(getRequestCode(request), request.documentStage),
+    subject:
+      request.documentStage === "output"
+        ? `Saída do SIG gerada pelo ${PDF_SYSTEM_NAME}`
+        : `Solicitação de material gerada pelo ${PDF_SYSTEM_NAME}`,
     creator: `${PDF_SYSTEM_NAME} · Módulo Almoxarifado`,
   });
 

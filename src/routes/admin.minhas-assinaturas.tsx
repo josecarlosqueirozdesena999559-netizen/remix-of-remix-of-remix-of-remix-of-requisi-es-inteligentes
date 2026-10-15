@@ -391,7 +391,7 @@ function MinhasAssinaturasPage() {
       const { data, error: requestError } = await supabase
         .from("requisicoes")
         .select(
-          "id,saida_codigo,saida_vinculada_codigo,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment,signed_attachment",
+          "id,saida_codigo,saida_vinculada_codigo,saida_vinculada_data,categoria,setor,programa,solicitante,solicitante_cpf,solicitante_funcao,data,created_at,status,items,admin_attachment,signed_attachment",
         )
         .eq("id", request.id)
         .maybeSingle();
@@ -406,14 +406,31 @@ function MinhasAssinaturasPage() {
       let sourcePdf: Blob;
       if (isOutputStage) {
         const sourceAttachment = getAttachmentFiles(data.admin_attachment).at(0);
-        const sourceUrl = await resolveAttachmentUrl(sourceAttachment);
-        if (!sourceUrl)
-          throw new Error("O PDF de saída ainda não está disponível para visualização.");
-        const response = await fetch(sourceUrl);
-        if (!response.ok) throw new Error("Não foi possível carregar o PDF original da saída.");
-        sourcePdf = await response.blob();
-        if (sourcePdf.size > 14 * 1024 * 1024 || sourcePdf.type !== "application/pdf") {
-          throw new Error("O PDF de saída é inválido ou maior que 14 MB.");
+        if (sourceAttachment) {
+          const sourceUrl = await resolveAttachmentUrl(sourceAttachment);
+          if (!sourceUrl)
+            throw new Error("O PDF de saída anexado não está disponível para visualização.");
+          const response = await fetch(sourceUrl);
+          if (!response.ok) throw new Error("Não foi possível carregar o PDF original da saída.");
+          sourcePdf = await response.blob();
+          if (sourcePdf.size > 14 * 1024 * 1024 || sourcePdf.type !== "application/pdf") {
+            throw new Error("O PDF de saída é inválido ou maior que 14 MB.");
+          }
+        } else {
+          const row = data as unknown as RequisicaoPdfRow;
+          const fallbackCode = request.id.slice(0, 8).toUpperCase();
+          const outputCode = data.saida_vinculada_codigo || data.saida_codigo || fallbackCode;
+          const resolvedRequest = await resolveRequestForPdf(
+            { ...row, items: row.items as RequestPdfItem[] | null },
+            outputCode,
+          );
+          sourcePdf = await createRequestPdfBlob({
+            ...resolvedRequest,
+            documentStage: "output",
+            outputCode,
+            requestCode: data.saida_codigo || fallbackCode,
+            outputDate: data.saida_vinculada_data || data.data,
+          });
         }
       } else {
         const row = data as unknown as RequisicaoPdfRow;
@@ -810,6 +827,14 @@ function MinhasAssinaturasPage() {
                                 : "Solicitação sem itens. Refaça antes de assinar manualmente."}
                             </span>
                           )}
+                          {demoSignatureEnabled &&
+                            isOutputStage &&
+                            getAttachmentFiles(request.admin_attachment).length === 0 && (
+                              <span className="text-xs text-emerald-700">
+                                O PDF da saída SIG será gerado automaticamente para assinatura
+                                digital.
+                              </span>
+                            )}
                           {request.return_reason && request.status === "correcao_requisicao" && (
                             <span className="text-xs text-orange-700">
                               Motivo da devolução: {request.return_reason}
