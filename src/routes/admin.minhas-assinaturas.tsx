@@ -11,7 +11,6 @@ import {
   getOutputSignedAttachment,
   getOutputSignedAttachments,
   getRequestSignedAttachment,
-  resolveAttachmentUrl,
   removeAttachmentFile,
   type AttachmentFile,
 } from "@/lib/attachments";
@@ -208,6 +207,7 @@ function MinhasAssinaturasPage() {
   const [stagedFiles, setStagedFiles] = useState<Record<string, File[]>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [demoSignatureEnabled, setDemoSignatureEnabled] = useState(false);
+  const [signatureSetupOpen, setSignatureSetupOpen] = useState(false);
   const [demoSignatureDocument, setDemoSignatureDocument] = useState<{
     requestId: string;
     documentCode: string;
@@ -407,10 +407,23 @@ function MinhasAssinaturasPage() {
       if (isOutputStage) {
         const sourceAttachment = getAttachmentFiles(data.admin_attachment).at(0);
         if (sourceAttachment) {
-          const sourceUrl = await resolveAttachmentUrl(sourceAttachment);
-          if (!sourceUrl)
-            throw new Error("O PDF de saída anexado não está disponível para visualização.");
-          const response = await fetch(sourceUrl);
+          const { data: sourceData, error: sourceError } = await supabase.functions.invoke(
+            "demo-signature",
+            { body: { action: "get_output_source_url", requestId: data.id } },
+          );
+          if (sourceError) {
+            const context = (sourceError as { context?: Response }).context;
+            const payload = context ? await context.json().catch(() => null) : null;
+            throw new Error(
+              typeof payload?.error === "string" ? payload.error : sourceError.message,
+            );
+          }
+          if (sourceData?.ok !== true || typeof sourceData.source_pdf_url !== "string") {
+            throw new Error(
+              sourceData?.error || "O PDF de saída não está disponível para visualização.",
+            );
+          }
+          const response = await fetch(sourceData.source_pdf_url);
           if (!response.ok) throw new Error("Não foi possível carregar o PDF original da saída.");
           sourcePdf = await response.blob();
           if (sourcePdf.size > 14 * 1024 * 1024 || sourcePdf.type !== "application/pdf") {
@@ -743,9 +756,23 @@ function MinhasAssinaturasPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-sm text-muted-foreground">Usuário / Assinaturas</p>
-        <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Usuário / Assinaturas</p>
+          <h2 className="text-2xl text-foreground">Minhas assinaturas</h2>
+        </div>
+        {demoSignatureEnabled ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              setSignatureSetupOpen(true);
+            }}
+          >
+            <Pencil className="mr-2 h-4 w-4" /> Cadastrar assinatura
+          </Button>
+        ) : null}
       </div>
 
       {message && (
@@ -1015,6 +1042,14 @@ function MinhasAssinaturasPage() {
           </div>
         </Card>
       )}
+
+      {demoSignatureEnabled ? (
+        <DemoSignatureDialog
+          open={signatureSetupOpen}
+          onOpenChange={(open) => setSignatureSetupOpen(open)}
+          setupOnly
+        />
+      ) : null}
 
       {demoSignatureDocument ? (
         <DemoSignatureDialog

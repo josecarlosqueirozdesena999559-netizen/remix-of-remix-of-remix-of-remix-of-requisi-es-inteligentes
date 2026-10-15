@@ -488,6 +488,10 @@ export function DemoSignatureDialog({
 
           {step === "complete" ? (
             <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sua assinatura está cadastrada. Esse cadastro não assina nenhum documento; cada
+                assinatura exige revisar o PDF e confirmar o código OTP.
+              </p>
               <DialogFooter>
                 <Button type="button" onClick={() => onOpenChange(false)}>
                   Concluir

@@ -233,6 +233,28 @@ async function getRequestForDemo(requestId: string, user: AuthenticatedDemoUser)
   return request;
 }
 
+async function getOutputSourceUrl(user: AuthenticatedDemoUser, payload: Record<string, unknown>) {
+  const requestId = String(payload.requestId || "");
+  const document = await getRequestForDemo(requestId, user);
+  if (isPendingStage(document.status) !== "output") {
+    throw new Error("Esta solicitação não está aguardando assinatura de saída.");
+  }
+
+  const attachment = getAttachment(document.admin_attachment);
+  if (!attachment?.storagePath) {
+    throw new Error("O PDF de saída anexado não está disponível para visualização.");
+  }
+
+  const { data, error } = await admin.storage
+    .from(REQUESTS_BUCKET)
+    .createSignedUrl(attachment.storagePath, 5 * 60);
+  if (error || !data?.signedUrl) {
+    throw new Error("Não foi possível preparar a visualização segura do PDF de saída.");
+  }
+
+  return { ok: true, source_pdf_url: data.signedUrl, expires_in_seconds: 5 * 60 };
+}
+
 async function createCanonicalRequestPdf(
   request: RequestRecord,
   user: AuthenticatedDemoUser,
@@ -1158,7 +1180,8 @@ Deno.serve(async (request) => {
     const user = await requireDemoUser(request);
     const payload = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const action = String(payload.action || "");
-    await enforceSignatureRateLimit(user.id, action);
+    const rateLimitAction = action === "get_output_source_url" ? "status" : action;
+    await enforceSignatureRateLimit(user.id, rateLimitAction);
 
     if (action === "status") {
       await cleanupExpiredIntents(user.id);
@@ -1176,6 +1199,10 @@ Deno.serve(async (request) => {
 
     if (action === "begin_signature") {
       return jsonResponse(await beginSignature(user, request, payload));
+    }
+
+    if (action === "get_output_source_url") {
+      return jsonResponse(await getOutputSourceUrl(user, payload));
     }
 
     if (action === "preview_signature") {
