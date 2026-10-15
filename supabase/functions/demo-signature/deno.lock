@@ -133,10 +133,11 @@
   "remote": {
     "https://esm.sh/@supabase/supabase-js@2.117.3": "614f9e550b12b4be7054f947cc4949ebcc0eceeb8e83f7e226cc875356e9b126",
     "https://esm.sh/pdf-lib@1.17.1": "cf7c5527829cb9bbb3aa20d339c530067441c10eb98880360aea9e77c3c87ff8",
-    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/401d71b5b11d1779040f1e6459cd089ba6c981f1/supabase/functions/demo-signature/index.ts": "2d323ec7c076eae55834206f3bfdbe04600c19e4ec8dd3e4182dd9c9d3823ef2",
-    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/401d71b5b11d1779040f1e6459cd089ba6c981f1/supabase/functions/demo-signature/pdf-assets.ts": "d46d79fc75308329dd9ce6e1dacd0a37d495e112079238cd3b91b60ac69aa881",
-    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/401d71b5b11d1779040f1e6459cd089ba6c981f1/supabase/functions/demo-signature/pdf-utils.ts": "d43f729680667b075bb05c6ab2f6623d37d59f6bff31ad0f7f6c444e756b8c24",
-    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/401d71b5b11d1779040f1e6459cd089ba6c981f1/supabase/functions/demo-signature/request-pdf.ts": "41318ff0f632368294fae0c06c6863ce1057f837b8bb53dcb01c49bc8517fdef"
+    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/1ca420f8344cf228537956a97b3d760ef987f413/supabase/functions/demo-signature/index.ts": "27240e18dd28621daa4963d6ddc15f83d9d6b7b56929c31bac5ceb20ebd16841",
+    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/1ca420f8344cf228537956a97b3d760ef987f413/supabase/functions/demo-signature/pdf-assets.ts": "d46d79fc75308329dd9ce6e1dacd0a37d495e112079238cd3b91b60ac69aa881",
+    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/1ca420f8344cf228537956a97b3d760ef987f413/supabase/functions/demo-signature/pdf-utils.ts": "d43f729680667b075bb05c6ab2f6623d37d59f6bff31ad0f7f6c444e756b8c24",
+    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/1ca420f8344cf228537956a97b3d760ef987f413/supabase/functions/demo-signature/request-pdf.ts": "b00f29cd03189df27ba042e2b717896f97cbd0c7210abdef21c419ad461d29e1",
+    "https://raw.githubusercontent.com/josecarlosqueirozdesena999559-netizen/remix-of-remix-of-remix-of-remix-of-requisi-es-inteligentes/1ca420f8344cf228537956a97b3d760ef987f413/supabase/functions/demo-signature/whatsapp-otp.ts": "451cdab2666e518dd68d883c59aadabc00c1904bfa52b094c3c15d802789b7af"
   },
   "workspace": {
     "dependencies": [
