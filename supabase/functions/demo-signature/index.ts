@@ -720,7 +720,7 @@ async function createEvidencePdf(
   const signatureCenterX = isOutputAttachment ? pageWidth * 0.8 : 54 * mmToPt * scaleX;
   const signatureBlockTop = 241;
   const signatureLineY = isOutputAttachment
-    ? pageHeight * 0.38
+    ? pageHeight * 0.16
     : pageHeight - (signatureBlockTop + 16) * mmToPt * scaleY;
   const govBoxX = 16 * mmToPt * scaleX;
   const govBoxY = pageHeight - (signatureBlockTop + 12) * mmToPt * scaleY;
@@ -760,7 +760,7 @@ async function createEvidencePdf(
     height: imageSize.height,
   });
 
-  if (!input.preview) {
+  if (!input.preview && !isOutputAttachment) {
     const dateTime = `Assinado em ${new Intl.DateTimeFormat("pt-BR", {
       year: "numeric",
       month: "long",
@@ -773,9 +773,7 @@ async function createEvidencePdf(
     }).format(new Date(input.signedAt))}`;
     const dateFontSize = 7 * scale;
     const dateWidth = font.widthOfTextAtSize(dateTime, dateFontSize);
-    const dateY = isOutputAttachment
-      ? Math.max(12 * scale, signatureLineY - pageHeight * 0.055)
-      : pageHeight - (signatureBlockTop + 33) * mmToPt * scaleY;
+    const dateY = pageHeight - (signatureBlockTop + 33) * mmToPt * scaleY;
     page.drawText(dateTime, {
       x: Math.max(
         14 * mmToPt * scaleX,
